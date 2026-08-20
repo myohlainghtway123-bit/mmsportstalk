@@ -5,6 +5,7 @@ import AppFull from "./AppFull";
 import { AccountScreen, FavoritesScreen, PredictionScreen } from "./phase2/Phase2Screens";
 import ContentScreen from "./phase3/ContentScreens";
 import { AboutScreen, NotificationsScreen, SettingsScreen } from "./phase4/Phase4Screens";
+import QuickScoresScreen from "./final/QuickScoresScreen";
 
 const SITE = "https://myanmarsportstalk.com";
 const YOUTUBE = "https://www.youtube.com/@MyanmarSportsTalk";
@@ -108,6 +109,7 @@ export default function AppFinalShell() {
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
     <View style={{flex:1}}>
       {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goBase}/> : null}
+      {mode === "scores" ? <QuickScoresScreen openMatch={(x)=>openWebsiteEntity("match",x)}/> : null}
       {mode === "favorites" ? <FavoritesScreen openLeague={(x)=>openWebsiteEntity("competition",x)} openTeam={(x)=>openWebsiteEntity("team",x)} openPlayer={(x)=>openWebsiteEntity("player",x)} openAccount={openAccount}/> : null}
       {mode === "prediction" ? <PredictionScreen openMatch={(x)=>openWebsiteEntity("match",x)} openAccount={openAccount}/> : null}
       {mode === "more" ? <MoreScreen navigate={setMode}/> : null}
@@ -116,7 +118,7 @@ export default function AppFinalShell() {
       {mode === "settings" ? <SettingsScreen goBack={() => setMode("more")} openNotifications={() => setMode("notifications")} openAccount={openAccount}/> : null}
       {mode === "about" ? <AboutScreen goBack={() => setMode("more")}/> : null}
     </View>
-    {!isSubpage ? <BottomNav active={isContent ? "home" : mode} onChange={(tab) => { if (tab === "home" || tab === "scores") goBase(); else setMode(tab); }}/> : null}
+    {!isSubpage ? <BottomNav active={isContent ? "home" : mode} onChange={(tab) => { if (tab === "home") goBase(); else setMode(tab); }}/> : null}
   </SafeAreaView>;
 }
 
