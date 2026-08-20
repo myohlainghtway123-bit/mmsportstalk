@@ -1,0 +1,31 @@
+name: MST Brand Refresh Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mst-brand-refresh-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply MST website branding
+        run: python3 scripts/apply_mst_brand_refresh.py
+
+      - name: Remove one-time workflow
+        run: rm .github/workflows/mst-brand-refresh-once.yml
+
+      - name: Commit brand refresh
+        run: |
+          git config user.name "MST Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add App.js .github/workflows/mst-brand-refresh-once.yml
+          git commit -m "Apply MST website branding to mobile app"
+          git push
