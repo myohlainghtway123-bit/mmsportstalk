@@ -7,11 +7,14 @@ const C = { bg:"#080A0C", bg2:"#0B0E10", card:"#111416", card2:"#15191C", border
 const TABS = ["LIVE SCORES", "NEWS", "VIDEOS", "TRANSFERS"];
 const YOUTUBE = "https://www.youtube.com/@MyanmarSportsTalk";
 
-function Header({ active, onTab, onNotifications }) {
+function Header({ active, onTab, onNotifications, onSearch }) {
   return <>
     <View style={s.mainHeader}>
       <View><Text style={s.logo}>MST</Text><Text style={s.logoSub}>MYANMAR SPORTS TALK</Text></View>
-      <Pressable hitSlop={12} style={s.headerIcon} onPress={onNotifications}><Ionicons name="notifications-outline" size={27} color={C.text}/></Pressable>
+      <View style={s.headerIcons}>
+        <Pressable hitSlop={10} style={s.headerIcon} onPress={onNotifications}><Ionicons name="notifications-outline" size={27} color={C.text}/></Pressable>
+        <Pressable hitSlop={10} style={s.headerIcon} onPress={onSearch}><Ionicons name="search-outline" size={29} color={C.text}/></Pressable>
+      </View>
     </View>
     <View style={s.tabs}>{TABS.map((tab) => <Pressable key={tab} style={s.tab} onPress={() => onTab(tab)}><Text style={[s.tabText, active === tab && s.tabTextActive]}>{tab}</Text>{active === tab ? <View style={s.tabLine}/> : null}</Pressable>)}</View>
   </>;
@@ -84,21 +87,21 @@ function Videos() {
   </ScrollView>;
 }
 
-export default function ContentScreen({ initialTab = "NEWS", onLiveScores, onOpenArticle, onNotifications }) {
+export default function ContentScreen({ initialTab = "NEWS", onLiveScores, onOpenArticle, onNotifications, onSearch }) {
   const [tab, setTab] = useState(initialTab);
   useEffect(() => setTab(initialTab), [initialTab]);
   const change = (next) => { if (next === "LIVE SCORES") { onLiveScores?.(); return; } setTab(next); };
-  return <View style={s.screen}><Header active={tab} onTab={change} onNotifications={onNotifications}/><View style={{ flex: 1 }}>{tab === "NEWS" ? <NewsList onOpenArticle={onOpenArticle}/> : tab === "TRANSFERS" ? <NewsList transfer onOpenArticle={onOpenArticle}/> : tab === "VIDEOS" ? <Videos/> : null}</View></View>;
+  return <View style={s.screen}><Header active={tab} onTab={change} onNotifications={onNotifications} onSearch={onSearch}/><View style={{ flex: 1 }}>{tab === "NEWS" ? <NewsList onOpenArticle={onOpenArticle}/> : tab === "TRANSFERS" ? <NewsList transfer onOpenArticle={onOpenArticle}/> : tab === "VIDEOS" ? <Videos/> : null}</View></View>;
 }
 
 const s = StyleSheet.create({
   screen:{flex:1,backgroundColor:C.bg},
-  mainHeader:{minHeight:92,paddingHorizontal:20,paddingTop:28,paddingBottom:4,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
+  mainHeader:{minHeight:88,paddingHorizontal:18,paddingTop:10,paddingBottom:8,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
   logo:{color:C.red,fontSize:34,lineHeight:35,fontWeight:"900",fontStyle:"italic",letterSpacing:-2},
-  logoSub:{color:C.text,fontSize:9,lineHeight:12,fontWeight:"800",letterSpacing:.6},
-  headerIcon:{width:42,height:42,alignItems:"center",justifyContent:"center"},
-  tabs:{height:43,flexDirection:"row",paddingHorizontal:14,borderBottomWidth:1,borderBottomColor:C.border2},
-  tab:{flex:1,alignItems:"center",justifyContent:"center",position:"relative"},tabText:{fontSize:10.5,fontWeight:"700",color:C.text2},tabTextActive:{color:C.red},tabLine:{position:"absolute",left:4,right:4,bottom:0,height:3,borderRadius:2,backgroundColor:C.red},
+  logoSub:{color:C.text,fontSize:9.5,lineHeight:12,fontWeight:"900",letterSpacing:.7},
+  headerIcons:{flexDirection:"row",alignItems:"center",gap:8},headerIcon:{width:44,height:44,alignItems:"center",justifyContent:"center"},
+  tabs:{height:50,flexDirection:"row",paddingHorizontal:10,borderBottomWidth:1,borderBottomColor:C.border2},
+  tab:{flex:1,alignItems:"center",justifyContent:"center",position:"relative"},tabText:{fontSize:10.5,fontWeight:"800",color:C.text2},tabTextActive:{color:C.red},tabLine:{position:"absolute",left:7,right:7,bottom:0,height:3,borderRadius:2,backgroundColor:C.red},
   content:{padding:16,paddingBottom:35},
   state:{minHeight:160,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,alignItems:"center",justifyContent:"center",gap:8,padding:20},stateTitle:{fontSize:14,fontWeight:"800",color:C.text},stateText:{fontSize:11,color:C.muted,textAlign:"center",lineHeight:16},
   retry:{backgroundColor:C.red,borderRadius:7,paddingHorizontal:18,paddingVertical:9,marginTop:4},retryText:{color:C.text,fontSize:10,fontWeight:"900"},
