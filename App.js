@@ -10,7 +10,7 @@
 // FOOTER
 // Home · Scores · Favorites · Prediction · More
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -23,8 +23,11 @@ import {
   StatusBar,
   Dimensions,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { fetchFootballMatches, isLiveMatch, offsetDateString } from "./src/services/footballApi";
 
 const { width } = Dimensions.get("window");
 
@@ -722,21 +725,103 @@ function BottomNav({ active, onChange }) {
 }
 
 // -------------------------------------------------------
+// REAL FOOTBALL DATA
+// -------------------------------------------------------
+
+function useFootballMatches(dateString) {
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
+    else if (!matches.length) setLoading(true);
+
+    try {
+      const result = await fetchFootballMatches({ date: dateString });
+      setMatches(result.matches);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load football data.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [dateString, matches.length]);
+
+  useEffect(() => {
+    load(false);
+    const timer = setInterval(() => load(false), 60000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  return {
+    matches,
+    loading,
+    refreshing,
+    error,
+    refresh: () => load(true),
+    retry: () => load(false),
+  };
+}
+
+function FootballFeedState({ loading, error, onRetry, emptyText }) {
+  if (loading) {
+    return (
+      <View style={styles.footballStateCard}>
+        <ActivityIndicator size="small" color={COLORS.red} />
+        <Text style={styles.footballStateText}>Loading real football data…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.footballStateCard}>
+        <Ionicons name="cloud-offline-outline" size={24} color={COLORS.muted} />
+        <Text style={styles.footballStateTitle}>Live data unavailable</Text>
+        <Text style={styles.footballStateText}>Check your connection and try again.</Text>
+        <Pressable style={styles.retryButton} onPress={onRetry}>
+          <Text style={styles.retryButtonText}>RETRY</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.footballStateCard}>
+      <Ionicons name="football-outline" size={24} color={COLORS.muted} />
+      <Text style={styles.footballStateTitle}>{emptyText}</Text>
+      <Text style={styles.footballStateText}>Pull down to refresh the latest data.</Text>
+    </View>
+  );
+}
+
+// -------------------------------------------------------
 // LIVE SCORE COMPONENTS
 // -------------------------------------------------------
 
 function MatchCard({ match, onPress }) {
+  const live = isLiveMatch(match);
+  const hasScore = match.homeScore !== null && match.homeScore !== undefined &&
+    match.awayScore !== null && match.awayScore !== undefined;
+
   return (
     <Pressable style={styles.matchCard} onPress={() => onPress(match)}>
       <View style={styles.matchCardTop}>
-        <Text style={styles.competitionLabel}>{match.competition}</Text>
+        <Text numberOfLines={1} style={styles.competitionLabel}>{match.competition}</Text>
 
         <View style={styles.liveRow}>
-          <View style={styles.liveBadge}>
-            <Text style={styles.liveBadgeText}>{match.status}</Text>
-          </View>
+          {live ? (
+            <View style={styles.liveBadge}>
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
+          ) : null}
 
-          <Text style={styles.minuteText}>{match.minute}</Text>
+          <Text style={styles.minuteText}>
+            {live ? match.minute : (match.minute || match.statusCode || match.status)}
+          </Text>
         </View>
       </View>
 
@@ -751,7 +836,7 @@ function MatchCard({ match, onPress }) {
 
         <View style={styles.scoreCenter}>
           <Text style={styles.bigScore}>
-            {match.homeScore} - {match.awayScore}
+            {hasScore ? `${match.homeScore} - ${match.awayScore}` : "VS"}
           </Text>
 
           {match.aggregate ? (
@@ -810,10 +895,23 @@ function CompetitionStrip({ onLeaguePress }) {
 // -------------------------------------------------------
 
 function HomeLiveScores({ openMatch, openLeague }) {
+  const today = offsetDateString(0);
+  const { matches, loading, refreshing, error, refresh, retry } = useFootballMatches(today);
+  const liveMatches = useMemo(() => matches.filter(isLiveMatch), [matches]);
+  const visibleMatches = liveMatches.slice(0, 5);
+
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.pageContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={refresh}
+          tintColor={COLORS.red}
+          colors={[COLORS.red]}
+        />
+      }
     >
       <View style={styles.liveNowRow}>
         <View style={styles.liveNowLeft}>
@@ -821,12 +919,28 @@ function HomeLiveScores({ openMatch, openLeague }) {
           <Text style={styles.liveNowText}>LIVE NOW</Text>
         </View>
 
-        <Text style={styles.matchCount}>12 Matches</Text>
+        <Text style={styles.matchCount}>
+          {liveMatches.length} {liveMatches.length === 1 ? "Match" : "Matches"}
+        </Text>
       </View>
 
-      {LIVE_MATCHES.map((match) => (
-        <MatchCard key={match.id} match={match} onPress={openMatch} />
-      ))}
+      {visibleMatches.length ? (
+        visibleMatches.map((match) => (
+          <MatchCard key={match.id} match={match} onPress={openMatch} />
+        ))
+      ) : (
+        <FootballFeedState
+          loading={loading}
+          error={error}
+          onRetry={retry}
+          emptyText="No live matches right now"
+        />
+      )}
+
+      <View style={styles.apiConnectedRow}>
+        <View style={styles.apiConnectedDot} />
+        <Text style={styles.apiConnectedText}>LIVE DATA · MST FOOTBALL API</Text>
+      </View>
 
       <Pressable style={styles.allScoresButton}>
         <Text style={styles.allScoresText}>ALL LIVE SCORES</Text>
@@ -1054,6 +1168,10 @@ function HomeScreen({ openMatch, openLeague }) {
 
 function ScoresScreen({ openMatch, openLeague }) {
   const [date, setDate] = useState("TODAY");
+  const dateOffset = date === "YESTERDAY" ? -1 : date === "TOMORROW" ? 1 : 0;
+  const selectedDate = offsetDateString(dateOffset);
+  const { matches, loading, refreshing, error, refresh, retry } = useFootballMatches(selectedDate);
+  const liveCount = useMemo(() => matches.filter(isLiveMatch).length, [matches]);
 
   return (
     <View style={styles.screen}>
@@ -1091,23 +1209,48 @@ function ScoresScreen({ openMatch, openLeague }) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.pageContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={COLORS.red}
+            colors={[COLORS.red]}
+          />
+        }
       >
         <View style={styles.liveNowRow}>
           <View style={styles.liveNowLeft}>
-            <View style={styles.redDot} />
-            <Text style={styles.liveNowText}>LIVE</Text>
+            {liveCount > 0 ? <View style={styles.redDot} /> : null}
+            <Text style={styles.liveNowText}>{date}</Text>
           </View>
 
-          <Text style={styles.matchCount}>12 matches</Text>
+          <Text style={styles.matchCount}>
+            {matches.length} {matches.length === 1 ? "match" : "matches"}
+            {liveCount > 0 ? ` · ${liveCount} live` : ""}
+          </Text>
         </View>
 
-        {LIVE_MATCHES.map((match) => (
-          <MatchCard
-            key={match.id}
-            match={match}
-            onPress={openMatch}
+        {matches.length ? (
+          matches.map((match) => (
+            <MatchCard
+              key={match.id}
+              match={match}
+              onPress={openMatch}
+            />
+          ))
+        ) : (
+          <FootballFeedState
+            loading={loading}
+            error={error}
+            onRetry={retry}
+            emptyText={`No matches for ${date.toLowerCase()}`}
           />
-        ))}
+        )}
+
+        <View style={styles.apiConnectedRow}>
+          <View style={styles.apiConnectedDot} />
+          <Text style={styles.apiConnectedText}>DATA · MYANMARSPORTSTALK.COM</Text>
+        </View>
 
         <CompetitionStrip onLeaguePress={openLeague} />
 
@@ -2586,6 +2729,68 @@ const styles = StyleSheet.create({
   sectionAction: {
     color: COLORS.muted,
     fontSize: 11,
+  },
+
+  footballStateCard: {
+    minHeight: 118,
+    backgroundColor: COLORS.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    padding: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+
+  footballStateTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 8,
+  },
+
+  footballStateText: {
+    color: COLORS.muted,
+    fontSize: 10,
+    marginTop: 6,
+    textAlign: "center",
+  },
+
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: COLORS.red,
+  },
+
+  retryButtonText: {
+    color: COLORS.text,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  apiConnectedRow: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  apiConnectedDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.red,
+  },
+
+  apiConnectedText: {
+    color: COLORS.muted2,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
 
   // LIVE ------------------------------------------------
