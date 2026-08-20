@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AppFull from "./AppFull";
+import HomeScreen from "./final/HomeScreen";
 import { AccountScreen, FavoritesScreen, PredictionScreen } from "./phase2/Phase2Screens";
 import ContentScreen from "./phase3/ContentScreens";
 import { AboutScreen, NotificationsScreen, SettingsScreen } from "./phase4/Phase4Screens";
@@ -24,7 +24,10 @@ const NAV = [
 function BottomNav({ active, onChange }) {
   return <View style={s.bottomNav}>{NAV.map(([id,label,icon,activeIcon]) => {
     const selected = active === id;
-    return <Pressable key={id} hitSlop={4} style={s.navItem} onPress={() => onChange(id)}><Ionicons name={selected ? activeIcon : icon} size={25} color={selected ? C.red : C.muted}/><Text style={[s.navText, selected && s.navTextActive]}>{label}</Text></Pressable>;
+    return <Pressable key={id} hitSlop={4} style={s.navItem} onPress={() => onChange(id)}>
+      <Ionicons name={selected ? activeIcon : icon} size={25} color={selected ? C.red : C.muted}/>
+      <Text style={[s.navText, selected && s.navTextActive]}>{label}</Text>
+    </Pressable>;
   })}</View>;
 }
 
@@ -38,7 +41,7 @@ function MoreScreen({ navigate, openAccount, openNotifications }) {
     ["information-circle-outline", "About MST", "Myanmar Sports Talk mobile app", () => navigate("about")],
   ];
   return <View style={s.screen}>
-    <View style={s.header}><View><Text style={s.title}>More</Text><Text style={s.subtitle}>Myanmar Sports Talk</Text></View><Ionicons name="person-circle-outline" size={31} color={C.text}/></View>
+    <View style={s.header}><View><Text style={s.title}>More</Text><Text style={s.subtitle}>Myanmar Sports Talk</Text></View><Pressable onPress={openAccount}><Ionicons name="person-circle-outline" size={31} color={C.text}/></Pressable></View>
     <ScrollView contentContainerStyle={s.content}>
       <Pressable style={s.accountHero} onPress={openAccount}><View style={s.accountIcon}><Text style={s.mst}>MST</Text></View><View style={{flex:1}}><Text style={s.accountTitle}>My MST Account</Text><Text style={s.accountText}>Use the same account as myanmarsportstalk.com.</Text></View><Ionicons name="chevron-forward" size={20} color={C.muted}/></Pressable>
       <Text style={s.section}>ACCOUNT & APP</Text>
@@ -53,40 +56,30 @@ function MoreScreen({ navigate, openAccount, openNotifications }) {
 }
 
 export default function AppFinalShell() {
-  const [mode,setMode] = useState(null);
-  const [baseKey,setBaseKey] = useState(0);
+  const [mode,setMode] = useState("home");
   const [selected,setSelected] = useState(null);
   const [returnMode,setReturnMode] = useState("home");
 
-  const goBase = () => { setSelected(null); setReturnMode("home"); setMode(null); setBaseKey((value) => value + 1); };
   const rememberOrigin = () => mode || "home";
+  const goHome = () => { setSelected(null); setReturnMode("home"); setMode("home"); };
   const openMatch = (match,origin) => { if (!match) return; setReturnMode(origin || rememberOrigin()); setSelected(match); setMode("match"); };
   const openEntity = (type,entity,origin) => { if (!entity?.id) return; setReturnMode(origin || rememberOrigin()); setSelected({type,entity}); setMode("entity"); };
   const openArticle = (article) => { if (!article) return; const origin = rememberOrigin(); setReturnMode(origin.startsWith("content-") ? origin : "content-news"); setSelected(article); setMode("article"); };
   const openAccount = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("account"); };
   const openNotifications = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("notifications"); };
-  const goReturn = () => { if (returnMode === "home") goBase(); else setMode(returnMode); };
+  const goReturn = () => setMode(returnMode || "home");
+  const openTopTab = (tab) => setMode(tab === "NEWS" ? "content-news" : tab === "VIDEOS" ? "content-videos" : tab === "TRANSFERS" ? "content-transfers" : "home");
 
-  if (!mode) {
-    return <View style={s.root}>
-      <AppFull key={baseKey}/>
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-        <View pointerEvents="box-none" style={s.headerActionBar}><Pressable accessibilityLabel="Notifications" style={s.headerAction} onPress={() => openNotifications("home")}/><Pressable accessibilityLabel="Search" style={s.headerAction} onPress={() => setMode("search")}/></View>
-        <View pointerEvents="box-none" style={s.topInterceptBar}><View style={s.topPassThrough} pointerEvents="none"/><Pressable accessibilityLabel="News" style={s.topIntercept} onPress={() => setMode("content-news")}/><Pressable accessibilityLabel="Videos" style={s.topIntercept} onPress={() => setMode("content-videos")}/><Pressable accessibilityLabel="Transfers" style={s.topIntercept} onPress={() => setMode("content-transfers")}/></View>
-        <View pointerEvents="box-none" style={s.interceptBar}><View style={s.passThrough} pointerEvents="none"/><Pressable accessibilityLabel="Scores" style={s.intercept} onPress={() => setMode("scores")}/><Pressable accessibilityLabel="Favorites" style={s.intercept} onPress={() => setMode("favorites")}/><Pressable accessibilityLabel="Prediction" style={s.intercept} onPress={() => setMode("prediction")}/><Pressable accessibilityLabel="More" style={s.intercept} onPress={() => setMode("more")}/></View>
-      </View>
-    </View>;
-  }
-
-  const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
   const isContent = mode.startsWith("content-");
+  const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
   const isSubpage = ["account","notifications","settings","about","match","entity","article","search"].includes(mode);
   const androidInset = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0;
 
   return <View style={s.root}>
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
-    <View style={[s.body,!isContent && Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
-      {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goBase} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)}/> : null}
+    <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
+      {mode === "home" ? <HomeScreen onTab={openTopTab} openMatch={(x) => openMatch(x,"home")} openEntity={(type,x) => openEntity(type,x,"home")} openScores={() => setMode("scores")} openNotifications={() => openNotifications("home")} openSearch={() => { setReturnMode("home"); setMode("search"); }}/> : null}
+      {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)}/> : null}
       {mode === "scores" ? <QuickScoresScreen openMatch={(x) => openMatch(x,"scores")}/> : null}
       {mode === "favorites" ? <FavoritesScreen openLeague={(x) => openEntity("competition",x,"favorites")} openTeam={(x) => openEntity("team",x,"favorites")} openPlayer={(x) => openEntity("player",x,"favorites")} openAccount={() => openAccount("favorites")}/> : null}
       {mode === "prediction" ? <PredictionScreen openMatch={(x) => openMatch(x,"prediction")} openAccount={() => openAccount("prediction")}/> : null}
@@ -95,21 +88,18 @@ export default function AppFinalShell() {
       {mode === "notifications" ? <NotificationsScreen goBack={goReturn} openAccount={() => openAccount("notifications")}/> : null}
       {mode === "settings" ? <SettingsScreen goBack={() => setMode("more")} openNotifications={() => openNotifications("settings")} openAccount={() => openAccount("settings")}/> : null}
       {mode === "about" ? <AboutScreen goBack={() => setMode("more")}/> : null}
-      {mode === "search" ? <SearchScreen goBack={goBase} openMatch={(x) => openMatch(x,"search")} openEntity={(type,x) => openEntity(type,x,"search")}/> : null}
+      {mode === "search" ? <SearchScreen goBack={goReturn} openMatch={(x) => openMatch(x,"search")} openEntity={(type,x) => openEntity(type,x,"search")}/> : null}
       {mode === "match" ? <NativeMatchScreen match={selected} goBack={goReturn}/> : null}
       {mode === "entity" ? <NativeEntityScreen type={selected?.type} entity={selected?.entity} goBack={goReturn}/> : null}
       {mode === "article" ? <NativeArticleScreen article={selected} goBack={goReturn}/> : null}
     </View>
-    {!isSubpage ? <BottomNav active={isContent ? "home" : mode} onChange={(tab) => { if (tab === "home") goBase(); else setMode(tab); }}/> : null}
+    {!isSubpage ? <BottomNav active={isContent ? "home" : mode} onChange={(tab) => tab === "home" ? goHome() : setMode(tab)}/> : null}
   </View>;
 }
 
 const s = StyleSheet.create({
   root:{flex:1,backgroundColor:C.bg},body:{flex:1},screen:{flex:1,backgroundColor:C.bg},
-  headerActionBar:{position:"absolute",right:13,top:Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 7 : 7,width:102,height:50,flexDirection:"row"},headerAction:{flex:1},
-  topInterceptBar:{position:"absolute",left:14,right:14,top:Platform.OS === "android" ? 92 : 78,height:43,flexDirection:"row"},topPassThrough:{flex:1},topIntercept:{flex:1},
-  interceptBar:{position:"absolute",left:0,right:0,bottom:0,height:76,flexDirection:"row"},passThrough:{flex:1},intercept:{flex:1},
-  bottomNav:{height:Platform.OS === "ios" ? 73 : 68,backgroundColor:C.bg2,borderTopWidth:1,borderTopColor:C.border,flexDirection:"row",paddingTop:6,paddingBottom:Platform.OS === "ios" ? 8 : 5},navItem:{flex:1,alignItems:"center",justifyContent:"center",gap:3},navText:{fontSize:10,color:C.muted},navTextActive:{color:C.red},
+  bottomNav:{height:68,backgroundColor:C.bg2,borderTopWidth:1,borderTopColor:C.border,flexDirection:"row",paddingTop:6,paddingBottom:5},navItem:{flex:1,alignItems:"center",justifyContent:"center",gap:3},navText:{fontSize:10,color:C.muted},navTextActive:{color:C.red},
   header:{minHeight:70,paddingHorizontal:18,flexDirection:"row",alignItems:"center",justifyContent:"space-between",borderBottomWidth:1,borderBottomColor:C.border2},title:{color:C.text,fontSize:22,fontWeight:"800"},subtitle:{color:C.muted,fontSize:11,marginTop:3},content:{padding:16,paddingBottom:36},
   accountHero:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:13,padding:14,flexDirection:"row",alignItems:"center",gap:12},accountIcon:{width:54,height:54,borderRadius:14,backgroundColor:"rgba(243,38,45,0.14)",alignItems:"center",justifyContent:"center"},mst:{color:C.red,fontSize:20,fontStyle:"italic",fontWeight:"900"},accountTitle:{color:C.text,fontSize:15,fontWeight:"800"},accountText:{color:C.muted,fontSize:10.5,lineHeight:15,marginTop:4},
   section:{color:C.text2,fontSize:12,fontWeight:"800",marginTop:18,marginBottom:9},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},row:{minHeight:62,paddingHorizontal:13,paddingVertical:9,flexDirection:"row",alignItems:"center",gap:11},rowBorder:{borderBottomWidth:1,borderBottomColor:C.border2},rowTitle:{color:C.text2,fontSize:13,fontWeight:"700"},rowSub:{color:C.muted,fontSize:9.5,marginTop:3},
