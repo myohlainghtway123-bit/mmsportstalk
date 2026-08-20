@@ -1,5 +1,6 @@
 name: Connect Full Football Data Once
 
+# Existing workflow: this update intentionally triggers the one-time integration.
 on:
   push:
     branches: [main]
