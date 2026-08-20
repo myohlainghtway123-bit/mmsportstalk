@@ -63,7 +63,8 @@ function rect(c, x, y, w, h, color) {
 
 function drawText(c, text, centerX, centerY, cell, color) {
   const chars = text.split('');
-  const charWidth = 5 * cell, gap = cell * 1.15;
+  const charWidth = 5 * cell;
+  const gap = cell * 1.15;
   const total = chars.length * charWidth + (chars.length - 1) * gap;
   let x = centerX - total / 2;
   const totalH = 7 * cell;
@@ -72,7 +73,7 @@ function drawText(c, text, centerX, centerY, cell, color) {
     const glyph = FONT[ch];
     if (glyph) glyph.forEach((row, ry) => row.split('').forEach((bit, rx) => {
       if (bit === '1') {
-        const italicShift = (6 - ry) * cell * 0.12;
+        const italicShift = (6 - ry) * cell * 0.10;
         rect(c, x + rx * cell + italicShift, y + ry * cell, cell * 0.92, cell * 0.92, color);
       }
     }));
@@ -87,14 +88,17 @@ function save(name, c) {
   console.log(`generated ${out}`);
 }
 
+// Standard icon: keep the full MST word well inside the square.
 const icon = canvas(1024,1024,BLACK);
-drawText(icon,'MST',512,505,92,RED);
+drawText(icon,'MST',512,500,52,RED);
 save('icon.png',icon);
 
+// Android adaptive foreground: much smaller safe-zone to survive circular/squircle masks.
 const adaptive = canvas(1024,1024,TRANSPARENT);
-drawText(adaptive,'MST',512,512,78,RED);
+drawText(adaptive,'MST',512,512,42,RED);
 save('adaptive-icon.png',adaptive);
 
+// Splash: centered MST mark with generous breathing room.
 const splash = canvas(1242,2436,BLACK);
-drawText(splash,'MST',621,1218,105,RED);
+drawText(splash,'MST',621,1218,62,RED);
 save('splash.png',splash);
