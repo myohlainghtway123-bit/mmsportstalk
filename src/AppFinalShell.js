@@ -6,6 +6,7 @@ import { AccountScreen, FavoritesScreen, PredictionScreen } from "./phase2/Phase
 import ContentScreen from "./phase3/ContentScreens";
 import { AboutScreen, NotificationsScreen, SettingsScreen } from "./phase4/Phase4Screens";
 import QuickScoresScreen from "./final/QuickScoresScreen";
+import SearchScreen from "./final/SearchScreen";
 import { NativeArticleScreen, NativeEntityScreen, NativeMatchScreen } from "./final/NativeDetailScreens";
 
 const SITE = "https://myanmarsportstalk.com";
@@ -73,16 +74,23 @@ export default function AppFinalShell() {
   const [mode, setMode] = useState(null);
   const [baseKey, setBaseKey] = useState(0);
   const [selected, setSelected] = useState(null);
+  const [returnMode, setReturnMode] = useState("home");
 
-  const goBase = () => { setSelected(null); setMode(null); setBaseKey((value) => value + 1); };
-  const openMatch = (match) => { if (!match) return; setSelected(match); setMode("match"); };
-  const openEntity = (type, entity) => { if (!entity?.id) return; setSelected({ type, entity }); setMode("entity"); };
-  const openArticle = (article) => { if (!article) return; setSelected(article); setMode("article"); };
+  const goBase = () => { setSelected(null); setReturnMode("home"); setMode(null); setBaseKey((value) => value + 1); };
+  const rememberOrigin = () => mode || "home";
+  const openMatch = (match, origin) => { if (!match) return; setReturnMode(origin || rememberOrigin()); setSelected(match); setMode("match"); };
+  const openEntity = (type, entity, origin) => { if (!entity?.id) return; setReturnMode(origin || rememberOrigin()); setSelected({ type, entity }); setMode("entity"); };
+  const openArticle = (article) => { if (!article) return; setReturnMode(rememberOrigin().startsWith("content-") ? rememberOrigin() : "content-news"); setSelected(article); setMode("article"); };
+  const goReturn = () => { if (returnMode === "home") goBase(); else setMode(returnMode); };
 
   if (!mode) {
     return <View style={s.root}>
       <AppFull key={baseKey}/>
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        <View pointerEvents="box-none" style={s.headerActionBar}>
+          <Pressable accessibilityLabel="Notifications" style={s.headerAction} onPress={() => setMode("notifications")}/>
+          <Pressable accessibilityLabel="Search" style={s.headerAction} onPress={() => setMode("search")}/>
+        </View>
         <View pointerEvents="box-none" style={s.topInterceptBar}>
           <View style={s.topPassThrough} pointerEvents="none"/>
           <Pressable accessibilityLabel="News" style={s.topIntercept} onPress={() => setMode("content-news")}/>
@@ -102,7 +110,7 @@ export default function AppFinalShell() {
 
   const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
   const isContent = mode.startsWith("content-");
-  const isSubpage = ["account", "notifications", "settings", "about", "match", "entity", "article"].includes(mode);
+  const isSubpage = ["account", "notifications", "settings", "about", "match", "entity", "article", "search"].includes(mode);
   const androidInset = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0;
   const openAccount = () => setMode("account");
 
@@ -110,17 +118,18 @@ export default function AppFinalShell() {
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
     <View style={[s.body, !isContent && Platform.OS === "android" ? { paddingTop: androidInset } : null]}>
       {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goBase} onOpenArticle={openArticle} onNotifications={() => setMode("notifications")}/> : null}
-      {mode === "scores" ? <QuickScoresScreen openMatch={openMatch}/> : null}
-      {mode === "favorites" ? <FavoritesScreen openLeague={(x) => openEntity("competition", x)} openTeam={(x) => openEntity("team", x)} openPlayer={(x) => openEntity("player", x)} openAccount={openAccount}/> : null}
-      {mode === "prediction" ? <PredictionScreen openMatch={openMatch} openAccount={openAccount}/> : null}
+      {mode === "scores" ? <QuickScoresScreen openMatch={(x) => openMatch(x, "scores")}/> : null}
+      {mode === "favorites" ? <FavoritesScreen openLeague={(x) => openEntity("competition", x, "favorites")} openTeam={(x) => openEntity("team", x, "favorites")} openPlayer={(x) => openEntity("player", x, "favorites")} openAccount={openAccount}/> : null}
+      {mode === "prediction" ? <PredictionScreen openMatch={(x) => openMatch(x, "prediction")} openAccount={openAccount}/> : null}
       {mode === "more" ? <MoreScreen navigate={setMode}/> : null}
       {mode === "account" ? <AccountScreen goBack={() => setMode("more")}/> : null}
       {mode === "notifications" ? <NotificationsScreen goBack={() => setMode("more")} openAccount={openAccount}/> : null}
       {mode === "settings" ? <SettingsScreen goBack={() => setMode("more")} openNotifications={() => setMode("notifications")} openAccount={openAccount}/> : null}
       {mode === "about" ? <AboutScreen goBack={() => setMode("more")}/> : null}
-      {mode === "match" ? <NativeMatchScreen match={selected} goBack={() => setMode("scores")}/> : null}
-      {mode === "entity" ? <NativeEntityScreen type={selected?.type} entity={selected?.entity} goBack={() => setMode("favorites")}/> : null}
-      {mode === "article" ? <NativeArticleScreen article={selected} goBack={() => setMode("content-news")}/> : null}
+      {mode === "search" ? <SearchScreen goBack={goBase} openMatch={(x) => openMatch(x, "search")} openEntity={(type, x) => openEntity(type, x, "search")}/> : null}
+      {mode === "match" ? <NativeMatchScreen match={selected} goBack={goReturn}/> : null}
+      {mode === "entity" ? <NativeEntityScreen type={selected?.type} entity={selected?.entity} goBack={goReturn}/> : null}
+      {mode === "article" ? <NativeArticleScreen article={selected} goBack={goReturn}/> : null}
     </View>
     {!isSubpage ? <BottomNav active={isContent ? "home" : mode} onChange={(tab) => { if (tab === "home") goBase(); else setMode(tab); }}/> : null}
   </View>;
@@ -130,6 +139,8 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   body: { flex: 1 },
   screen: { flex: 1, backgroundColor: C.bg },
+  headerActionBar: { position: "absolute", right: 13, top: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 7 : 7, width: 102, height: 50, flexDirection: "row" },
+  headerAction: { flex: 1 },
   topInterceptBar: { position: "absolute", left: 14, right: 14, top: Platform.OS === "android" ? 92 : 78, height: 43, flexDirection: "row" },
   topPassThrough: { flex: 1 }, topIntercept: { flex: 1 },
   interceptBar: { position: "absolute", left: 0, right: 0, bottom: 0, height: 76, flexDirection: "row" },
