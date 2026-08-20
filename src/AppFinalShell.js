@@ -41,7 +41,7 @@ function MoreScreen({ navigate, openAccount, openNotifications }) {
     ["information-circle-outline", "About MST", "Myanmar Sports Talk mobile app", () => navigate("about")],
   ];
   return <View style={s.screen}>
-    <View style={s.header}><View><Text style={s.title}>More</Text><Text style={s.subtitle}>Myanmar Sports Talk</Text></View><Pressable onPress={openAccount}><Ionicons name="person-circle-outline" size={31} color={C.text}/></Pressable></View>
+    <View style={s.header}><View><Text style={s.title}>More</Text><Text style={s.subtitle}>Myanmar Sports Talk</Text></View><Pressable hitSlop={8} onPress={openAccount}><Ionicons name="person-circle-outline" size={31} color={C.text}/></Pressable></View>
     <ScrollView contentContainerStyle={s.content}>
       <Pressable style={s.accountHero} onPress={openAccount}><View style={s.accountIcon}><Text style={s.mst}>MST</Text></View><View style={{flex:1}}><Text style={s.accountTitle}>My MST Account</Text><Text style={s.accountText}>Use the same account as myanmarsportstalk.com.</Text></View><Ionicons name="chevron-forward" size={20} color={C.muted}/></Pressable>
       <Text style={s.section}>ACCOUNT & APP</Text>
@@ -67,6 +67,7 @@ export default function AppFinalShell() {
   const openArticle = (article) => { if (!article) return; const origin = rememberOrigin(); setReturnMode(origin.startsWith("content-") ? origin : "content-news"); setSelected(article); setMode("article"); };
   const openAccount = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("account"); };
   const openNotifications = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("notifications"); };
+  const openSearch = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("search"); };
   const goReturn = () => setMode(returnMode || "home");
   const openTopTab = (tab) => setMode(tab === "NEWS" ? "content-news" : tab === "VIDEOS" ? "content-videos" : tab === "TRANSFERS" ? "content-transfers" : "home");
 
@@ -78,8 +79,8 @@ export default function AppFinalShell() {
   return <View style={s.root}>
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
     <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
-      {mode === "home" ? <HomeScreen onTab={openTopTab} openMatch={(x) => openMatch(x,"home")} openEntity={(type,x) => openEntity(type,x,"home")} openScores={() => setMode("scores")} openNotifications={() => openNotifications("home")} openSearch={() => { setReturnMode("home"); setMode("search"); }}/> : null}
-      {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)}/> : null}
+      {mode === "home" ? <HomeScreen onTab={openTopTab} openMatch={(x) => openMatch(x,"home")} openEntity={(type,x) => openEntity(type,x,"home")} openScores={() => setMode("scores")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")}/> : null}
+      {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
       {mode === "scores" ? <QuickScoresScreen openMatch={(x) => openMatch(x,"scores")}/> : null}
       {mode === "favorites" ? <FavoritesScreen openLeague={(x) => openEntity("competition",x,"favorites")} openTeam={(x) => openEntity("team",x,"favorites")} openPlayer={(x) => openEntity("player",x,"favorites")} openAccount={() => openAccount("favorites")}/> : null}
       {mode === "prediction" ? <PredictionScreen openMatch={(x) => openMatch(x,"prediction")} openAccount={() => openAccount("prediction")}/> : null}
