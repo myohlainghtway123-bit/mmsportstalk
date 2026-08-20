@@ -1,16 +1,15 @@
 name: Phase 2 Connect Once
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/phase2-connect-once.yml'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   integrate:
+    if: github.event.issue.title == 'RUN MST PHASE 2 INTEGRATION'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
