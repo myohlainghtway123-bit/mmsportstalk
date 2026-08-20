@@ -30,10 +30,20 @@ function first(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
-function absoluteUrl(value) {
+function stringUrl(value) {
   if (!value) return null;
-  const text = String(value);
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return first(value.url, value.src, value.source_url, value.href, value.image, null);
+  return null;
+}
+
+function absoluteUrl(value) {
+  const source = stringUrl(value);
+  if (!source) return null;
+  const text = String(source).trim();
+  if (!text || text === "[object Object]") return null;
   if (/^https?:\/\//i.test(text)) return text;
+  if (text.startsWith("//")) return `https:${text}`;
   if (text.startsWith("/")) return `${SITE}${text}`;
   return `${SITE}/${text}`;
 }
@@ -48,14 +58,40 @@ function cleanText(value) {
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&hellip;/gi, "…")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function articleImage(raw) {
+  return first(
+    raw?.imageUrl,
+    raw?.image_url,
+    raw?.featuredImageUrl,
+    raw?.featured_image_url,
+    raw?.featuredImage?.url,
+    raw?.featured_image?.url,
+    raw?.coverImage?.url,
+    raw?.cover_image?.url,
+    raw?.thumbnailUrl,
+    raw?.thumbnail_url,
+    raw?.thumbnail?.url,
+    raw?.media?.url,
+    raw?.media?.source_url,
+    raw?.image?.url,
+    raw?.image?.src,
+    typeof raw?.featuredImage === "string" ? raw.featuredImage : null,
+    typeof raw?.coverImage === "string" ? raw.coverImage : null,
+    typeof raw?.cover === "string" ? raw.cover : null,
+    typeof raw?.thumbnail === "string" ? raw.thumbnail : null,
+    typeof raw?.image === "string" ? raw.image : null,
+    null
+  );
 }
 
 export function normalizeArticle(raw, index = 0) {
   const categoryRaw = first(raw?.category?.name, raw?.category, raw?.type, raw?.section, raw?.topic, "News");
   const slug = first(raw?.slug, raw?.id, `article-${index}`);
-  const image = first(raw?.image, raw?.imageUrl, raw?.image_url, raw?.cover, raw?.coverImage, raw?.featuredImage, raw?.thumbnail, raw?.media?.url);
   const published = first(raw?.publishedAt, raw?.published_at, raw?.date, raw?.createdAt, raw?.created_at, raw?.updatedAt);
   const title = first(raw?.title, raw?.headline, raw?.name, "Myanmar Sports Talk");
   const excerpt = first(raw?.excerpt, raw?.summary, raw?.description, raw?.dek, raw?.content, raw?.body, "");
@@ -63,13 +99,13 @@ export function normalizeArticle(raw, index = 0) {
     id: String(first(raw?.id, slug, index)),
     slug: String(slug),
     title: cleanText(title),
-    excerpt: cleanText(excerpt).slice(0, 280),
+    excerpt: cleanText(excerpt).slice(0, 300),
     content: cleanText(first(raw?.content, raw?.body, raw?.article, raw?.description, "")),
     category: typeof categoryRaw === "string" ? categoryRaw : first(categoryRaw?.name, categoryRaw?.title, "News"),
-    image: absoluteUrl(image),
-    author: first(raw?.author?.name, raw?.authorName, raw?.author, "MST Team"),
+    image: absoluteUrl(articleImage(raw)),
+    author: first(raw?.author?.name, raw?.authorName, raw?.author_name, typeof raw?.author === "string" ? raw.author : null, "Myanmar Sports Talk"),
     publishedAt: published || null,
-    url: absoluteUrl(first(raw?.url, raw?.link, `/news/${slug}`)),
+    url: absoluteUrl(first(raw?.url, raw?.link, raw?.permalink, `/news/${slug}`)),
     raw,
   };
 }
@@ -82,7 +118,17 @@ export function normalizeVideo(raw, index = 0) {
     const match = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([^?&/]+)/i);
     youtubeId = match?.[1] || null;
   }
-  const thumbnail = first(raw?.thumbnail, raw?.thumbnailUrl, raw?.thumbnail_url, raw?.image, raw?.cover, youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null);
+  const thumbnail = first(
+    raw?.thumbnailUrl,
+    raw?.thumbnail_url,
+    raw?.thumbnail?.url,
+    raw?.image?.url,
+    typeof raw?.thumbnail === "string" ? raw.thumbnail : null,
+    typeof raw?.image === "string" ? raw.image : null,
+    raw?.cover?.url,
+    typeof raw?.cover === "string" ? raw.cover : null,
+    youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null
+  );
   return {
     id: String(id),
     youtubeId: youtubeId || null,
