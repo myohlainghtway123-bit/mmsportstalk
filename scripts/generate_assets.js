@@ -88,17 +88,17 @@ function save(name, c) {
   console.log(`generated ${out}`);
 }
 
-// Standard icon: keep the full MST word well inside the square.
+// Standard icon: generous margin so the full mark survives launcher rounding.
 const icon = canvas(1024,1024,BLACK);
-drawText(icon,'MST',512,500,52,RED);
+drawText(icon,'MST',512,500,44,RED);
 save('icon.png',icon);
 
-// Android adaptive foreground: much smaller safe-zone to survive circular/squircle masks.
+// Android adaptive foreground: stay inside the conservative central safe zone.
 const adaptive = canvas(1024,1024,TRANSPARENT);
-drawText(adaptive,'MST',512,512,42,RED);
+drawText(adaptive,'MST',512,512,34,RED);
 save('adaptive-icon.png',adaptive);
 
 // Splash: centered MST mark with generous breathing room.
 const splash = canvas(1242,2436,BLACK);
-drawText(splash,'MST',621,1218,62,RED);
+drawText(splash,'MST',621,1218,58,RED);
 save('splash.png',splash);
