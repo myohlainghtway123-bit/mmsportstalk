@@ -9,6 +9,12 @@
     "backgroundColor": "#080A0C",
     "scheme": "mst",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#080A0C"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.myanmarsportstalk.mst",
@@ -17,7 +23,11 @@
     "android": {
       "package": "com.myanmarsportstalk.mst",
       "versionCode": 1,
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#080A0C"
+      }
     },
     "androidStatusBar": {
       "backgroundColor": "#080A0C",
