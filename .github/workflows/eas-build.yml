@@ -20,6 +20,10 @@ on:
         options:
           - preview
           - production
+  push:
+    branches: [main]
+    paths:
+      - '.release/android-preview.txt'
 
 jobs:
   build:
@@ -39,4 +43,6 @@ jobs:
       - name: Build with EAS
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli@latest build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive --wait
+          PLATFORM: ${{ inputs.platform || 'android' }}
+          PROFILE: ${{ inputs.profile || 'preview' }}
+        run: npx eas-cli@latest build --platform "$PLATFORM" --profile "$PROFILE" --non-interactive --wait
