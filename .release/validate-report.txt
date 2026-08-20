@@ -1,5 +1,5 @@
 MST Android validation
-Commit: ddd92cd65b5af531515ca5aad5adc4c5a34c086c
+Commit: 78aa41acf2660130fedf4a9106a63f6a30c0ba7c
 
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
@@ -16,7 +16,7 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 702 packages, and audited 703 packages in 31s
+added 702 packages, and audited 703 packages in 23s
 
 53 packages are looking for funding
   run `npm fund` for details
@@ -38,10 +38,10 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 73/217)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 70.8% (428/524)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (656/656)
-Android Bundled 11455ms index.js (656 modules)
+Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 68/200)
+Android ./index.js ▓▓▓▓▓▓▓▓░░░░░░░░ 55.8% (342/458)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.7% (629/650)
+Android Bundled 12411ms index.js (656 modules)
 
 › Assets (19):
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf (130 kB)
@@ -65,7 +65,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-093c9ad078b7977c0059dd2d9d07a2c1.hbc (2.39 MB)
+_expo/static/js/android/index-2986844e55833866964a6e9f8ad23730.hbc (2.39 MB)
 
 › Files (1):
 metadata.json (1.35 kB)
