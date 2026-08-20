@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchFootballMatches, isLiveMatch } from "../services/footballApi";
+import { isLiveMatch } from "../services/footballApi";
+import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
 
 const C = {
   bg: "#080A0C",
@@ -36,26 +37,30 @@ function bangkokDate(offset = 0) {
 }
 
 function useMatches(date) {
-  const [state, setState] = useState({ loading: true, refreshing: false, error: "", matches: [] });
+  const [state, setState] = useState(() => {
+    const saved = peekFastFootballMatches(date);
+    return { loading: !saved, refreshing: false, error: "", matches: saved?.matches || [] };
+  });
 
   const load = useCallback(async (refresh = false) => {
+    const saved = peekFastFootballMatches(date);
     setState((prev) => ({
       ...prev,
-      loading: !refresh,
+      loading: !refresh && !saved,
       refreshing: refresh,
       error: "",
-      matches: refresh ? prev.matches : [],
+      matches: saved?.matches || (refresh ? prev.matches : []),
     }));
     try {
-      const result = await fetchFootballMatches({ date });
+      const result = await fetchFastFootballMatches({ date, force: refresh });
       setState({ loading: false, refreshing: false, error: "", matches: result.matches || [] });
     } catch (error) {
-      setState({ loading: false, refreshing: false, error: error?.message || "Could not load matches.", matches: [] });
+      setState((prev) => ({ ...prev, loading: false, refreshing: false, error: error?.message || "Could not load matches." }));
     }
   }, [date]);
 
   useEffect(() => { load(false); }, [load]);
-  return { ...state, reload: () => load(false), refresh: () => load(true) };
+  return { ...state, reload: () => load(true), refresh: () => load(true) };
 }
 
 function TeamLogo({ uri }) {
@@ -149,10 +154,10 @@ export default function QuickScoresScreen({ openMatch }) {
           <Text style={s.count}>{matches.length} matches</Text>
         </View>
 
-        {api.loading ? <View style={s.state}><ActivityIndicator color={C.red} /><Text style={s.stateText}>Loading {tab.toLowerCase()} matches…</Text></View> : null}
-        {!api.loading && api.error ? <View style={s.state}><Ionicons name="cloud-offline-outline" size={25} color={C.muted} /><Text style={s.stateText}>{api.error}</Text><Pressable style={s.retry} onPress={api.reload}><Text style={s.retryText}>RETRY</Text></Pressable></View> : null}
+        {api.loading && !matches.length ? <View style={s.state}><ActivityIndicator color={C.red} /><Text style={s.stateText}>Loading {tab.toLowerCase()} matches…</Text></View> : null}
+        {!api.loading && api.error && !matches.length ? <View style={s.state}><Ionicons name="cloud-offline-outline" size={25} color={C.muted} /><Text style={s.stateText}>{api.error}</Text><Pressable style={s.retry} onPress={api.reload}><Text style={s.retryText}>RETRY</Text></Pressable></View> : null}
         {!api.loading && !api.error && !matches.length ? <View style={s.state}><Ionicons name="football-outline" size={25} color={C.muted} /><Text style={s.stateText}>No matches found for {date}.</Text></View> : null}
-        {!api.loading && !api.error ? matches.map((match) => <MatchCard key={`${date}-${match.id}`} match={match} onOpen={openMatch} />) : null}
+        {matches.map((match) => <MatchCard key={`${date}-${match.id}`} match={match} onOpen={openMatch} />)}
         <View style={{ height: 28 }} />
       </ScrollView>
     </View>
