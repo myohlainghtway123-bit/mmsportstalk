@@ -1,0 +1,82 @@
+name: Bootstrap MST App
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore App.js from uploaded Snack project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/appjs.part1.b64 .bootstrap/appjs.part2.b64 | base64 --decode | gunzip > App.js
+          echo "a396272059a940ba9d27350a7592ee07613df9a9dbb31d0647d5215a23997f2d  App.js" | sha256sum -c -
+
+      - name: Clean Snack-only files and set MST Expo config
+        shell: bash
+        run: |
+          rm -rf .bootstrap
+          rm -f components/AssetExample.js
+          rmdir components 2>/dev/null || true
+          cat > app.json <<'EOF'
+          {
+            "expo": {
+              "name": "Myanmar Sports Talk",
+              "slug": "mst-app",
+              "version": "1.0.0",
+              "orientation": "portrait",
+              "userInterfaceStyle": "dark",
+              "newArchEnabled": true,
+              "ios": {
+                "supportsTablet": true
+              },
+              "android": {
+                "edgeToEdgeEnabled": true
+              }
+            }
+          }
+          EOF
+          cat > README.md <<'EOF'
+          # Myanmar Sports Talk (MST) App
+
+          React Native / Expo prototype for Myanmar Sports Talk.
+
+          ## Navigation
+
+          **Header:** Live Scores · News · Videos · Transfers
+
+          **Footer:** Home · Scores · Favorites · Prediction · More
+
+          ## Run locally
+
+          ```bash
+          npm install
+          npx expo start
+          ```
+
+          The current prototype uses mock football data and remote image/team-logo URLs. Live API, authentication, prediction persistence, notifications and production data connections can be added next.
+          EOF
+
+      - name: Commit restored Expo app
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git commit -m "Restore complete MST Expo prototype"
+          git push
