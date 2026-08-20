@@ -1,1 +1,1 @@
-export { default } from "./src/AppPhase2Shell";
+export { default } from "./src/AppFinalShell";
