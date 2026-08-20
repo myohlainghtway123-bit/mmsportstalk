@@ -18,37 +18,19 @@ const C = {
 };
 
 function Header({ title, subtitle, goBack }) {
-  return (
-    <View style={s.header}>
-      <Pressable onPress={goBack}><Ionicons name="chevron-back" size={28} color={C.text} /></Pressable>
-      <View style={{ flex: 1, paddingHorizontal: 12 }}>
-        <Text style={s.title}>{title}</Text>
-        {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
-      </View>
-      <View style={{ width: 28 }} />
-    </View>
-  );
+  return <View style={s.header}>
+    <Pressable hitSlop={10} onPress={goBack}><Ionicons name="chevron-back" size={28} color={C.text}/></Pressable>
+    <View style={{flex:1,paddingHorizontal:12}}><Text style={s.title}>{title}</Text>{subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}</View>
+    <View style={{width:28}}/>
+  </View>;
 }
 
 function Empty({ icon, title, text, action, actionText }) {
-  return (
-    <View style={s.empty}>
-      <Ionicons name={icon} size={30} color={C.muted} />
-      <Text style={s.emptyTitle}>{title}</Text>
-      {text ? <Text style={s.emptyText}>{text}</Text> : null}
-      {action ? <Pressable style={s.redButton} onPress={action}><Text style={s.redButtonText}>{actionText}</Text></Pressable> : null}
-    </View>
-  );
+  return <View style={s.empty}><Ionicons name={icon} size={30} color={C.muted}/><Text style={s.emptyTitle}>{title}</Text>{text ? <Text style={s.emptyText}>{text}</Text> : null}{action ? <Pressable style={s.redButton} onPress={action}><Text style={s.redButtonText}>{actionText}</Text></Pressable> : null}</View>;
 }
 
 function ToggleRow({ icon, title, subtitle, value, onChange, disabled }) {
-  return (
-    <Pressable style={s.row} disabled={disabled} onPress={() => onChange(!value)}>
-      <View style={s.rowIcon}><Ionicons name={icon} size={21} color={C.text2} /></View>
-      <View style={{ flex: 1 }}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View>
-      <View style={[s.toggle, value && s.toggleOn, disabled && { opacity: .55 }]}><View style={[s.toggleKnob, value && s.toggleKnobOn]} /></View>
-    </Pressable>
-  );
+  return <Pressable style={s.row} disabled={disabled} onPress={() => onChange(!value)}><View style={s.rowIcon}><Ionicons name={icon} size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View><View style={[s.toggle,value && s.toggleOn,disabled && {opacity:.55}]}><View style={[s.toggleKnob,value && s.toggleKnobOn]}/></View></Pressable>;
 }
 
 function timeLabel(value) {
@@ -60,95 +42,82 @@ function timeLabel(value) {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 export function NotificationsScreen({ goBack, openAccount }) {
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [prefs, setPrefs] = useState({ breakingNews: true, liveScores: true, transfers: true, predictions: true });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loading,setLoading] = useState(true);
+  const [refreshing,setRefreshing] = useState(false);
+  const [authenticated,setAuthenticated] = useState(false);
+  const [notifications,setNotifications] = useState([]);
+  const [prefs,setPrefs] = useState({breakingNews:true,liveScores:true,transfers:true,predictions:true});
+  const [saving,setSaving] = useState(false);
+  const [error,setError] = useState("");
 
-  const load = useCallback(async (refresh = false) => {
-    refresh ? setRefreshing(true) : setLoading(true);
-    setError("");
+  const load = useCallback(async (refresh=false) => {
+    refresh ? setRefreshing(true) : setLoading(true); setError("");
     try {
       const auth = await getAuthStatus();
       setAuthenticated(auth.authenticated);
-      if (!auth.authenticated) {
-        setNotifications([]);
-        return;
-      }
-      const [notificationPayload, prefPayload] = await Promise.all([
-        getNotifications().catch(() => null),
-        getNotificationPreferences().catch(() => null),
-      ]);
+      if (!auth.authenticated) { setNotifications([]); return; }
+      const [notificationPayload,prefPayload] = await Promise.all([getNotifications().catch(() => null),getNotificationPreferences().catch(() => null)]);
       setNotifications(normalizeNotifications(notificationPayload));
       if (prefPayload) setPrefs(normalizeNotificationPreferences(prefPayload));
-    } catch (e) {
-      setError(e?.message || "Could not load notifications.");
-    } finally {
-      setLoading(false); setRefreshing(false);
-    }
+    } catch (e) { setError(e?.message || "Could not load notifications."); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
-
   useEffect(() => { load(); }, [load]);
 
-  const updatePref = async (key, value) => {
-    const next = { ...prefs, [key]: value };
-    setPrefs(next); setSaving(true); setError("");
+  const updatePref = async (key,value) => {
+    const next = {...prefs,[key]:value}; setPrefs(next); setSaving(true); setError("");
     try { await saveNotificationPreferences(serializeNotificationPreferences(next)); }
     catch (e) { setPrefs(prefs); setError(e?.message || "Could not save notification preference."); }
     finally { setSaving(false); }
   };
 
-  return (
-    <View style={s.screen}>
-      <Header title="Notifications" subtitle="MST alerts and preferences" goBack={goBack} />
-      <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={C.red} colors={[C.red]} />}>
-        {loading ? <View style={s.loading}><ActivityIndicator color={C.red} /><Text style={s.emptyText}>Loading notifications…</Text></View> : null}
-        {!loading && !authenticated ? <Empty icon="person-circle-outline" title="Sign in for MST notifications" text="Use your MST account to sync notification preferences and alerts." action={openAccount} actionText="SIGN IN" /> : null}
-        {error ? <Text style={s.error}>{error}</Text> : null}
-        {!loading && authenticated ? <>
-          <Text style={s.section}>NOTIFICATION PREFERENCES</Text>
-          <View style={s.card}>
-            <ToggleRow icon="newspaper-outline" title="Breaking News" subtitle="Important MST news and articles" value={prefs.breakingNews} onChange={(v) => updatePref("breakingNews", v)} disabled={saving} />
-            <View style={s.divider} />
-            <ToggleRow icon="football-outline" title="Live Scores" subtitle="Match and score updates" value={prefs.liveScores} onChange={(v) => updatePref("liveScores", v)} disabled={saving} />
-            <View style={s.divider} />
-            <ToggleRow icon="swap-horizontal-outline" title="Transfers" subtitle="Transfer news and confirmed moves" value={prefs.transfers} onChange={(v) => updatePref("transfers", v)} disabled={saving} />
-            <View style={s.divider} />
-            <ToggleRow icon="trophy-outline" title="Predictions" subtitle="Prediction results and points" value={prefs.predictions} onChange={(v) => updatePref("predictions", v)} disabled={saving} />
-          </View>
-          <Text style={s.section}>RECENT NOTIFICATIONS</Text>
-          {notifications.length ? <View style={s.card}>{notifications.slice(0,30).map((item, index) => <View key={`${item.id}-${index}`} style={[s.notificationRow, index !== Math.min(notifications.length,30)-1 && s.divider]}><View style={[s.unreadDot, item.read && { opacity: 0 }]} /><View style={{ flex: 1 }}><Text style={s.notificationTitle}>{item.title}</Text>{item.body ? <Text style={s.notificationBody}>{item.body}</Text> : null}<Text style={s.notificationTime}>{timeLabel(item.createdAt)}</Text></View></View>)}</View> : <Empty icon="notifications-outline" title="No notifications yet" text="New MST alerts will appear here." />}
-        </> : null}
-      </ScrollView>
-    </View>
-  );
+  return <View style={s.screen}>
+    <Header title="Notifications" subtitle="MST alerts and preferences" goBack={goBack}/>
+    <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={C.red} colors={[C.red]}/> }>
+      {loading ? <View style={s.loading}><ActivityIndicator color={C.red}/><Text style={s.emptyText}>Loading notifications…</Text></View> : null}
+      {!loading && !authenticated ? <Empty icon="person-circle-outline" title="Sign in for MST notifications" text="Use your MST account to sync notification preferences and alerts." action={openAccount} actionText="SIGN IN"/> : null}
+      {error ? <Text style={s.error}>{error}</Text> : null}
+      {!loading && authenticated ? <>
+        <Text style={s.section}>NOTIFICATION PREFERENCES</Text>
+        <View style={s.card}>
+          <ToggleRow icon="newspaper-outline" title="Breaking News" subtitle="Important MST news and articles" value={prefs.breakingNews} onChange={(v) => updatePref("breakingNews",v)} disabled={saving}/><View style={s.divider}/>
+          <ToggleRow icon="football-outline" title="Live Scores" subtitle="Match and score updates" value={prefs.liveScores} onChange={(v) => updatePref("liveScores",v)} disabled={saving}/><View style={s.divider}/>
+          <ToggleRow icon="swap-horizontal-outline" title="Transfers" subtitle="Transfer news and confirmed moves" value={prefs.transfers} onChange={(v) => updatePref("transfers",v)} disabled={saving}/><View style={s.divider}/>
+          <ToggleRow icon="trophy-outline" title="Predictions" subtitle="Prediction results and points" value={prefs.predictions} onChange={(v) => updatePref("predictions",v)} disabled={saving}/>
+        </View>
+        <Text style={s.section}>RECENT NOTIFICATIONS</Text>
+        {notifications.length ? <View style={s.card}>{notifications.slice(0,30).map((item,index) => <View key={`${item.id}-${index}`} style={[s.notificationRow,index !== Math.min(notifications.length,30)-1 && s.divider]}><View style={[s.unreadDot,item.read && {opacity:0}]}/><View style={{flex:1}}><Text style={s.notificationTitle}>{item.title}</Text>{item.body ? <Text style={s.notificationBody}>{item.body}</Text> : null}<Text style={s.notificationTime}>{timeLabel(item.createdAt)}</Text></View></View>)}</View> : <Empty icon="notifications-outline" title="No notifications yet" text="New MST alerts will appear here."/>}
+      </> : null}
+    </ScrollView>
+  </View>;
 }
 
 export function SettingsScreen({ goBack, openNotifications, openAccount }) {
-  const [auth, setAuth] = useState(null);
-  useEffect(() => { getAuthStatus().then(setAuth).catch(() => setAuth({ authenticated: false })); }, []);
+  const [auth,setAuth] = useState(null);
+  useEffect(() => { getAuthStatus().then(setAuth).catch(() => setAuth({authenticated:false})); }, []);
   const rows = useMemo(() => [
-    ["person-circle-outline", "MST Account", auth?.authenticated ? "Signed in" : "Sign in to sync favorites and predictions", openAccount],
-    ["notifications-outline", "Notifications", "News, live scores, transfers and predictions", openNotifications],
-    ["moon-outline", "Appearance", "Dark theme · MST red / black / white", null],
-    ["language-outline", "Language", "English UI · Burmese content supported", null],
-    ["refresh-outline", "Live score refresh", "Every 60 seconds while the app is open", null],
-    ["globe-outline", "Website", "myanmarsportstalk.com", () => Linking.openURL(MST_SITE_URL)],
-  ], [auth, openAccount, openNotifications]);
+    ["person-circle-outline","MST Account",auth?.authenticated ? "Signed in" : "Sign in to sync favorites and predictions",openAccount],
+    ["notifications-outline","Notifications","Manage MST alert preferences",openNotifications],
+    ["globe-outline","MST Website","myanmarsportstalk.com",() => Linking.openURL(MST_SITE_URL)],
+  ], [auth,openAccount,openNotifications]);
 
-  return <View style={s.screen}><Header title="Settings" subtitle="Myanmar Sports Talk" goBack={goBack} /><ScrollView contentContainerStyle={s.content}><Text style={s.section}>APP</Text><View style={s.card}>{rows.map(([icon,title,subtitle,action],i)=><Pressable key={title} onPress={action || undefined} style={[s.settingsRow,i!==rows.length-1&&s.divider]}><View style={s.rowIcon}><Ionicons name={icon} size={21} color={title === "MST Account" ? C.red : C.text2} /></View><View style={{flex:1}}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View>{action?<Ionicons name="chevron-forward" size={18} color={C.muted}/>:null}</Pressable>)}</View><Text style={s.section}>BUILD</Text><View style={s.card}><View style={s.settingsRow}><View style={s.rowIcon}><Ionicons name="phone-portrait-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>Myanmar Sports Talk</Text><Text style={s.rowSub}>Version 1.0.0 · Android / iPhone ready configuration</Text></View></View></View></ScrollView></View>;
+  return <View style={s.screen}><Header title="Settings" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}>
+    <Text style={s.section}>APP</Text>
+    <View style={s.card}>{rows.map(([icon,title,subtitle,action],i) => <Pressable key={title} onPress={action} style={[s.settingsRow,i !== rows.length-1 && s.divider]}><View style={s.rowIcon}><Ionicons name={icon} size={21} color={title === "MST Account" ? C.red : C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View><Ionicons name="chevron-forward" size={18} color={C.muted}/></Pressable>)}</View>
+    <Text style={s.section}>APP INFO</Text>
+    <View style={s.card}>
+      <View style={[s.settingsRow,s.divider]}><View style={s.rowIcon}><Ionicons name="refresh-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>Live score refresh</Text><Text style={s.rowSub}>Every 60 seconds while the app is open</Text></View></View>
+      <View style={s.settingsRow}><View style={s.rowIcon}><Ionicons name="phone-portrait-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>Myanmar Sports Talk</Text><Text style={s.rowSub}>Version 1.0.1 · Android build 2</Text></View></View>
+    </View>
+  </ScrollView></View>;
 }
 
 export function AboutScreen({ goBack }) {
-  return <View style={s.screen}><Header title="About MST" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MYANMAR SPORTS TALK</Text><Text style={s.aboutText}>The football platform for Myanmar fans — live scores, football data, news, videos, favorites and predictions in one app.</Text></View><Pressable style={s.redButton} onPress={()=>Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
+  return <View style={s.screen}><Header title="About MST" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MYANMAR SPORTS TALK</Text><Text style={s.aboutText}>The football platform for Myanmar fans — live scores, football data, news, videos, favorites and predictions in one app.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
 }
 
 const s = StyleSheet.create({
