@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { Linking, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AppFull from "./AppFull";
 import { AccountScreen, FavoritesScreen, PredictionScreen } from "./phase2/Phase2Screens";
+import ContentScreen from "./phase3/ContentScreens";
 
 const SITE = "https://myanmarsportstalk.com";
 const C = {
@@ -88,7 +89,7 @@ function MorePhase2({ openAccount }) {
           ))}
         </View>
 
-        <Text style={s.helper}>Football discovery, team, player and competition pages remain available from Home and Scores. This Phase 2 screen adds the MST user system without disturbing the football build.</Text>
+        <Text style={s.helper}>Football discovery, team, player and competition pages remain available from Home and Scores. The user and content systems are layered on top without disturbing the working football build.</Text>
       </View>
     </View>
   );
@@ -114,6 +115,12 @@ export default function AppPhase2Shell() {
       <View style={s.root}>
         <AppFull key={baseKey} />
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <View pointerEvents="box-none" style={s.topInterceptBar}>
+            <View style={s.topPassThrough} pointerEvents="none" />
+            <Pressable accessibilityLabel="News" style={s.topIntercept} onPress={() => setMode("content-news")} />
+            <Pressable accessibilityLabel="Videos" style={s.topIntercept} onPress={() => setMode("content-videos")} />
+            <Pressable accessibilityLabel="Transfers" style={s.topIntercept} onPress={() => setMode("content-transfers")} />
+          </View>
           <View pointerEvents="box-none" style={s.interceptBar}>
             <View style={s.passThrough} pointerEvents="none" />
             <View style={s.passThrough} pointerEvents="none" />
@@ -127,11 +134,19 @@ export default function AppPhase2Shell() {
   }
 
   const openAccount = () => setMode("account");
+  const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
+  const isContent = mode.startsWith("content-");
 
   return (
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
       <View style={{ flex: 1 }}>
+        {isContent ? (
+          <ContentScreen
+            initialTab={contentTab}
+            onLiveScores={goBase}
+          />
+        ) : null}
         {mode === "favorites" ? (
           <FavoritesScreen
             openLeague={(entity) => openWebsiteEntity("competition", entity)}
@@ -151,7 +166,7 @@ export default function AppPhase2Shell() {
       </View>
       {mode !== "account" ? (
         <PhaseBottomNav
-          active={mode}
+          active={isContent ? "home" : mode}
           onChange={(tab) => {
             if (tab === "home" || tab === "scores") goBase();
             else setMode(tab);
@@ -165,6 +180,16 @@ export default function AppPhase2Shell() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   screen: { flex: 1, backgroundColor: C.bg },
+  topInterceptBar: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    top: Platform.OS === "android" ? 92 : 78,
+    height: 43,
+    flexDirection: "row",
+  },
+  topPassThrough: { flex: 1 },
+  topIntercept: { flex: 1 },
   interceptBar: {
     position: "absolute",
     left: 0,
