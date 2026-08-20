@@ -2,6 +2,7 @@
   "expo": {
     "name": "Myanmar Sports Talk",
     "slug": "mst-app",
+    "owner": "myohlainghtway",
     "description": "Myanmar Sports Talk — live football scores, news, videos, transfers, favorites and predictions.",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -36,6 +37,11 @@
     "androidNavigationBar": {
       "backgroundColor": "#0B0E10",
       "barStyle": "light-content"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "393dcc05-f6d3-42ca-9c35-b35b5eedf090"
+      }
     }
   }
 }
