@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { fetchFootballMatches, isLiveMatch } from "../services/footballApi";
+import { isLiveMatch } from "../services/footballApi";
+import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
 
 const C = {
   bg: "#080A0C", card: "#111416", card2: "#15191C", border: "#24292D", border2: "#1D2226",
@@ -48,17 +49,29 @@ function MatchCard({ match, openMatch }) {
 }
 
 export default function HomeScreen({ onTab, openMatch, openEntity, openScores, openNotifications, openSearch }) {
-  const [state, setState] = useState({ loading:true, refreshing:false, error:"", matches:[] });
   const date = bangkokToday();
+  const [state, setState] = useState(() => {
+    const saved = peekFastFootballMatches(date);
+    return { loading:!saved, refreshing:false, error:"", matches:saved?.matches || [] };
+  });
+
   const load = useCallback(async (refresh=false) => {
-    setState((p) => ({ ...p, loading:!refresh, refreshing:refresh, error:"", matches:refresh ? p.matches : [] }));
+    const saved = peekFastFootballMatches(date);
+    setState((p) => ({
+      ...p,
+      loading: !refresh && !saved && !p.matches.length,
+      refreshing: refresh,
+      error: "",
+      matches: saved?.matches || p.matches,
+    }));
     try {
-      const result = await fetchFootballMatches({ date });
+      const result = await fetchFastFootballMatches({ date, force:refresh });
       setState({ loading:false, refreshing:false, error:"", matches:result.matches || [] });
     } catch (e) {
-      setState({ loading:false, refreshing:false, error:e?.message || "Could not load live scores.", matches:[] });
+      setState((p) => ({ ...p, loading:false, refreshing:false, error:e?.message || "Could not load live scores." }));
     }
   }, [date]);
+
   useEffect(() => { load(false); }, [load]);
   useEffect(() => { const timer = setInterval(() => load(true), 60000); return () => clearInterval(timer); }, [load]);
 
@@ -77,10 +90,10 @@ export default function HomeScreen({ onTab, openMatch, openEntity, openScores, o
 
     <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => load(true)} colors={[C.red]} tintColor={C.red}/> }>
       <View style={s.sectionRow}><View style={s.liveTitle}><View style={s.redDot}/><Text style={s.sectionTitle}>LIVE NOW</Text></View><Text style={s.count}>{live.length} {live.length === 1 ? "Match" : "Matches"}</Text></View>
-      {state.loading ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading live scores…</Text></View> : null}
-      {!state.loading && state.error ? <View style={s.state}><Ionicons name="cloud-offline-outline" size={26} color={C.muted}/><Text style={s.stateText}>{state.error}</Text><Pressable style={s.retry} onPress={() => load(false)}><Text style={s.retryText}>RETRY</Text></Pressable></View> : null}
+      {state.loading && !state.matches.length ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading live scores…</Text></View> : null}
+      {!state.loading && state.error && !state.matches.length ? <View style={s.state}><Ionicons name="cloud-offline-outline" size={26} color={C.muted}/><Text style={s.stateText}>{state.error}</Text><Pressable style={s.retry} onPress={() => load(true)}><Text style={s.retryText}>RETRY</Text></Pressable></View> : null}
       {!state.loading && !state.error && !live.length ? <View style={s.state}><Ionicons name="football-outline" size={28} color={C.muted}/><Text style={s.stateText}>No live matches right now.</Text></View> : null}
-      {!state.loading && !state.error ? live.map((m) => <MatchCard key={m.id} match={m} openMatch={openMatch}/>) : null}
+      {live.map((m) => <MatchCard key={m.id} match={m} openMatch={openMatch}/>) }
 
       <Pressable style={s.allScores} onPress={openScores}><Text style={s.allScoresText}>ALL SCORES</Text><Ionicons name="chevron-forward" size={20} color={C.text}/></Pressable>
 
