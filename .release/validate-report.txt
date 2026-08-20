@@ -1,5 +1,5 @@
 MST Android validation
-Commit: 558b571e39f52426145b190b20e43cd5d3acd0b1
+Commit: 989881ade97fdfdba37550afa8545bc6eba4fae7
 
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
@@ -16,7 +16,7 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 702 packages, and audited 703 packages in 23s
+added 702 packages, and audited 703 packages in 22s
 
 53 packages are looking for funding
   run `npm fund` for details
@@ -38,9 +38,10 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓▓▓▓▓▓▓░░░░░░░░░ 44.8% (279/428)
+Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 73/216)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.7% (466/539)
 Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (656/656)
-Android Bundled 7750ms index.js (656 modules)
+Android Bundled 11009ms index.js (656 modules)
 
 › Assets (19):
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf (130 kB)
