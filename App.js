@@ -33,36 +33,27 @@ const { width } = Dimensions.get("window");
 // -------------------------------------------------------
 
 const COLORS = {
-  // MST website / logo palette
-  background: "#05090A",
-  backgroundSoft: "#081012",
-  card: "#0C1416",
-  card2: "#101A1D",
-  card3: "#142024",
-  border: "#203036",
-  borderSoft: "#172329",
+  background: "#080A0C",
+  backgroundSoft: "#0B0E10",
+  card: "#111416",
+  card2: "#15191C",
+  card3: "#191D20",
+  border: "#24292D",
+  borderSoft: "#1D2226",
 
-  // Primary MST brand accent from the real green logo
-  brand: "#78C800",
-  brandDark: "#5DA300",
-  brandSoft: "rgba(120,200,0,0.14)",
+  red: "#F3262D",
+  redDark: "#C91C23",
+  redSoft: "rgba(243,38,45,0.14)",
 
-  // Red is reserved for genuinely live / breaking states
-  live: "#FF3138",
-  liveDark: "#D92128",
-  liveSoft: "rgba(255,49,56,0.14)",
+  text: "#FFFFFF",
+  textSoft: "#D0D2D4",
+  muted: "#92979B",
+  muted2: "#666D72",
 
-  text: "#F7FAF8",
-  textSoft: "#D6DEDA",
-  muted: "#8B9892",
-  muted2: "#5F6B67",
-
+  green: "#31C674",
   yellow: "#F5C542",
   blue: "#4496FF",
 };
-
-const MST_WEBSITE = "https://myanmarsportstalk.com";
-const MST_LOGO = `${MST_WEBSITE}/media/myanmar-sports-talk-logo-v2.webp`;
 
 // -------------------------------------------------------
 // IMAGE HELPERS
@@ -154,6 +145,24 @@ const LIVE_MATCHES = [
     },
     homeScore: 0,
     awayScore: 0,
+  },
+  {
+    id: 5,
+    competition: "BUNDESLIGA",
+    status: "LIVE",
+    minute: "71'",
+    home: {
+      name: "Borussia Dortmund",
+      short: "BVB",
+      logo: teamLogo(165),
+    },
+    away: {
+      name: "Bayer Leverkusen",
+      short: "B04",
+      logo: teamLogo(168),
+    },
+    homeScore: 1,
+    awayScore: 2,
   },
 ];
 
@@ -543,12 +552,8 @@ const TRANSFERS = [
 function Logo() {
   return (
     <View style={styles.logoWrap}>
-      <Image
-        source={{ uri: MST_LOGO }}
-        resizeMode="contain"
-        style={styles.logoImage}
-        accessibilityLabel="Myanmar Sports Talk"
-      />
+      <Text style={styles.logoText}>MST</Text>
+      <Text style={styles.logoSub}>MYANMAR SPORTS TALK</Text>
     </View>
   );
 }
@@ -697,7 +702,7 @@ function BottomNav({ active, onChange }) {
             <Ionicons
               name={selected ? tab.activeIcon : tab.icon}
               size={22}
-              color={selected ? COLORS.brand : COLORS.muted}
+              color={selected ? COLORS.red : COLORS.muted}
             />
 
             <Text
@@ -737,7 +742,7 @@ function MatchCard({ match, onPress }) {
 
       <View style={styles.matchTeams}>
         <View style={styles.matchTeam}>
-          <TeamLogo uri={match.home.logo} size={44} />
+          <TeamLogo uri={match.home.logo} size={38} />
 
           <Text numberOfLines={1} style={styles.matchTeamName}>
             {match.home.name}
@@ -755,7 +760,7 @@ function MatchCard({ match, onPress }) {
         </View>
 
         <View style={styles.matchTeam}>
-          <TeamLogo uri={match.away.logo} size={44} />
+          <TeamLogo uri={match.away.logo} size={38} />
 
           <Text numberOfLines={1} style={styles.matchTeamName}>
             {match.away.name}
@@ -996,7 +1001,7 @@ function TransfersScreenContent() {
             <Ionicons
               name="arrow-forward"
               size={22}
-              color={COLORS.brand}
+              color={COLORS.red}
             />
 
             <View style={styles.transferClubBox}>
@@ -1217,7 +1222,7 @@ function FavoritesScreen({ openLeague, openPlayer }) {
                         name={favorite ? "star" : "star-outline"}
                         size={20}
                         color={
-                          favorite ? COLORS.brand : COLORS.muted
+                          favorite ? COLORS.red : COLORS.muted
                         }
                       />
                     </Pressable>
@@ -1258,7 +1263,7 @@ function FavoritesScreen({ openLeague, openPlayer }) {
                         name={favorite ? "star" : "star-outline"}
                         size={20}
                         color={
-                          favorite ? COLORS.brand : COLORS.muted
+                          favorite ? COLORS.red : COLORS.muted
                         }
                       />
                     </Pressable>
@@ -1292,7 +1297,7 @@ function FavoritesScreen({ openLeague, openPlayer }) {
                 </Text>
               </View>
 
-              <Ionicons name="star" size={20} color={COLORS.brand} />
+              <Ionicons name="star" size={20} color={COLORS.red} />
             </Pressable>
           </>
         )}
@@ -1301,7 +1306,7 @@ function FavoritesScreen({ openLeague, openPlayer }) {
           <Ionicons
             name="compass-outline"
             size={25}
-            color={COLORS.brand}
+            color={COLORS.red}
           />
 
           <View style={styles.discoverMoreTextWrap}>
@@ -1380,7 +1385,7 @@ function PredictionScreen() {
           <Ionicons
             name="information-circle-outline"
             size={21}
-            color={COLORS.brand}
+            color={COLORS.red}
           />
 
           <Text style={styles.predictionNoticeText}>
@@ -2447,41 +2452,34 @@ const styles = StyleSheet.create({
   // HEADER ------------------------------------------------
 
   mainHeader: {
-    minHeight: 76,
-    paddingHorizontal: 18,
-    paddingTop: Platform.OS === "android" ? 10 : 6,
-    paddingBottom: 8,
+    minHeight: Platform.OS === "android" ? 96 : 82,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 7 : 8,
+    paddingBottom: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: COLORS.backgroundSoft,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderSoft,
   },
 
   logoWrap: {
-    width: 128,
-    height: 42,
+    width: 132,
+    minHeight: 46,
     justifyContent: "center",
   },
 
-  logoImage: {
-    width: 122,
-    height: 38,
-  },
-
   logoText: {
-    color: COLORS.brand,
+    color: COLORS.red,
     fontSize: 34,
+    lineHeight: 35,
     fontWeight: "900",
     fontStyle: "italic",
     letterSpacing: -2,
   },
 
   logoSub: {
-    marginTop: -1,
     color: COLORS.text,
     fontSize: 9,
+    lineHeight: 12,
     fontWeight: "800",
     letterSpacing: 0.6,
   },
@@ -2507,7 +2505,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: COLORS.live,
+    backgroundColor: COLORS.red,
     borderWidth: 1,
     borderColor: COLORS.background,
   },
@@ -2515,7 +2513,6 @@ const styles = StyleSheet.create({
   headerTabs: {
     flexDirection: "row",
     paddingHorizontal: 14,
-    backgroundColor: COLORS.backgroundSoft,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderSoft,
   },
@@ -2535,7 +2532,7 @@ const styles = StyleSheet.create({
   },
 
   headerTabTextActive: {
-    color: COLORS.brand,
+    color: COLORS.red,
   },
 
   headerTabIndicator: {
@@ -2545,7 +2542,7 @@ const styles = StyleSheet.create({
     left: 4,
     right: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.brand,
+    backgroundColor: COLORS.red,
   },
 
   simpleTopHeader: {
@@ -2609,7 +2606,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 5,
-    backgroundColor: COLORS.live,
+    backgroundColor: COLORS.red,
     marginRight: 7,
   },
 
@@ -2626,9 +2623,10 @@ const styles = StyleSheet.create({
 
   matchCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: 13,
-    marginBottom: 8,
+    borderRadius: 9,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: COLORS.borderSoft,
   },
@@ -2641,7 +2639,7 @@ const styles = StyleSheet.create({
 
   competitionLabel: {
     color: COLORS.textSoft,
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "700",
     letterSpacing: 0.2,
   },
@@ -2652,7 +2650,7 @@ const styles = StyleSheet.create({
   },
 
   liveBadge: {
-    backgroundColor: COLORS.live,
+    backgroundColor: COLORS.red,
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 3,
@@ -2671,7 +2669,7 @@ const styles = StyleSheet.create({
   },
 
   matchTeams: {
-    marginTop: 11,
+    marginTop: 7,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -2683,27 +2681,27 @@ const styles = StyleSheet.create({
 
   matchTeamName: {
     color: COLORS.text,
-    fontSize: 11,
-    marginTop: 5,
+    fontSize: 10.5,
+    marginTop: 3,
     textAlign: "center",
   },
 
   scoreCenter: {
-    width: 100,
+    width: 88,
     alignItems: "center",
   },
 
   bigScore: {
     color: COLORS.text,
-    fontSize: 30,
+    fontSize: 27,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
 
   aggregateText: {
     color: COLORS.muted,
-    fontSize: 11,
-    marginTop: 6,
+    fontSize: 10,
+    marginTop: 3,
   },
 
   allScoresButton: {
@@ -2716,7 +2714,7 @@ const styles = StyleSheet.create({
   },
 
   allScoresText: {
-    color: COLORS.brand,
+    color: COLORS.red,
     fontSize: 11,
     fontWeight: "800",
   },
@@ -2759,7 +2757,7 @@ const styles = StyleSheet.create({
   },
 
   pillActive: {
-    backgroundColor: COLORS.brand,
+    backgroundColor: COLORS.red,
   },
 
   pillText: {
@@ -2802,7 +2800,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 4,
     borderRadius: 3,
-    backgroundColor: COLORS.live,
+    backgroundColor: COLORS.red,
     marginBottom: 8,
   },
 
@@ -2954,7 +2952,7 @@ const styles = StyleSheet.create({
   },
 
   transferStatus: {
-    color: COLORS.brand,
+    color: COLORS.red,
     fontSize: 10,
     fontWeight: "700",
     marginTop: 4,
@@ -3004,7 +3002,7 @@ const styles = StyleSheet.create({
   },
 
   dateTabActive: {
-    backgroundColor: COLORS.brandSoft,
+    backgroundColor: COLORS.redSoft,
   },
 
   dateTabText: {
@@ -3014,7 +3012,7 @@ const styles = StyleSheet.create({
   },
 
   dateTabTextActive: {
-    color: COLORS.brand,
+    color: COLORS.red,
   },
 
   // FAVORITES ------------------------------------------------
@@ -3036,7 +3034,7 @@ const styles = StyleSheet.create({
   },
 
   segmentItemActive: {
-    backgroundColor: COLORS.brand,
+    backgroundColor: COLORS.red,
   },
 
   segmentText: {
@@ -3124,7 +3122,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
     padding: 14,
     borderRadius: 9,
-    backgroundColor: COLORS.brandSoft,
+    backgroundColor: COLORS.redSoft,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -3183,7 +3181,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.brandSoft,
+    backgroundColor: COLORS.redSoft,
     borderRadius: 8,
     padding: 10,
   },
@@ -3256,8 +3254,8 @@ const styles = StyleSheet.create({
   },
 
   predictionButtonActive: {
-    backgroundColor: COLORS.brand,
-    borderColor: COLORS.brand,
+    backgroundColor: COLORS.red,
+    borderColor: COLORS.red,
   },
 
   predictionButtonText: {
@@ -3364,7 +3362,7 @@ const styles = StyleSheet.create({
   },
 
   detailLiveTime: {
-    color: COLORS.live,
+    color: COLORS.red,
     fontSize: 14,
     fontWeight: "700",
     marginTop: 4,
@@ -3415,7 +3413,7 @@ const styles = StyleSheet.create({
   },
 
   matchDetailTabTextActive: {
-    color: COLORS.brand,
+    color: COLORS.red,
     fontWeight: "800",
   },
 
@@ -3425,7 +3423,7 @@ const styles = StyleSheet.create({
     height: 2,
     left: 1,
     right: 1,
-    backgroundColor: COLORS.brand,
+    backgroundColor: COLORS.red,
   },
 
   timeline: {
@@ -3632,7 +3630,7 @@ const styles = StyleSheet.create({
   },
 
   leagueTabTextActive: {
-    color: COLORS.brand,
+    color: COLORS.red,
   },
 
   leagueTabIndicator: {
@@ -3641,7 +3639,7 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     height: 2,
-    backgroundColor: COLORS.brand,
+    backgroundColor: COLORS.red,
   },
 
   tableWrap: {
@@ -3861,7 +3859,7 @@ const styles = StyleSheet.create({
   },
 
   playerTabTextActive: {
-    color: COLORS.brand,
+    color: COLORS.red,
     fontWeight: "800",
   },
 
@@ -3871,7 +3869,7 @@ const styles = StyleSheet.create({
     left: 5,
     right: 5,
     height: 2,
-    backgroundColor: COLORS.brand,
+    backgroundColor: COLORS.red,
   },
 
   playerSeasonStats: {
@@ -3972,6 +3970,6 @@ const styles = StyleSheet.create({
   },
 
   bottomNavTextActive: {
-    color: COLORS.brand,
+    color: COLORS.red,
   },
 });
