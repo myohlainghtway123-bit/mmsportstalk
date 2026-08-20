@@ -1,15 +1,51 @@
 const API_BASE = "https://myanmarsportstalk.com/api";
 const SITE = "https://myanmarsportstalk.com";
+const TIMEOUT_MS = 12000;
 
-async function get(path) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+const root = globalThis;
+if (!root.__MST_CONTENT_CACHE__) root.__MST_CONTENT_CACHE__ = new Map();
+if (!root.__MST_CONTENT_INFLIGHT__) root.__MST_CONTENT_INFLIGHT__ = new Map();
+const cache = root.__MST_CONTENT_CACHE__;
+const inflight = root.__MST_CONTENT_INFLIGHT__;
+
+function ttlFor(path) {
+  if (path.startsWith("/content/articles/")) return 5 * 60 * 1000;
+  return 2 * 60 * 1000;
+}
+
+async function networkGet(path) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let payload = null;
+    try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = { message: text }; }
+    if (!response.ok) throw new Error(payload?.error || payload?.message || `MST API ${response.status}`);
+    cache.set(path, { payload, fetchedAt: Date.now() });
+    return payload;
+  } catch (error) {
+    const saved = cache.get(path);
+    if (saved) return saved.payload;
+    if (error?.name === "AbortError") throw new Error("MST content is taking too long. Pull to refresh in a moment.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function get(path, { force = false } = {}) {
+  const saved = cache.get(path);
+  if (!force && saved && Date.now() - saved.fetchedAt < ttlFor(path)) return saved.payload;
+  if (!force && inflight.has(path)) return inflight.get(path);
+  const promise = networkGet(path).finally(() => {
+    if (inflight.get(path) === promise) inflight.delete(path);
   });
-  const text = await response.text();
-  let payload = null;
-  try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = { message: text }; }
-  if (!response.ok) throw new Error(payload?.error || payload?.message || `MST API ${response.status}`);
-  return payload;
+  inflight.set(path, promise);
+  return promise;
 }
 
 function arrayFrom(payload, keys = []) {
@@ -143,19 +179,19 @@ export function normalizeVideo(raw, index = 0) {
   };
 }
 
-export async function fetchArticles() {
-  const payload = await get("/content/articles");
+export async function fetchArticles(options) {
+  const payload = await get("/content/articles", options);
   return { payload, articles: arrayFrom(payload, ["posts"]).map(normalizeArticle).filter((x) => x.title) };
 }
 
-export async function fetchArticle(slug) {
-  const payload = await get(`/content/articles/${encodeURIComponent(slug)}`);
+export async function fetchArticle(slug, options) {
+  const payload = await get(`/content/articles/${encodeURIComponent(slug)}`, options);
   const raw = payload?.article || payload?.data?.article || payload?.data || payload;
   return { payload, article: normalizeArticle(raw) };
 }
 
-export async function fetchSocialVideos() {
-  const payload = await get("/social/videos");
+export async function fetchSocialVideos(options) {
+  const payload = await get("/social/videos", options);
   return { payload, videos: arrayFrom(payload, ["posts"]).map(normalizeVideo).filter((x) => x.title) };
 }
 
