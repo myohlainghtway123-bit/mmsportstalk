@@ -1,0 +1,38 @@
+name: Phase 2 Connect Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase2-connect-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connect Phase 2 navigation
+        run: python3 scripts/apply_phase2_navigation.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Android Expo bundle
+        run: npx expo export --platform android --output-dir /tmp/mst-phase2-check
+
+      - name: Remove one-time integration files
+        run: |
+          rm -f scripts/apply_phase2_navigation.py
+          rm -f .github/workflows/phase2-connect-once.yml
+
+      - name: Commit Phase 2 integration
+        run: |
+          git config user.name "MST Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Connect MST account favorites and prediction system"
+          git push
