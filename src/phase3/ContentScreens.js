@@ -46,14 +46,14 @@ function NewsList({ transfer = false, onOpenArticle }) {
   const [state, setState] = useState({ loading: true, refreshing: false, error: null, articles: [] });
   const load = useCallback(async (refresh = false) => {
     setState((p) => ({ ...p, loading: !refresh && !p.articles.length, refreshing: refresh, error: null }));
-    try { const r = await fetchArticles(); setState({ loading: false, refreshing: false, error: null, articles: r.articles }); }
+    try { const r = await fetchArticles({ force:refresh }); setState({ loading: false, refreshing: false, error: null, articles: r.articles }); }
     catch (e) { setState((p) => ({ ...p, loading: false, refreshing: false, error: e?.message || "Unable to load news" })); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(false); }, [load]);
   const rows = useMemo(() => transfer ? state.articles.filter(isTransferArticle) : state.articles.filter((x) => !isTransferArticle(x)), [state.articles, transfer]);
 
   return <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => load(true)} tintColor={C.red} colors={[C.red]}/> }>
-    {!rows.length ? <State loading={state.loading} error={state.error} retry={() => load()} empty={transfer ? "No transfer stories yet" : "No news yet"}/> : <>
+    {!rows.length ? <State loading={state.loading} error={state.error} retry={() => load(true)} empty={transfer ? "No transfer stories yet" : "No news yet"}/> : <>
       <ArticleRow article={rows[0]} big onOpen={onOpenArticle}/>
       <Text style={s.section}>{transfer ? "LATEST TRANSFERS" : "LATEST NEWS"}</Text>
       <View style={s.listCard}>{rows.slice(1,30).map((article,index) => <View key={`${article.id}-${index}`} style={index !== Math.min(rows.length - 1, 29) - 1 ? s.rowBorder : null}><ArticleRow article={article} onOpen={onOpenArticle}/></View>)}</View>
@@ -65,7 +65,7 @@ function VideoCard({ video, big = false }) {
   return <Pressable style={big ? s.videoHero : s.videoRow} onPress={() => video.url && Linking.openURL(video.url)}>
     {video.thumbnail ? <Image source={{ uri: video.thumbnail }} style={big ? s.videoHeroImage : s.videoThumb}/> : <BrandedFallback big={big} video/>}
     <View style={big ? s.playHero : s.playSmall}><Ionicons name="play" size={big ? 25 : 17} color={C.text}/></View>
-    <View style={big ? s.videoHeroBody : s.videoBody}><Text numberOfLines={big ? 3 : 2} style={big ? s.heroTitle : s.articleTitle}>{video.title}</Text><Text style={s.meta}>{[video.platform, formatContentDate(video.publishedAt), video.views ? `${video.views} views` : null].filter(Boolean).join(" · ")}</Text></View>
+    <View style={big ? s.videoHeroBody : s.videoBody}><Text numberOfLines={big ? 3 : 2} style={big ? s.heroTitle:s.articleTitle}>{video.title}</Text><Text style={s.meta}>{[video.platform, formatContentDate(video.publishedAt), video.views ? `${video.views} views` : null].filter(Boolean).join(" · ")}</Text></View>
   </Pressable>;
 }
 
@@ -73,13 +73,13 @@ function Videos() {
   const [state, setState] = useState({ loading: true, refreshing: false, error: null, videos: [] });
   const load = useCallback(async (refresh = false) => {
     setState((p) => ({ ...p, loading: !refresh && !p.videos.length, refreshing: refresh, error: null }));
-    try { const r = await fetchSocialVideos(); setState({ loading: false, refreshing: false, error: null, videos: r.videos }); }
+    try { const r = await fetchSocialVideos({ force:refresh }); setState({ loading: false, refreshing: false, error: null, videos: r.videos }); }
     catch (e) { setState((p) => ({ ...p, loading: false, refreshing: false, error: e?.message || "Unable to load videos" })); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(false); }, [load]);
 
   return <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => load(true)} tintColor={C.red} colors={[C.red]}/> }>
-    {!state.videos.length ? <State loading={state.loading} error={state.error} retry={() => load()} empty="No videos in the feed yet" video/> : <>
+    {!state.videos.length ? <State loading={state.loading} error={state.error} retry={() => load(true)} empty="No videos in the feed yet" video/> : <>
       <VideoCard video={state.videos[0]} big/>
       <Text style={s.section}>LATEST VIDEOS</Text>
       <View style={s.listCard}>{state.videos.slice(1,30).map((video,index) => <View key={`${video.id}-${index}`} style={index !== Math.min(state.videos.length - 1, 29) - 1 ? s.rowBorder : null}><VideoCard video={video}/></View>)}</View>
