@@ -4,12 +4,13 @@ The app is configured with Expo SDK 54 and EAS Build.
 
 ## Final local preview
 
-The app no longer uses any migration or Python patch script. Sync directly to GitHub `main` before the final preview:
+The app no longer uses any migration or Python patch script. Sync directly to GitHub `main`, generate the MST icon/splash assets, then start Expo:
 
 ```bash
 cd ~/Downloads/mst-app-build
 git fetch origin
 git reset --hard origin/main
+node scripts/generate_assets.js
 npx expo start -c
 ```
 
@@ -18,6 +19,7 @@ Scan the Metro QR code with Expo Go on a physical Android phone. Do not press `a
 ## Installable Android APK
 
 ```bash
+node scripts/generate_assets.js
 npx eas-cli@latest build --platform android --profile preview --clear-cache
 ```
 
@@ -26,12 +28,14 @@ The `preview` profile creates an APK for direct installation.
 ## Android Play Store build
 
 ```bash
+node scripts/generate_assets.js
 npx eas-cli@latest build --platform android --profile production
 ```
 
 ## iPhone internal build
 
 ```bash
+node scripts/generate_assets.js
 npx eas-cli@latest build --platform ios --profile preview
 ```
 
@@ -40,6 +44,7 @@ A physical iPhone build requires Apple signing and an Apple Developer account.
 ## iPhone App Store / TestFlight
 
 ```bash
+node scripts/generate_assets.js
 npx eas-cli@latest build --platform ios --profile production
 ```
 
@@ -50,6 +55,7 @@ npx eas-cli@latest build --platform ios --profile production
 - Android package: `com.myanmarsportstalk.mst`
 - iOS bundle identifier: `com.myanmarsportstalk.mst`
 - Scheme: `mst`
+- Brand: black / red / white MST wordmark
 
 ## Final app areas
 
@@ -66,5 +72,6 @@ npx eas-cli@latest build --platform ios --profile production
 - Notification center and preferences
 - Settings / About
 - MST website and YouTube links
+- MST app icon and splash screen
 
 Football requests are routed through the MST website backend rather than exposing the paid provider key inside the app.
