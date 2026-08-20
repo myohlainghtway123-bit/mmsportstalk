@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { extractArray, fetchCompetitionCatalog, fetchFootballMatches } from "../services/footballApi";
+import { extractArray, fetchCompetitionCatalog } from "../services/footballApi";
+import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
 
 const C = { bg:"#080A0C", card:"#111416", card2:"#15191C", border:"#24292D", border2:"#1D2226", red:"#F3262D", text:"#FFFFFF", text2:"#D0D2D4", muted:"#92979B" };
 
@@ -30,21 +31,23 @@ function ResultRow({ icon, image, title, subtitle, onPress }) {
 }
 
 export default function SearchScreen({ goBack, openMatch, openEntity }) {
+  const today = todayBangkok();
+  const initial = peekFastFootballMatches(today);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(!initial);
+  const [matches, setMatches] = useState(initial?.matches || []);
   const [competitions, setCompetitions] = useState([]);
 
   useEffect(() => {
     let alive = true;
-    Promise.allSettled([fetchFootballMatches({ date:todayBangkok() }), fetchCompetitionCatalog()]).then((results) => {
+    Promise.allSettled([fetchFastFootballMatches({ date:today }), fetchCompetitionCatalog()]).then((results) => {
       if (!alive) return;
       if (results[0].status === "fulfilled") setMatches(results[0].value.matches || []);
       if (results[1].status === "fulfilled") setCompetitions(extractArray(results[1].value));
       setLoading(false);
     });
     return () => { alive = false; };
-  }, []);
+  }, [today]);
 
   const q = query.trim().toLowerCase();
   const data = useMemo(() => {
@@ -64,7 +67,7 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       <View style={s.searchBox}><Ionicons name="search-outline" size={20} color={C.muted}/><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Search teams, matches, competitions" placeholderTextColor={C.muted} style={s.input}/>{query ? <Pressable onPress={() => setQuery("")}><Ionicons name="close-circle" size={19} color={C.muted}/></Pressable> : null}</View>
     </View>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      {loading ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading football search…</Text></View> : null}
+      {loading && !matches.length ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading football search…</Text></View> : null}
       {!loading && !q ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>Search MST football</Text><Text style={s.stateText}>Find today's matches, teams and competitions.</Text></View> : null}
       {!loading && q && !total ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>No results</Text><Text style={s.stateText}>Try another team or competition name.</Text></View> : null}
       {data.matches.length ? <><Text style={s.section}>MATCHES</Text><View style={s.card}>{data.matches.map((m,index) => <View key={m.id} style={index !== data.matches.length-1 ? s.border : null}><ResultRow icon="football-outline" title={`${m.home?.name} vs ${m.away?.name}`} subtitle={m.competition} onPress={() => openMatch?.(m)}/></View>)}</View></> : null}
