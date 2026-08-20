@@ -2,13 +2,15 @@
   "expo": {
     "name": "Myanmar Sports Talk",
     "slug": "mst-app",
+    "description": "Myanmar Sports Talk — live football scores, news, videos, transfers, favorites and predictions.",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "backgroundColor": "#080A0C",
     "scheme": "mst",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.myanmarsportstalk.mst",
       "buildNumber": "1"
     },
@@ -19,6 +21,10 @@
     },
     "androidStatusBar": {
       "backgroundColor": "#080A0C",
+      "barStyle": "light-content"
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#0B0E10",
       "barStyle": "light-content"
     }
   }
