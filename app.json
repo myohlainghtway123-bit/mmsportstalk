@@ -5,12 +5,21 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "scheme": "mst",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.myanmarsportstalk.mst",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.myanmarsportstalk.mst",
+      "versionCode": 1,
       "edgeToEdgeEnabled": true
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#080A0C",
+      "barStyle": "light-content"
     }
   }
 }
