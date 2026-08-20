@@ -1,53 +1,70 @@
-# Building Myanmar Sports Talk
+# Myanmar Sports Talk — Final App Build
 
-The repository is configured for Expo EAS Build.
+The app is configured with Expo SDK 54 and EAS Build.
+
+## Final local preview
+
+The app no longer uses any migration or Python patch script. Sync directly to GitHub `main` before the final preview:
+
+```bash
+cd ~/Downloads/mst-app-build
+git fetch origin
+git reset --hard origin/main
+npx expo start -c
+```
+
+Scan the Metro QR code with Expo Go on a physical Android phone. Do not press `a` unless Android Studio / ADB is installed on the Mac.
 
 ## Installable Android APK
 
-Use the `preview` profile:
-
 ```bash
-npx eas-cli@latest build --platform android --profile preview
+npx eas-cli@latest build --platform android --profile preview --clear-cache
 ```
 
-This produces an APK that can be installed directly on an Android phone.
+The `preview` profile creates an APK for direct installation.
 
-## Installable iPhone build
-
-Use the `preview` profile:
-
-```bash
-npx eas-cli@latest build --platform ios --profile preview
-```
-
-For a physical iPhone, Apple requires signing with an Apple Developer account. EAS can manage the certificate and provisioning profile after the Apple account is connected and the test device is registered.
-
-## Store builds
-
-Android Google Play bundle:
+## Android Play Store build
 
 ```bash
 npx eas-cli@latest build --platform android --profile production
 ```
 
-iOS App Store/TestFlight build:
+## iPhone internal build
+
+```bash
+npx eas-cli@latest build --platform ios --profile preview
+```
+
+A physical iPhone build requires Apple signing and an Apple Developer account.
+
+## iPhone App Store / TestFlight
 
 ```bash
 npx eas-cli@latest build --platform ios --profile production
 ```
 
-## One-time Expo setup
+## App identity
 
-Before the first cloud build, sign in to Expo and link this repository to an EAS project:
-
-```bash
-npx eas-cli@latest login
-npx eas-cli@latest init
-```
-
-Do not share Expo or Apple passwords in source code or chat. For GitHub Actions, store an Expo access token as the repository secret `EXPO_TOKEN`.
-
-## Native identifiers
-
+- Name: `Myanmar Sports Talk`
+- Version: `1.0.0`
 - Android package: `com.myanmarsportstalk.mst`
 - iOS bundle identifier: `com.myanmarsportstalk.mst`
+- Scheme: `mst`
+
+## Final app areas
+
+- Live Scores / fixtures
+- Match events, lineups, statistics, H2H, players and injuries
+- Competition tables, fixtures, teams, scorers and seasons
+- Team and player data
+- MST News
+- MST Videos
+- MST Transfers
+- MST Account login
+- Favorites
+- Predictions / My Picks / leaderboard
+- Notification center and preferences
+- Settings / About
+- MST website and YouTube links
+
+Football requests are routed through the MST website backend rather than exposing the paid provider key inside the app.
