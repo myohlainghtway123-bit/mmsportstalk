@@ -5,7 +5,11 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:android:apk": "npx eas-cli@latest build --platform android --profile preview",
+    "build:ios:internal": "npx eas-cli@latest build --platform ios --profile preview",
+    "build:android:store": "npx eas-cli@latest build --platform android --profile production",
+    "build:ios:store": "npx eas-cli@latest build --platform ios --profile production"
   },
   "dependencies": {
     "expo": "~54.0.37",
