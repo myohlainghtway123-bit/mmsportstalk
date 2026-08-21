@@ -63,30 +63,32 @@ export default function HomeScreen({ onTab, openMatch, openEntity, openScores, o
     return { loading:!saved, refreshing:false, error:"", matches:saved?.matches || [] };
   });
 
-  const load = useCallback(async (refresh=false) => {
+  const load = useCallback(async (force=false, silent=false) => {
     const saved = peekFastFootballMatches(date);
-    setState((p) => ({
-      ...p,
-      loading: !refresh && !saved && !p.matches.length,
-      refreshing: refresh,
-      error: "",
-      matches: saved?.matches || p.matches,
-    }));
+    if (!silent) {
+      setState((p) => ({
+        ...p,
+        loading: !force && !saved && !p.matches.length,
+        refreshing: force,
+        error: "",
+        matches: saved?.matches || p.matches,
+      }));
+    }
     try {
-      const result = await fetchFastFootballMatches({ date, force:refresh });
+      const result = await fetchFastFootballMatches({ date, force });
       setState({ loading:false, refreshing:false, error:"", matches:result.matches || [] });
     } catch (e) {
       setState((p) => ({ ...p, loading:false, refreshing:false, error:e?.message || "Could not update scores." }));
     }
   }, [date]);
 
-  useEffect(() => { load(false); }, [load]);
+  useEffect(() => { load(false, false); }, [load]);
   useEffect(() => {
     const timer = setTimeout(() => prefetchFastFootballMatches([bangkokDate(-1), bangkokDate(1)]), 450);
     return () => clearTimeout(timer);
   }, [date]);
   useEffect(() => {
-    const timer = setInterval(() => load(true), 20000);
+    const timer = setInterval(() => load(true, true), 20000);
     return () => clearInterval(timer);
   }, [load]);
 
@@ -103,7 +105,7 @@ export default function HomeScreen({ onTab, openMatch, openEntity, openScores, o
 
     <View style={s.tabs}>{TABS.map((tab) => <Pressable key={tab} style={s.tab} onPress={() => tab !== "LIVE SCORES" && onTab?.(tab)}><Text style={[s.tabText, tab === "LIVE SCORES" && s.tabTextOn]}>{tab}</Text>{tab === "LIVE SCORES" ? <View style={s.tabLine}/> : null}</Pressable>)}</View>
 
-    <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => load(true)} colors={[C.red]} tintColor={C.red}/> } showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => load(true, false)} colors={[C.red]} tintColor={C.red}/> } showsVerticalScrollIndicator={false}>
       <View style={s.quickGrid}>
         <QuickAction icon="football-outline" label="Scores" onPress={openScores}/>
         <QuickAction icon="newspaper-outline" label="News" onPress={() => onTab?.("NEWS")}/>
@@ -117,13 +119,13 @@ export default function HomeScreen({ onTab, openMatch, openEntity, openScores, o
       </ScrollView>
 
       <View style={[s.sectionRow,{marginTop:18}]}>
-        <View style={s.liveTitle}><View style={s.redDot}/><Text style={s.sectionTitle}>LIVE NOW</Text>{state.loading || state.refreshing ? <ActivityIndicator size="small" color={C.red}/> : null}</View>
+        <View style={s.liveTitle}><View style={s.redDot}/><Text style={s.sectionTitle}>LIVE NOW</Text>{state.loading ? <ActivityIndicator size="small" color={C.red}/> : null}</View>
         <Text style={s.count}>{live.length} {live.length === 1 ? "Match" : "Matches"}</Text>
       </View>
 
       {live.map((m) => <MatchCard key={m.id} match={m} openMatch={openMatch}/>) }
       {!state.loading && !live.length ? <View style={s.compactState}><Ionicons name="football-outline" size={20} color={C.muted}/><Text style={s.compactText}>No live matches right now. All scores are still available.</Text></View> : null}
-      {state.error ? <Pressable style={s.errorStrip} onPress={() => load(true)}><Ionicons name="refresh-outline" size={17} color={C.red}/><Text numberOfLines={1} style={s.errorText}>Scores update delayed · tap to retry</Text></Pressable> : null}
+      {state.error ? <Pressable style={s.errorStrip} onPress={() => load(true, false)}><Ionicons name="refresh-outline" size={17} color={C.red}/><Text numberOfLines={1} style={s.errorText}>Scores update delayed · tap to retry</Text></Pressable> : null}
 
       <Pressable style={s.allScores} onPress={openScores} android_ripple={{ color:"rgba(255,255,255,0.04)" }}><Text style={s.allScoresText}>ALL SCORES</Text><Ionicons name="chevron-forward" size={20} color={C.text}/></Pressable>
       <View style={{height:24}}/>
