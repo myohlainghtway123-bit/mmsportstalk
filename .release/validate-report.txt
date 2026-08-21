@@ -1,5 +1,5 @@
 MST Android validation
-Commit: 84739f6aa69ecc66ac40276ebbb190b126f20757
+Commit: dff2249bcbdfbfb443d2a328dfcca4f8ee8b2201
 
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
@@ -16,7 +16,7 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 702 packages, and audited 703 packages in 27s
+added 702 packages, and audited 703 packages in 22s
 
 53 packages are looking for funding
   run `npm fund` for details
@@ -38,10 +38,10 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 11.8% ( 71/214)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 69.8% (406/486)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (660/660)
-Android Bundled 11934ms index.js (660 modules)
+Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 69/203)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 66.0% (394/486)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (661/661)
+Android Bundled 11462ms index.js (661 modules)
 
 › Assets (19):
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf (130 kB)
@@ -65,7 +65,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-fc5d877dae47b59f82ab10a8157819ba.hbc (2.42 MB)
+_expo/static/js/android/index-fc869624a6b6d10548a9382ac77bbd15.hbc (2.44 MB)
 
 › Files (1):
 metadata.json (1.35 kB)
