@@ -9,6 +9,37 @@ const FILTERS=["ALL","LIVE","UPCOMING","FINISHED"];
 const DATE_OFFSETS=Array.from({length:14},(_,i)=>i-3);
 const POPULAR=["Premier League","Champions League","Europa League","LaLiga","La Liga","Serie A","Bundesliga","Ligue 1"];
 
+const MAJOR_COMPETITIONS=[
+  [/(world cup|euro championship|uefa euro|copa america|champions league|club world cup)/i,120],
+  [/(premier league|la ?liga|serie a|bundesliga|ligue 1)/i,90],
+  [/(europa league)/i,80],
+  [/(conference league)/i,65],
+  [/(fa cup|copa del rey|coppa italia|dfb pokal|coupe de france)/i,58],
+];
+const BIG_TEAMS=[
+  "real madrid","barcelona","atletico madrid","manchester united","man utd","manchester city","man city","liverpool","arsenal","chelsea","tottenham","spurs","bayern munich","bayern münchen","borussia dortmund","dortmund","paris saint germain","paris saint-germain","psg","juventus","inter","inter milan","internazionale","ac milan","milan","napoli","roma","benfica","porto","sporting cp","ajax","feyenoord","celtic","rangers",
+  "argentina","brazil","england","france","spain","germany","portugal","italy","netherlands","belgium","croatia","uruguay","japan","south korea"
+];
+const ELITE_TEAMS=["real madrid","barcelona","manchester united","man utd","manchester city","man city","liverpool","arsenal","chelsea","bayern munich","bayern münchen","paris saint germain","paris saint-germain","psg","juventus","inter","inter milan","ac milan","milan","argentina","brazil","england","france","spain","germany","portugal","italy"];
+
+function normalizedName(value){return String(value||"").trim().toLowerCase();}
+function containsTeam(name,list){const n=normalizedName(name);return list.some((team)=>n===team||n.includes(team));}
+function competitionWeight(name){for(const [pattern,score] of MAJOR_COMPETITIONS)if(pattern.test(String(name||"")))return score;return 0;}
+function matchPriorityScore(match){
+  let score=competitionWeight(match?.competition);
+  const home=match?.home?.name,away=match?.away?.name;
+  const bigHome=containsTeam(home,BIG_TEAMS),bigAway=containsTeam(away,BIG_TEAMS);
+  const eliteHome=containsTeam(home,ELITE_TEAMS),eliteAway=containsTeam(away,ELITE_TEAMS);
+  if(bigHome)score+=38;if(bigAway)score+=38;
+  if(eliteHome)score+=18;if(eliteAway)score+=18;
+  if(bigHome&&bigAway)score+=115;
+  if(eliteHome&&eliteAway)score+=55;
+  if(isLiveMatch(match))score+=12;
+  return score;
+}
+function kickoffTime(match){const t=match?.kickoff?new Date(match.kickoff).getTime():Number.MAX_SAFE_INTEGER;return Number.isFinite(t)?t:Number.MAX_SAFE_INTEGER;}
+function importantMatchSort(a,b){return matchPriorityScore(b)-matchPriorityScore(a)||kickoffTime(a)-kickoffTime(b)||String(a?.home?.name||"").localeCompare(String(b?.home?.name||""));}
+
 function bangkokDate(offset=0){const date=new Date(Date.now()+offset*86400000);try{const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);const map=Object.fromEntries(parts.map((p)=>[p.type,p.value]));return `${map.year}-${map.month}-${map.day}`;}catch(_){return date.toISOString().slice(0,10);}}
 function dayMeta(offset,language){const d=new Date(Date.now()+offset*86400000);const day=d.toLocaleDateString([], {weekday:"short"}).toUpperCase();const num=d.toLocaleDateString([], {day:"2-digit"});const month=d.toLocaleDateString([], {month:"short"}).toUpperCase();return {day:offset===0?(language==="my"?"ယနေ့":"TODAY"):day,num,month};}
 function kickoffLabel(match){if(isLiveMatch(match))return match.minute?String(match.minute).includes("'")?match.minute:`${match.minute}'`:"LIVE";const code=String(match.statusCode||match.status||"").toUpperCase();if(["FT","AET","PEN","FINISHED"].includes(code))return"FT";if(!match.kickoff)return code||"—";const d=new Date(match.kickoff);if(Number.isNaN(d.getTime()))return"—";return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});}
@@ -39,7 +70,7 @@ export default function HomeScreen({openMatch,openNotifications,openSearch,langu
   const competitions=useMemo(()=>{const values=[...new Set(state.matches.map((m)=>m.competition).filter(Boolean))];return values.sort((a,b)=>{const ai=POPULAR.findIndex((x)=>String(a).includes(x)),bi=POPULAR.findIndex((x)=>String(b).includes(x));return(ai===-1?999:ai)-(bi===-1?999:bi)||String(a).localeCompare(String(b));});},[state.matches]);
   const visibleCompetitions=useMemo(()=>{const q=leagueSearch.trim().toLowerCase();return q?competitions.filter((x)=>String(x).toLowerCase().includes(q)):competitions;},[competitions,leagueSearch]);
   const filtered=useMemo(()=>state.matches.filter((m)=>{const statusOk=filter==="ALL"?true:filter==="LIVE"?isLiveMatch(m):filter==="UPCOMING"?isUpcoming(m):isFinished(m);const leagueOk=competition==="ALL"||m.competition===competition;return statusOk&&leagueOk;}),[state.matches,filter,competition]);
-  const sections=useMemo(()=>{const map=new Map();for(const match of filtered){const key=match.competition||"Other";if(!map.has(key))map.set(key,[]);map.get(key).push(match);}const rows=[...map.entries()].map(([title,data])=>({title,data,logo:data[0]?.competitionLogo,country:data[0]?.country}));rows.sort((a,b)=>{const ai=POPULAR.findIndex((x)=>a.title.includes(x)),bi=POPULAR.findIndex((x)=>b.title.includes(x));return(ai===-1?999:ai)-(bi===-1?999:bi)||a.title.localeCompare(b.title);});return rows;},[filtered]);
+  const sections=useMemo(()=>{const map=new Map();for(const match of filtered){const key=match.competition||"Other";if(!map.has(key))map.set(key,[]);map.get(key).push(match);}const rows=[...map.entries()].map(([title,data])=>{const ordered=[...data].sort(importantMatchSort);return{title,data:ordered,logo:ordered[0]?.competitionLogo,country:ordered[0]?.country,priority:ordered.length?matchPriorityScore(ordered[0]):0};});rows.sort((a,b)=>b.priority-a.priority||competitionWeight(b.title)-competitionWeight(a.title)||a.title.localeCompare(b.title));return rows;},[filtered]);
   const filterLabel=(value)=>my?({ALL:"အားလုံး",LIVE:"တိုက်ရိုက်",UPCOMING:"လာမည့်ပွဲ",FINISHED:"ပြီးဆုံး"}[value]||value):value;
 
   const header=<>
