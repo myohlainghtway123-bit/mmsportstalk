@@ -76,7 +76,7 @@ export function NotificationsScreen({ goBack, openAccount }) {
   };
 
   return <View style={s.screen}>
-    <Header title="Notifications" subtitle="MST alerts and preferences" goBack={goBack}/>
+    <Header title="Notifications" subtitle="MST Score alerts and preferences" goBack={goBack}/>
     <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={C.red} colors={[C.red]}/> }>
       {loading ? <View style={s.loading}><ActivityIndicator color={C.red}/><Text style={s.emptyText}>Loading notifications…</Text></View> : null}
       {!loading && !authenticated ? <Empty icon="person-circle-outline" title="Sign in for MST notifications" text="Use your MST account to sync notification preferences and alerts." action={openAccount} actionText="SIGN IN"/> : null}
@@ -105,19 +105,19 @@ export function SettingsScreen({ goBack, openNotifications, openAccount }) {
     ["globe-outline","MST Website","myanmarsportstalk.com",() => Linking.openURL(MST_SITE_URL)],
   ], [auth,openAccount,openNotifications]);
 
-  return <View style={s.screen}><Header title="Settings" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}>
+  return <View style={s.screen}><Header title="Settings" subtitle="MST Score" goBack={goBack}/><ScrollView contentContainerStyle={s.content}>
     <Text style={s.section}>APP</Text>
     <View style={s.card}>{rows.map(([icon,title,subtitle,action],i) => <Pressable key={title} onPress={action} style={[s.settingsRow,i !== rows.length-1 && s.divider]}><View style={s.rowIcon}><Ionicons name={icon} size={21} color={title === "MST Account" ? C.red : C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View><Ionicons name="chevron-forward" size={18} color={C.muted}/></Pressable>)}</View>
     <Text style={s.section}>APP INFO</Text>
     <View style={s.card}>
-      <View style={[s.settingsRow,s.divider]}><View style={s.rowIcon}><Ionicons name="refresh-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>Live score refresh</Text><Text style={s.rowSub}>Every 60 seconds while the app is open</Text></View></View>
-      <View style={s.settingsRow}><View style={s.rowIcon}><Ionicons name="phone-portrait-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>Myanmar Sports Talk</Text><Text style={s.rowSub}>Version 1.0.1 · Android build 2</Text></View></View>
+      <View style={[s.settingsRow,s.divider]}><View style={s.rowIcon}><Ionicons name="refresh-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>Live score refresh</Text><Text style={s.rowSub}>Silent background refresh every 20 seconds while Matches is open</Text></View></View>
+      <View style={s.settingsRow}><View style={s.rowIcon}><Ionicons name="phone-portrait-outline" size={21} color={C.text2}/></View><View style={{flex:1}}><Text style={s.rowTitle}>MST Score</Text><Text style={s.rowSub}>Version 1.1.0 · Android build 4</Text></View></View>
     </View>
   </ScrollView></View>;
 }
 
 export function AboutScreen({ goBack }) {
-  return <View style={s.screen}><Header title="About MST" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MYANMAR SPORTS TALK</Text><Text style={s.aboutText}>The football platform for Myanmar fans — live scores, football data, news, videos, favorites and predictions in one app.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
+  return <View style={s.screen}><Header title="About MST Score" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MST SCORE</Text><Text style={s.aboutText}>Myanmar Sports Talk's football app for live matches, football data, news, videos, favorites, score predictions and rankings.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
 }
 
 const s = StyleSheet.create({
