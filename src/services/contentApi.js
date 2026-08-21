@@ -1,6 +1,7 @@
 const API_BASE = "https://myanmarsportstalk.com/api";
 const SITE = "https://myanmarsportstalk.com";
-const TIMEOUT_MS = 12000;
+const YOUTUBE_CHANNEL = "https://www.youtube.com/@MyanmarSportsTalk/videos";
+const TIMEOUT_MS = 9000;
 
 const root = globalThis;
 if (!root.__MST_CONTENT_CACHE__) root.__MST_CONTENT_CACHE__ = new Map();
@@ -101,21 +102,10 @@ function cleanText(value) {
 
 function articleImage(raw) {
   return first(
-    raw?.imageUrl,
-    raw?.image_url,
-    raw?.featuredImageUrl,
-    raw?.featured_image_url,
-    raw?.featuredImage?.url,
-    raw?.featured_image?.url,
-    raw?.coverImage?.url,
-    raw?.cover_image?.url,
-    raw?.thumbnailUrl,
-    raw?.thumbnail_url,
-    raw?.thumbnail?.url,
-    raw?.media?.url,
-    raw?.media?.source_url,
-    raw?.image?.url,
-    raw?.image?.src,
+    raw?.imageUrl, raw?.image_url, raw?.featuredImageUrl, raw?.featured_image_url,
+    raw?.featuredImage?.url, raw?.featured_image?.url, raw?.coverImage?.url, raw?.cover_image?.url,
+    raw?.thumbnailUrl, raw?.thumbnail_url, raw?.thumbnail?.url, raw?.media?.url, raw?.media?.source_url,
+    raw?.image?.url, raw?.image?.src,
     typeof raw?.featuredImage === "string" ? raw.featuredImage : null,
     typeof raw?.coverImage === "string" ? raw.coverImage : null,
     typeof raw?.cover === "string" ? raw.cover : null,
@@ -132,17 +122,13 @@ export function normalizeArticle(raw, index = 0) {
   const title = first(raw?.title, raw?.headline, raw?.name, "Myanmar Sports Talk");
   const excerpt = first(raw?.excerpt, raw?.summary, raw?.description, raw?.dek, raw?.content, raw?.body, "");
   return {
-    id: String(first(raw?.id, slug, index)),
-    slug: String(slug),
-    title: cleanText(title),
-    excerpt: cleanText(excerpt).slice(0, 300),
-    content: cleanText(first(raw?.content, raw?.body, raw?.article, raw?.description, "")),
+    id: String(first(raw?.id, slug, index)), slug: String(slug), title: cleanText(title),
+    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.content, raw?.body, raw?.article, raw?.description, "")),
     category: typeof categoryRaw === "string" ? categoryRaw : first(categoryRaw?.name, categoryRaw?.title, "News"),
     image: absoluteUrl(articleImage(raw)),
     author: first(raw?.author?.name, raw?.authorName, raw?.author_name, typeof raw?.author === "string" ? raw.author : null, "Myanmar Sports Talk"),
     publishedAt: published || null,
-    url: absoluteUrl(first(raw?.url, raw?.link, raw?.permalink, `/news/${slug}`)),
-    raw,
+    url: absoluteUrl(first(raw?.url, raw?.link, raw?.permalink, `/news/${slug}`)), raw,
   };
 }
 
@@ -155,28 +141,65 @@ export function normalizeVideo(raw, index = 0) {
     youtubeId = match?.[1] || null;
   }
   const thumbnail = first(
-    raw?.thumbnailUrl,
-    raw?.thumbnail_url,
-    raw?.thumbnail?.url,
-    raw?.image?.url,
+    raw?.thumbnailUrl, raw?.thumbnail_url, raw?.thumbnail?.url, raw?.image?.url,
     typeof raw?.thumbnail === "string" ? raw.thumbnail : null,
     typeof raw?.image === "string" ? raw.image : null,
-    raw?.cover?.url,
-    typeof raw?.cover === "string" ? raw.cover : null,
+    raw?.cover?.url, typeof raw?.cover === "string" ? raw.cover : null,
     youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null
   );
   return {
-    id: String(id),
-    youtubeId: youtubeId || null,
+    id: String(id), youtubeId: youtubeId || null,
     title: cleanText(first(raw?.title, raw?.name, raw?.caption, "MST Video")),
     thumbnail: absoluteUrl(thumbnail),
     url: absoluteUrl(url) || (youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : null),
     views: first(raw?.views, raw?.viewCount, raw?.view_count, null),
     duration: first(raw?.duration, raw?.length, null),
     publishedAt: first(raw?.publishedAt, raw?.published_at, raw?.date, raw?.createdAt, null),
-    platform: first(raw?.platform, youtubeId ? "YouTube" : "Video"),
-    raw,
+    platform: first(raw?.platform, youtubeId ? "YouTube" : "Video"), raw,
   };
+}
+
+function decodeYouTubeText(value) {
+  if (!value) return "MST YouTube Video";
+  try { return JSON.parse(`"${value.replace(/"/g, '\\"')}"`); } catch (_) { return value.replace(/\\u0026/g, "&").replace(/\\n/g, " "); }
+}
+
+async function fetchYouTubeFallback() {
+  const cacheKey = "youtube-direct";
+  const saved = cache.get(cacheKey);
+  if (saved && Date.now() - saved.fetchedAt < 3 * 60 * 1000) return saved.payload;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(YOUTUBE_CHANNEL, {
+      headers: { Accept: "text/html" }, signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`YouTube ${response.status}`);
+    const html = await response.text();
+    const videos = [];
+    const seen = new Set();
+    const re = /"videoId":"([A-Za-z0-9_-]{11})"/g;
+    let match;
+    while ((match = re.exec(html)) && videos.length < 24) {
+      const id = match[1];
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const nearby = html.slice(match.index, Math.min(html.length, match.index + 1800));
+      const titleMatch = nearby.match(/"title":\{"runs":\[\{"text":"((?:\\.|[^"\\])*)"/) || nearby.match(/"title":\{"simpleText":"((?:\\.|[^"\\])*)"/);
+      videos.push(normalizeVideo({
+        youtubeId: id,
+        title: decodeYouTubeText(titleMatch?.[1] || "MST YouTube Video"),
+        thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        url: `https://www.youtube.com/watch?v=${id}`,
+        platform: "YouTube",
+      }, videos.length));
+    }
+    cache.set(cacheKey, { payload: videos, fetchedAt: Date.now() });
+    return videos;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function fetchArticles(options) {
@@ -191,8 +214,18 @@ export async function fetchArticle(slug, options) {
 }
 
 export async function fetchSocialVideos(options) {
-  const payload = await get("/social/videos", options);
-  return { payload, videos: arrayFrom(payload, ["posts"]).map(normalizeVideo).filter((x) => x.title) };
+  try {
+    const payload = await get("/social/videos", options);
+    const videos = arrayFrom(payload, ["posts"]).map(normalizeVideo).filter((x) => x.title);
+    if (videos.length) return { payload, videos, source: "mst-api" };
+  } catch (_) {}
+
+  try {
+    const videos = await fetchYouTubeFallback();
+    return { payload: null, videos, source: "youtube" };
+  } catch (_) {
+    return { payload: null, videos: [], source: "youtube" };
+  }
 }
 
 export function isTransferArticle(article) {
@@ -216,3 +249,4 @@ export function formatContentDate(value) {
 }
 
 export const MST_SITE_URL = SITE;
+export const MST_YOUTUBE_URL = YOUTUBE_CHANNEL;
