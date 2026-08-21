@@ -26,7 +26,7 @@ function LazyNotifications(props) { const Screen = require("./phase4/Phase4Scree
 function LazySettings(props) { const Screen = require("./phase4/Phase4Screens").SettingsScreen; return <Screen {...props}/>; }
 function LazyAbout(props) { const Screen = require("./phase4/Phase4Screens").AboutScreen; return <Screen {...props}/>; }
 function LazySearch(props) { const Screen = require("./final/SearchScreen").default; return <Screen {...props}/>; }
-function LazyMatch(props) { const Screen = require("./final/NativeMatchScreenV3").default; return <Screen {...props}/>; }
+function LazyMatch(props) { const Screen = require("./final/NativeMatchScreenV4").default; return <Screen {...props}/>; }
 function LazyEntity(props) { const Screen = require("./final/NativeEntityScreenV2").default; return <Screen {...props}/>; }
 function LazyArticle(props) { const Screen = require("./final/NativeDetailScreens").NativeArticleScreen; return <Screen {...props}/>; }
 
