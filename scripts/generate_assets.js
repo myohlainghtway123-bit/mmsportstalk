@@ -4,13 +4,8 @@ const zlib = require('zlib');
 
 const RED = [243, 38, 45, 255];
 const BLACK = [8, 10, 12, 255];
+const WHITE = [255, 255, 255, 255];
 const TRANSPARENT = [0, 0, 0, 0];
-
-const FONT = {
-  M: ['10001','11011','10101','10101','10001','10001','10001'],
-  S: ['11111','10000','10000','11111','00001','00001','11111'],
-  T: ['11111','00100','00100','00100','00100','00100','00100'],
-};
 
 function crc32(buf) {
   let c = 0xffffffff;
@@ -52,33 +47,79 @@ function canvas(width, height, bg) {
   return { width, height, data };
 }
 
+function pixel(c, x, y, color) {
+  if (x < 0 || y < 0 || x >= c.width || y >= c.height) return;
+  const i = (Math.floor(y) * c.width + Math.floor(x)) * 4;
+  c.data[i]=color[0]; c.data[i+1]=color[1]; c.data[i+2]=color[2]; c.data[i+3]=color[3];
+}
+
 function rect(c, x, y, w, h, color) {
   const x0=Math.max(0,Math.floor(x)), y0=Math.max(0,Math.floor(y));
   const x1=Math.min(c.width,Math.ceil(x+w)), y1=Math.min(c.height,Math.ceil(y+h));
-  for (let yy=y0; yy<y1; yy++) for (let xx=x0; xx<x1; xx++) {
-    const i=(yy*c.width+xx)*4;
-    c.data[i]=color[0]; c.data[i+1]=color[1]; c.data[i+2]=color[2]; c.data[i+3]=color[3];
+  for (let yy=y0; yy<y1; yy++) for (let xx=x0; xx<x1; xx++) pixel(c, xx, yy, color);
+}
+
+function circle(c, cx, cy, r, color) {
+  const x0=Math.max(0,Math.floor(cx-r)), x1=Math.min(c.width-1,Math.ceil(cx+r));
+  const y0=Math.max(0,Math.floor(cy-r)), y1=Math.min(c.height-1,Math.ceil(cy+r));
+  const rr=r*r;
+  for (let y=y0; y<=y1; y++) for (let x=x0; x<=x1; x++) {
+    const dx=x-cx, dy=y-cy;
+    if (dx*dx+dy*dy<=rr) pixel(c,x,y,color);
   }
 }
 
-function drawText(c, text, centerX, centerY, cell, color) {
-  const chars = text.split('');
-  const charWidth = 5 * cell;
-  const gap = cell * 1.15;
-  const total = chars.length * charWidth + (chars.length - 1) * gap;
-  let x = centerX - total / 2;
-  const totalH = 7 * cell;
-  const y = centerY - totalH / 2;
-  chars.forEach((ch) => {
-    const glyph = FONT[ch];
-    if (glyph) glyph.forEach((row, ry) => row.split('').forEach((bit, rx) => {
-      if (bit === '1') {
-        const italicShift = (6 - ry) * cell * 0.10;
-        rect(c, x + rx * cell + italicShift, y + ry * cell, cell * 0.92, cell * 0.92, color);
-      }
-    }));
-    x += charWidth + gap;
-  });
+function roundedRect(c, x, y, w, h, r, color) {
+  const radius=Math.min(r,w/2,h/2);
+  rect(c,x+radius,y,w-2*radius,h,color);
+  rect(c,x,y+radius,w,h-2*radius,color);
+  circle(c,x+radius,y+radius,radius,color);
+  circle(c,x+w-radius,y+radius,radius,color);
+  circle(c,x+radius,y+h-radius,radius,color);
+  circle(c,x+w-radius,y+h-radius,radius,color);
+}
+
+function polygon(c, points, color) {
+  const minY=Math.max(0,Math.floor(Math.min(...points.map(p=>p[1]))));
+  const maxY=Math.min(c.height-1,Math.ceil(Math.max(...points.map(p=>p[1]))));
+  for (let y=minY; y<=maxY; y++) {
+    const xs=[];
+    for (let i=0,j=points.length-1;i<points.length;j=i++) {
+      const [xi,yi]=points[i], [xj,yj]=points[j];
+      if ((yi>y)!==(yj>y)) xs.push((xj-xi)*(y-yi)/(yj-yi)+xi);
+    }
+    xs.sort((a,b)=>a-b);
+    for (let i=0;i<xs.length;i+=2) {
+      const start=Math.max(0,Math.ceil(xs[i]));
+      const end=Math.min(c.width-1,Math.floor(xs[i+1] ?? xs[i]));
+      for (let x=start;x<=end;x++) pixel(c,x,y,color);
+    }
+  }
+}
+
+function drawMST(c, centerX, centerY, scale, color) {
+  const W=560*scale, H=220*scale;
+  const x=centerX-W/2, y=centerY-H/2;
+  const s=scale;
+
+  // M — strong vertical stems with sharp inner chevrons.
+  rect(c,x,y,34*s,220*s,color);
+  rect(c,x+156*s,y,34*s,220*s,color);
+  polygon(c,[[x+28*s,y],[x+68*s,y],[x+104*s,y+82*s],[x+80*s,y+119*s]],color);
+  polygon(c,[[x+162*s,y],[x+122*s,y],[x+86*s,y+82*s],[x+110*s,y+119*s]],color);
+
+  // S — compact sport-display shape with softened corners.
+  const sx=x+220*s;
+  roundedRect(c,sx,y,140*s,30*s,10*s,color);
+  roundedRect(c,sx,y,30*s,108*s,10*s,color);
+  roundedRect(c,sx,y+95*s,140*s,30*s,10*s,color);
+  roundedRect(c,sx+110*s,y+112*s,30*s,108*s,10*s,color);
+  roundedRect(c,sx,y+190*s,140*s,30*s,10*s,color);
+
+  // T — wide top, narrow stem.
+  const tx=x+390*s;
+  roundedRect(c,tx,y,170*s,32*s,10*s,color);
+  roundedRect(c,tx+68*s,y+20*s,36*s,200*s,10*s,color);
 }
 
 function save(name, c) {
@@ -88,17 +129,22 @@ function save(name, c) {
   console.log(`generated ${out}`);
 }
 
-// Standard icon: generous margin so the full mark survives launcher rounding.
-const icon = canvas(1024,1024,BLACK);
-drawText(icon,'MST',512,500,44,RED);
+// Main launcher icon: simple red sports tile with a crisp white MST mark.
+const icon = canvas(1024,1024,RED);
+drawMST(icon,512,500,1.12,WHITE);
+roundedRect(icon,368,710,288,18,9,BLACK);
 save('icon.png',icon);
 
-// Android adaptive foreground: stay inside the conservative central safe zone.
+// Android adaptive foreground: compact tile kept well inside every launcher mask.
 const adaptive = canvas(1024,1024,TRANSPARENT);
-drawText(adaptive,'MST',512,512,34,RED);
+roundedRect(adaptive,188,188,648,648,150,RED);
+drawMST(adaptive,512,500,0.72,WHITE);
+roundedRect(adaptive,420,650,184,13,7,BLACK);
 save('adaptive-icon.png',adaptive);
 
-// Splash: centered MST mark with generous breathing room.
+// Splash screen uses the same badge so launch branding matches the launcher.
 const splash = canvas(1242,2436,BLACK);
-drawText(splash,'MST',621,1218,58,RED);
+roundedRect(splash,391,923,460,460,108,RED);
+drawMST(splash,621,1124,0.52,WHITE);
+roundedRect(splash,560,1260,122,10,5,BLACK);
 save('splash.png',splash);
