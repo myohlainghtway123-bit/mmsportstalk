@@ -2,7 +2,7 @@ import { extractArray, normalizeFootballMatch } from "./footballApi";
 
 const FOOTBALL_API_BASE = "https://myanmarsportstalk.com/api/football";
 const APP_TIME_ZONE = "Asia/Bangkok";
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 10000;
 
 const root = globalThis;
 if (!root.__MST_MATCH_CACHE__) root.__MST_MATCH_CACHE__ = new Map();
@@ -36,7 +36,7 @@ function todayBangkok() {
 }
 
 function ttlFor(date) {
-  return date === todayBangkok() ? 30000 : 5 * 60 * 1000;
+  return date === todayBangkok() ? 20000 : 5 * 60 * 1000;
 }
 
 function sortMatches(matches) {
@@ -107,19 +107,38 @@ async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
   }
 }
 
-export async function fetchFastFootballMatches({ date = todayBangkok(), signal, force = false, timeoutMs } = {}) {
-  const saved = cache.get(date);
-  if (!force && saved && Date.now() - saved.fetchedAt < ttlFor(date)) {
-    return { ...saved, cached: true, stale: false };
-  }
-
-  if (!force && inflight.has(date)) return inflight.get(date);
-
-  const promise = requestDate(date, { signal, timeoutMs }).finally(() => {
+function startRequest(date, options = {}) {
+  if (inflight.has(date)) return inflight.get(date);
+  const promise = requestDate(date, options).finally(() => {
     if (inflight.get(date) === promise) inflight.delete(date);
   });
   inflight.set(date, promise);
   return promise;
+}
+
+export async function fetchFastFootballMatches({ date = todayBangkok(), signal, force = false, timeoutMs } = {}) {
+  const saved = cache.get(date);
+  const age = saved ? Date.now() - saved.fetchedAt : Number.POSITIVE_INFINITY;
+
+  if (!force && saved && age < ttlFor(date)) {
+    return { ...saved, cached: true, stale: false };
+  }
+
+  if (!force && saved) {
+    startRequest(date, { signal, timeoutMs }).catch(() => {});
+    return { ...saved, cached: true, stale: true };
+  }
+
+  return startRequest(date, { signal, timeoutMs });
+}
+
+export function prefetchFastFootballMatches(dates = []) {
+  const unique = [...new Set(dates.filter(Boolean))];
+  unique.forEach((date) => {
+    const saved = cache.get(date);
+    if (saved && Date.now() - saved.fetchedAt < ttlFor(date)) return;
+    startRequest(date, { timeoutMs: 8000 }).catch(() => {});
+  });
 }
 
 export function peekFastFootballMatches(date) {
