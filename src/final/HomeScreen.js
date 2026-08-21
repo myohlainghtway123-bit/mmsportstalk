@@ -1,150 +1,37 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { ActivityIndicator, Image, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { isLiveMatch } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches, prefetchFastFootballMatches } from "../services/fastFootballApi";
 
-const C = {
-  bg: "#080A0C", card: "#111416", card2: "#15191C", border: "#24292D", border2: "#1D2226",
-  red: "#F3262D", text: "#FFFFFF", text2: "#D0D2D4", muted: "#92979B"
-};
+const C = { bg:"#080A0C", card:"#111416", card2:"#15191C", border:"#24292D", border2:"#1D2226", red:"#F3262D", redSoft:"rgba(243,38,45,.14)", text:"#FFFFFF", text2:"#D0D2D4", muted:"#92979B", green:"#35C76F" };
+const FILTERS = ["ALL","LIVE","UPCOMING","FINISHED"];
+const POPULAR = ["Premier League","Champions League","LaLiga","La Liga","Serie A","Bundesliga","Ligue 1","Europa League"];
 
-const TABS = ["LIVE SCORES", "NEWS", "VIDEOS", "TRANSFERS"];
-const COMPETITIONS = [
-  { id: 39, name: "Premier League", icon: "crown-outline" },
-  { id: 2, name: "Champions League", icon: "soccer" },
-  { id: 140, name: "LaLiga", icon: "soccer-field" },
-  { id: 135, name: "Serie A", icon: "shield-outline" },
-  { id: 78, name: "Bundesliga", icon: "run-fast" },
-];
+function bangkokDate(offset=0){const date=new Date(Date.now()+offset*86400000);try{const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);const map=Object.fromEntries(parts.map((p)=>[p.type,p.value]));return `${map.year}-${map.month}-${map.day}`;}catch(_){return date.toISOString().slice(0,10);}}
+function dayLabel(offset){const d=new Date(Date.now()+offset*86400000);const day=d.toLocaleDateString([], {weekday:"short"}).toUpperCase();const num=d.toLocaleDateString([], {day:"numeric"});return offset===0?`TODAY ${num}`:`${day} ${num}`;}
+function Logo({uri}){return uri?<Image source={{uri}} resizeMode="contain" style={s.logo} fadeDuration={0}/>:<View style={s.logoFallback}><Ionicons name="football-outline" size={17} color={C.muted}/></View>;}
+function isFinished(match){return ["FT","AET","PEN","FINISHED"].includes(String(match.statusCode||match.status||"").toUpperCase());}
+function isUpcoming(match){if(isLiveMatch(match)||isFinished(match))return false;const t=match.kickoff?new Date(match.kickoff).getTime():NaN;return !Number.isFinite(t)||t>Date.now();}
+function kickoffLabel(match){if(isLiveMatch(match))return match.minute?`${match.minute}'`:"LIVE";if(isFinished(match))return "FT";if(!match.kickoff)return match.statusCode||"—";const d=new Date(match.kickoff);if(Number.isNaN(d.getTime()))return "—";return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});}
 
-function bangkokDate(offset = 0) {
-  const date = new Date(Date.now() + offset * 86400000);
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
-    const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
-    return `${map.year}-${map.month}-${map.day}`;
-  } catch (_) {
-    return date.toISOString().slice(0, 10);
-  }
+const MatchRow=memo(function MatchRow({match,onOpen}){const live=isLiveMatch(match);const finished=isFinished(match);const hasScore=match.homeScore!==null&&match.homeScore!==undefined&&match.awayScore!==null&&match.awayScore!==undefined;return <Pressable style={s.matchRow} onPress={()=>onOpen?.(match)} android_ripple={{color:"rgba(255,255,255,.035)"}}><View style={s.statusCol}><Text style={[s.statusText,live&&{color:C.red},finished&&{color:C.text2}]}>{kickoffLabel(match)}</Text>{live?<View style={s.liveDot}/>:null}</View><View style={s.teamsCol}><View style={s.teamLine}><Logo uri={match.home?.logo}/><Text numberOfLines={1} style={s.teamName}>{match.home?.name||"Home"}</Text><Text style={s.score}>{hasScore?match.homeScore:""}</Text></View><View style={s.teamLine}><Logo uri={match.away?.logo}/><Text numberOfLines={1} style={s.teamName}>{match.away?.name||"Away"}</Text><Text style={s.score}>{hasScore?match.awayScore:""}</Text></View></View><Ionicons name="chevron-forward" size={16} color={C.muted}/></Pressable>;});
+
+export default function HomeScreen({openMatch,openNotifications,openSearch}){
+  const [offset,setOffset]=useState(0);const [filter,setFilter]=useState("ALL");const date=bangkokDate(offset);
+  const [state,setState]=useState(()=>{const saved=peekFastFootballMatches(date);return {loading:!saved,refreshing:false,error:"",matches:saved?.matches||[]};});
+  const load=useCallback(async(force=false,silent=false)=>{const saved=peekFastFootballMatches(date);if(!silent)setState((p)=>({...p,loading:!force&&!saved&&!p.matches.length,refreshing:force,error:"",matches:saved?.matches||p.matches}));try{const result=await fetchFastFootballMatches({date,force});setState({loading:false,refreshing:false,error:"",matches:result.matches||[]});}catch(e){setState((p)=>({...p,loading:false,refreshing:false,error:e?.message||"Could not update matches."}));}},[date]);
+  useEffect(()=>{load(false,false);},[load]);
+  useEffect(()=>{prefetchFastFootballMatches([bangkokDate(-1),bangkokDate(0),bangkokDate(1)]);},[]);
+  useEffect(()=>{const timer=setInterval(()=>{if(offset===0)load(true,true);},20000);return()=>clearInterval(timer);},[load,offset]);
+
+  const filtered=useMemo(()=>state.matches.filter((m)=>filter==="ALL"?true:filter==="LIVE"?isLiveMatch(m):filter==="UPCOMING"?isUpcoming(m):isFinished(m)),[state.matches,filter]);
+  const sections=useMemo(()=>{const map=new Map();for(const match of filtered){const key=match.competition||"Other";if(!map.has(key))map.set(key,[]);map.get(key).push(match);}const rows=[...map.entries()].map(([title,data])=>({title,data}));rows.sort((a,b)=>{const ai=POPULAR.findIndex((x)=>a.title.includes(x));const bi=POPULAR.findIndex((x)=>b.title.includes(x));const av=ai===-1?999:ai,bv=bi===-1?999:bi;return av-bv||a.title.localeCompare(b.title);});return rows;},[filtered]);
+  const liveCount=useMemo(()=>state.matches.filter(isLiveMatch).length,[state.matches]);
+
+  const header=<><View style={s.brandHeader}><View><Text style={s.brand}><Text style={{color:C.red}}>MST</Text> Score</Text><Text style={s.brandSub}>Fast · Live · Complete</Text></View><View style={s.actions}><Pressable style={s.iconBtn} onPress={openNotifications}><Ionicons name="notifications-outline" size={25} color={C.text}/></Pressable><Pressable style={s.iconBtn} onPress={openSearch}><Ionicons name="search-outline" size={27} color={C.text}/></Pressable></View></View><View style={s.dateStrip}>{[-1,0,1].map((x)=><Pressable key={x} style={[s.dateTab,offset===x&&s.dateTabOn]} onPress={()=>setOffset(x)}><Text style={[s.dateText,offset===x&&s.dateTextOn]}>{dayLabel(x)}</Text></Pressable>)}<Pressable style={s.calendarBtn}><Ionicons name="calendar-outline" size={20} color={C.text2}/></Pressable></View><View style={s.filters}>{FILTERS.map((x)=><Pressable key={x} style={[s.filter,filter===x&&s.filterOn]} onPress={()=>setFilter(x)}><Text style={[s.filterText,filter===x&&s.filterTextOn]}>{x}</Text></Pressable>)}</View><View style={s.summaryRow}><View style={s.summaryLeft}><View style={s.liveDotLarge}/><Text style={s.summaryTitle}>{filter==="ALL"&&offset===0?"TODAY'S MATCHES":filter}</Text>{state.loading?<ActivityIndicator size="small" color={C.red}/>:null}</View><Text style={s.summaryCount}>{filter==="LIVE"?liveCount:filtered.length} matches</Text></View>{state.error?<Pressable style={s.errorStrip} onPress={()=>load(true,false)}><Ionicons name="refresh-outline" size={15} color={C.red}/><Text style={s.errorText}>Update delayed · tap to retry</Text></Pressable>:null}</>;
+
+  return <View style={s.screen}><SectionList sections={sections} keyExtractor={(item)=>String(item.id)} renderItem={({item})=><MatchRow match={item} onOpen={openMatch}/>} renderSectionHeader={({section})=><View style={s.sectionHeader}><View style={s.sectionMark}><Ionicons name="football-outline" size={16} color={C.text2}/></View><Text numberOfLines={1} style={s.sectionTitle}>{section.title}</Text><Ionicons name="chevron-forward" size={15} color={C.muted}/></View>} ListHeaderComponent={header} ListEmptyComponent={!state.loading?<View style={s.empty}><Ionicons name="football-outline" size={25} color={C.muted}/><Text style={s.emptyText}>No matches in this filter.</Text></View>:<View style={s.empty}><ActivityIndicator color={C.red}/><Text style={s.emptyText}>Updating matches…</Text></View>} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={()=>load(true,false)} colors={[C.red]} tintColor={C.red}/>} stickySectionHeadersEnabled={false} showsVerticalScrollIndicator={false} contentContainerStyle={s.listContent} initialNumToRender={14} maxToRenderPerBatch={12} updateCellsBatchingPeriod={24} windowSize={7} removeClippedSubviews/></View>;
 }
 
-function Logo({ uri }) {
-  return uri ? <Image source={{ uri }} resizeMode="contain" style={s.teamLogo} fadeDuration={0} /> : <View style={s.logoFallback}><Ionicons name="football-outline" size={26} color={C.muted}/></View>;
-}
-
-const MatchCard = memo(function MatchCard({ match, openMatch }) {
-  const live = isLiveMatch(match);
-  const hasScore = match.homeScore !== null && match.homeScore !== undefined && match.awayScore !== null && match.awayScore !== undefined;
-  return <Pressable style={s.matchCard} onPress={() => openMatch?.(match)} android_ripple={{ color:"rgba(255,255,255,0.04)" }}>
-    <View style={s.matchTop}>
-      <Text numberOfLines={1} style={s.comp}>{match.competition}</Text>
-      <View style={s.statusRow}>{live ? <View style={s.liveBadge}><Text style={s.liveText}>LIVE</Text></View> : null}<Text style={[s.minute, live && { color:C.red }]}>{match.minute || match.statusCode || "—"}</Text></View>
-    </View>
-    <View style={s.teamsRow}>
-      <View style={s.team}><Logo uri={match.home?.logo}/><Text numberOfLines={2} style={s.teamName}>{match.home?.name}</Text></View>
-      <Text style={s.score}>{hasScore ? `${match.homeScore} - ${match.awayScore}` : "VS"}</Text>
-      <View style={s.team}><Logo uri={match.away?.logo}/><Text numberOfLines={2} style={s.teamName}>{match.away?.name}</Text></View>
-    </View>
-  </Pressable>;
-});
-
-function QuickAction({ icon, label, onPress }) {
-  return <Pressable style={s.quickAction} onPress={onPress} android_ripple={{ color:"rgba(255,255,255,0.04)" }}>
-    <View style={s.quickIcon}><Ionicons name={icon} size={22} color={C.text}/></View>
-    <Text style={s.quickText}>{label}</Text>
-  </Pressable>;
-}
-
-export default function HomeScreen({ onTab, openMatch, openEntity, openScores, openNotifications, openSearch }) {
-  const date = bangkokDate(0);
-  const [state, setState] = useState(() => {
-    const saved = peekFastFootballMatches(date);
-    return { loading:!saved, refreshing:false, error:"", matches:saved?.matches || [] };
-  });
-
-  const load = useCallback(async (force=false, silent=false) => {
-    const saved = peekFastFootballMatches(date);
-    if (!silent) {
-      setState((p) => ({
-        ...p,
-        loading: !force && !saved && !p.matches.length,
-        refreshing: force,
-        error: "",
-        matches: saved?.matches || p.matches,
-      }));
-    }
-    try {
-      const result = await fetchFastFootballMatches({ date, force });
-      setState({ loading:false, refreshing:false, error:"", matches:result.matches || [] });
-    } catch (e) {
-      setState((p) => ({ ...p, loading:false, refreshing:false, error:e?.message || "Could not update scores." }));
-    }
-  }, [date]);
-
-  useEffect(() => { load(false, false); }, [load]);
-  useEffect(() => {
-    const timer = setTimeout(() => prefetchFastFootballMatches([bangkokDate(-1), bangkokDate(1)]), 450);
-    return () => clearTimeout(timer);
-  }, [date]);
-  useEffect(() => {
-    const timer = setInterval(() => load(true, true), 20000);
-    return () => clearInterval(timer);
-  }, [load]);
-
-  const live = useMemo(() => state.matches.filter(isLiveMatch).slice(0,5), [state.matches]);
-
-  return <View style={s.screen}>
-    <View style={s.header}>
-      <View><Text style={s.brand}>MST</Text><Text style={s.brandSub}>SCORE · MYANMAR SPORTS TALK</Text></View>
-      <View style={s.actions}>
-        <Pressable hitSlop={8} style={s.actionBtn} onPress={openNotifications}><Ionicons name="notifications-outline" size={28} color={C.text}/><View style={s.dot}/></Pressable>
-        <Pressable hitSlop={8} style={s.actionBtn} onPress={openSearch}><Ionicons name="search-outline" size={30} color={C.text}/></Pressable>
-      </View>
-    </View>
-
-    <View style={s.tabs}>{TABS.map((tab) => <Pressable key={tab} style={s.tab} onPress={() => tab !== "LIVE SCORES" && onTab?.(tab)}><Text style={[s.tabText, tab === "LIVE SCORES" && s.tabTextOn]}>{tab}</Text>{tab === "LIVE SCORES" ? <View style={s.tabLine}/> : null}</Pressable>)}</View>
-
-    <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => load(true, false)} colors={[C.red]} tintColor={C.red}/> } showsVerticalScrollIndicator={false}>
-      <View style={s.quickGrid}>
-        <QuickAction icon="football-outline" label="Scores" onPress={openScores}/>
-        <QuickAction icon="newspaper-outline" label="News" onPress={() => onTab?.("NEWS")}/>
-        <QuickAction icon="play-circle-outline" label="Videos" onPress={() => onTab?.("VIDEOS")}/>
-        <QuickAction icon="swap-horizontal-outline" label="Transfers" onPress={() => onTab?.("TRANSFERS")}/>
-      </View>
-
-      <View style={s.sectionRow}><Text style={s.sectionTitle}>TOP COMPETITIONS</Text><Text style={s.count}>Explore</Text></View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.compStrip}>
-        {COMPETITIONS.map((c) => <Pressable key={c.id} style={s.compItem} onPress={() => openEntity?.("competition", c)}><MaterialCommunityIcons name={c.icon} size={24} color={C.text}/><Text numberOfLines={2} style={s.compName}>{c.name}</Text></Pressable>)}
-      </ScrollView>
-
-      <View style={[s.sectionRow,{marginTop:18}]}>
-        <View style={s.liveTitle}><View style={s.redDot}/><Text style={s.sectionTitle}>LIVE NOW</Text>{state.loading ? <ActivityIndicator size="small" color={C.red}/> : null}</View>
-        <Text style={s.count}>{live.length} {live.length === 1 ? "Match" : "Matches"}</Text>
-      </View>
-
-      {live.map((m) => <MatchCard key={m.id} match={m} openMatch={openMatch}/>) }
-      {!state.loading && !live.length ? <View style={s.compactState}><Ionicons name="football-outline" size={20} color={C.muted}/><Text style={s.compactText}>No live matches right now. All scores are still available.</Text></View> : null}
-      {state.error ? <Pressable style={s.errorStrip} onPress={() => load(true, false)}><Ionicons name="refresh-outline" size={17} color={C.red}/><Text numberOfLines={1} style={s.errorText}>Scores update delayed · tap to retry</Text></Pressable> : null}
-
-      <Pressable style={s.allScores} onPress={openScores} android_ripple={{ color:"rgba(255,255,255,0.04)" }}><Text style={s.allScoresText}>ALL SCORES</Text><Ionicons name="chevron-forward" size={20} color={C.text}/></Pressable>
-      <View style={{height:24}}/>
-    </ScrollView>
-  </View>;
-}
-
-const s = StyleSheet.create({
-  screen:{flex:1,backgroundColor:C.bg},
-  header:{minHeight:88,paddingHorizontal:18,paddingTop:10,paddingBottom:8,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
-  brand:{fontSize:34,lineHeight:36,fontWeight:"900",fontStyle:"italic",letterSpacing:-2,color:C.red},
-  brandSub:{fontSize:9.2,lineHeight:12,fontWeight:"900",letterSpacing:.55,color:C.text},
-  actions:{flexDirection:"row",alignItems:"center",gap:8},actionBtn:{width:44,height:44,alignItems:"center",justifyContent:"center",position:"relative"},dot:{position:"absolute",right:7,top:7,width:7,height:7,borderRadius:4,backgroundColor:C.red},
-  tabs:{height:50,flexDirection:"row",borderBottomWidth:1,borderBottomColor:C.border2,paddingHorizontal:10},tab:{flex:1,alignItems:"center",justifyContent:"center",position:"relative"},tabText:{fontSize:10.5,fontWeight:"800",color:C.text2},tabTextOn:{color:C.red},tabLine:{position:"absolute",bottom:0,left:7,right:7,height:3,borderRadius:2,backgroundColor:C.red},
-  content:{paddingHorizontal:16,paddingTop:14},
-  quickGrid:{flexDirection:"row",gap:8,marginBottom:18},quickAction:{flex:1,minHeight:72,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,alignItems:"center",justifyContent:"center",gap:7,overflow:"hidden"},quickIcon:{width:34,height:34,borderRadius:10,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},quickText:{fontSize:10,fontWeight:"800",color:C.text2},
-  sectionRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginBottom:10},liveTitle:{flexDirection:"row",alignItems:"center",gap:8},redDot:{width:8,height:8,borderRadius:4,backgroundColor:C.red},sectionTitle:{fontSize:13.5,fontWeight:"900",color:C.text2},count:{fontSize:10.5,color:C.muted},
-  compStrip:{gap:8,paddingRight:8},compItem:{width:105,minHeight:78,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,padding:10,alignItems:"center",justifyContent:"center",gap:7},compName:{fontSize:9.5,lineHeight:12,textAlign:"center",fontWeight:"700",color:C.text2},
-  matchCard:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:13,padding:13,marginBottom:9,overflow:"hidden"},matchTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",gap:8},comp:{flex:1,fontSize:10.5,fontWeight:"800",color:C.text2},statusRow:{flexDirection:"row",alignItems:"center",gap:8},liveBadge:{backgroundColor:C.red,borderRadius:6,paddingHorizontal:9,paddingVertical:6},liveText:{fontSize:10,fontWeight:"900",color:C.text},minute:{fontSize:10.5,fontWeight:"700",color:C.muted},teamsRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginTop:13},team:{width:"35%",alignItems:"center",gap:7},teamLogo:{width:52,height:52},logoFallback:{width:52,height:52,borderRadius:26,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},teamName:{fontSize:12.5,lineHeight:16,textAlign:"center",color:C.text},score:{width:"25%",textAlign:"center",fontSize:29,fontWeight:"900",color:C.text},
-  compactState:{minHeight:54,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:10,paddingHorizontal:13,flexDirection:"row",alignItems:"center",gap:9},compactText:{flex:1,fontSize:10.5,color:C.muted,lineHeight:14},errorStrip:{minHeight:38,marginTop:8,backgroundColor:C.card2,borderRadius:8,paddingHorizontal:12,flexDirection:"row",alignItems:"center",gap:7},errorText:{flex:1,fontSize:10,color:C.muted},
-  allScores:{minHeight:46,backgroundColor:C.card2,borderWidth:1,borderColor:C.border2,borderRadius:10,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:5,marginTop:10,overflow:"hidden"},allScoresText:{fontSize:11,fontWeight:"900",color:C.text}
-});
+const s=StyleSheet.create({screen:{flex:1,backgroundColor:C.bg},listContent:{paddingBottom:18},brandHeader:{minHeight:82,paddingHorizontal:16,paddingTop:8,paddingBottom:8,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},brand:{fontSize:27,fontWeight:"900",letterSpacing:-1,color:C.text},brandSub:{fontSize:9.5,color:C.muted,marginTop:3},actions:{flexDirection:"row",gap:4},iconBtn:{width:42,height:42,alignItems:"center",justifyContent:"center"},dateStrip:{height:48,marginHorizontal:14,backgroundColor:C.card,borderRadius:10,flexDirection:"row",alignItems:"center",padding:4,borderWidth:1,borderColor:C.border2},dateTab:{flex:1,height:38,borderRadius:8,alignItems:"center",justifyContent:"center"},dateTabOn:{backgroundColor:C.redSoft,borderWidth:1,borderColor:"rgba(243,38,45,.28)"},dateText:{fontSize:9.2,fontWeight:"800",color:C.muted},dateTextOn:{color:C.red},calendarBtn:{width:38,height:38,alignItems:"center",justifyContent:"center"},filters:{height:46,flexDirection:"row",paddingHorizontal:14,gap:7,alignItems:"center"},filter:{paddingHorizontal:13,height:30,borderRadius:15,backgroundColor:C.card,alignItems:"center",justifyContent:"center",borderWidth:1,borderColor:C.border2},filterOn:{backgroundColor:C.red,borderColor:C.red},filterText:{fontSize:8.8,fontWeight:"900",color:C.muted},filterTextOn:{color:C.text},summaryRow:{height:44,paddingHorizontal:16,flexDirection:"row",alignItems:"center",justifyContent:"space-between",borderTopWidth:1,borderTopColor:C.border2},summaryLeft:{flexDirection:"row",alignItems:"center",gap:7},liveDotLarge:{width:8,height:8,borderRadius:4,backgroundColor:C.red},summaryTitle:{fontSize:11.5,fontWeight:"900",color:C.text2},summaryCount:{fontSize:9.6,color:C.muted},errorStrip:{marginHorizontal:14,marginBottom:7,minHeight:34,borderRadius:8,backgroundColor:C.card2,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6},errorText:{fontSize:9.2,color:C.muted},sectionHeader:{height:40,marginHorizontal:14,marginTop:7,paddingHorizontal:10,backgroundColor:C.card,borderTopLeftRadius:10,borderTopRightRadius:10,borderWidth:1,borderBottomWidth:0,borderColor:C.border2,flexDirection:"row",alignItems:"center",gap:7},sectionMark:{width:24,height:24,borderRadius:7,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},sectionTitle:{flex:1,fontSize:10.5,fontWeight:"900",color:C.text2},matchRow:{minHeight:68,marginHorizontal:14,paddingHorizontal:10,flexDirection:"row",alignItems:"center",backgroundColor:C.card,borderLeftWidth:1,borderRightWidth:1,borderBottomWidth:1,borderColor:C.border2},statusCol:{width:48,alignItems:"flex-start",justifyContent:"center",gap:3},statusText:{fontSize:9.8,fontWeight:"900",color:C.muted},liveDot:{width:5,height:5,borderRadius:3,backgroundColor:C.red},teamsCol:{flex:1,paddingVertical:7},teamLine:{height:27,flexDirection:"row",alignItems:"center",gap:7},logo:{width:21,height:21},logoFallback:{width:21,height:21,borderRadius:11,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},teamName:{flex:1,fontSize:11.4,fontWeight:"700",color:C.text2},score:{width:24,textAlign:"right",fontSize:13,fontWeight:"900",color:C.text},empty:{minHeight:150,alignItems:"center",justifyContent:"center",gap:8},emptyText:{fontSize:10.5,color:C.muted}});
