@@ -2,12 +2,6 @@ import React, { useState } from "react";
 import { Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "./final/HomeScreen";
-import { AccountScreen, FavoritesScreen, PredictionScreen } from "./phase2/Phase2Screens";
-import ContentScreen from "./phase3/ContentScreens";
-import { AboutScreen, NotificationsScreen, SettingsScreen } from "./phase4/Phase4Screens";
-import QuickScoresScreen from "./final/QuickScoresScreen";
-import SearchScreen from "./final/SearchScreen";
-import { NativeArticleScreen, NativeEntityScreen, NativeMatchScreen } from "./final/NativeDetailScreens";
 
 const SITE = "https://myanmarsportstalk.com";
 const YOUTUBE = "https://www.youtube.com/@MyanmarSportsTalk";
@@ -22,6 +16,19 @@ const NAV = [
   ["prediction", "Prediction", "football-outline", "football"],
   ["more", "More", "ellipsis-horizontal", "ellipsis-horizontal"],
 ];
+
+function LazyContent(props) { const Screen = require("./phase3/ContentScreens").default; return <Screen {...props}/>; }
+function LazyScores(props) { const Screen = require("./final/QuickScoresScreen").default; return <Screen {...props}/>; }
+function LazyFavorites(props) { const Screen = require("./phase2/Phase2Screens").FavoritesScreen; return <Screen {...props}/>; }
+function LazyPrediction(props) { const Screen = require("./phase2/Phase2Screens").PredictionScreen; return <Screen {...props}/>; }
+function LazyAccount(props) { const Screen = require("./phase2/Phase2Screens").AccountScreen; return <Screen {...props}/>; }
+function LazyNotifications(props) { const Screen = require("./phase4/Phase4Screens").NotificationsScreen; return <Screen {...props}/>; }
+function LazySettings(props) { const Screen = require("./phase4/Phase4Screens").SettingsScreen; return <Screen {...props}/>; }
+function LazyAbout(props) { const Screen = require("./phase4/Phase4Screens").AboutScreen; return <Screen {...props}/>; }
+function LazySearch(props) { const Screen = require("./final/SearchScreen").default; return <Screen {...props}/>; }
+function LazyMatch(props) { const Screen = require("./final/NativeDetailScreens").NativeMatchScreen; return <Screen {...props}/>; }
+function LazyEntity(props) { const Screen = require("./final/NativeDetailScreens").NativeEntityScreen; return <Screen {...props}/>; }
+function LazyArticle(props) { const Screen = require("./final/NativeDetailScreens").NativeArticleScreen; return <Screen {...props}/>; }
 
 function BottomNav({ active, onChange }) {
   return <View style={s.bottomNav}>{NAV.map(([id,label,icon,activeIcon]) => {
@@ -85,19 +92,19 @@ export default function AppFinalShell() {
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
     <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
       {mode === "home" ? <HomeScreen onTab={openTopTab} openMatch={(x) => openMatch(x,"home")} openEntity={(type,x) => openEntity(type,x,"home")} openScores={() => setMode("scores")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")}/> : null}
-      {isContent ? <ContentScreen initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
-      {mode === "scores" ? <QuickScoresScreen openMatch={(x) => openMatch(x,"scores")}/> : null}
-      {mode === "favorites" ? <FavoritesScreen openLeague={(x) => openEntity("competition",x,"favorites")} openTeam={(x) => openEntity("team",x,"favorites")} openPlayer={(x) => openEntity("player",x,"favorites")} openAccount={() => openAccount("favorites")}/> : null}
-      {mode === "prediction" ? <PredictionScreen openMatch={(x) => openMatch(x,"prediction")} openAccount={() => openAccount("prediction")}/> : null}
+      {isContent ? <LazyContent initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
+      {mode === "scores" ? <LazyScores openMatch={(x) => openMatch(x,"scores")}/> : null}
+      {mode === "favorites" ? <LazyFavorites openLeague={(x) => openEntity("competition",x,"favorites")} openTeam={(x) => openEntity("team",x,"favorites")} openPlayer={(x) => openEntity("player",x,"favorites")} openAccount={() => openAccount("favorites")}/> : null}
+      {mode === "prediction" ? <LazyPrediction openMatch={(x) => openMatch(x,"prediction")} openAccount={() => openAccount("prediction")}/> : null}
       {mode === "more" ? <MoreScreen navigate={setMode} openAccount={() => openAccount("more")} openNotifications={() => openNotifications("more")}/> : null}
-      {mode === "account" ? <AccountScreen goBack={goReturn}/> : null}
-      {mode === "notifications" ? <NotificationsScreen goBack={goReturn} openAccount={() => openAccount("notifications")}/> : null}
-      {mode === "settings" ? <SettingsScreen goBack={() => setMode("more")} openNotifications={() => openNotifications("settings")} openAccount={() => openAccount("settings")}/> : null}
-      {mode === "about" ? <AboutScreen goBack={() => setMode("more")}/> : null}
-      {mode === "search" ? <SearchScreen goBack={goReturn} openMatch={(x) => openMatch(x,"search")} openEntity={(type,x) => openEntity(type,x,"search")}/> : null}
-      {mode === "match" ? <NativeMatchScreen match={selected} goBack={goReturn}/> : null}
-      {mode === "entity" ? <NativeEntityScreen type={selected?.type} entity={selected?.entity} goBack={goReturn}/> : null}
-      {mode === "article" ? <NativeArticleScreen article={selected} goBack={goReturn}/> : null}
+      {mode === "account" ? <LazyAccount goBack={goReturn}/> : null}
+      {mode === "notifications" ? <LazyNotifications goBack={goReturn} openAccount={() => openAccount("notifications")}/> : null}
+      {mode === "settings" ? <LazySettings goBack={() => setMode("more")} openNotifications={() => openNotifications("settings")} openAccount={() => openAccount("settings")}/> : null}
+      {mode === "about" ? <LazyAbout goBack={() => setMode("more")}/> : null}
+      {mode === "search" ? <LazySearch goBack={goReturn} openMatch={(x) => openMatch(x,"search")} openEntity={(type,x) => openEntity(type,x,"search")}/> : null}
+      {mode === "match" ? <LazyMatch match={selected} goBack={goReturn}/> : null}
+      {mode === "entity" ? <LazyEntity type={selected?.type} entity={selected?.entity} goBack={goReturn}/> : null}
+      {mode === "article" ? <LazyArticle article={selected} goBack={goReturn}/> : null}
     </View>
     {!isSubpage ? <BottomNav active={isContent ? "home" : mode} onChange={(tab) => tab === "home" ? goHome() : setMode(tab)}/> : null}
   </View>;
