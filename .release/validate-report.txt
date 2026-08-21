@@ -1,5 +1,5 @@
 MST Android validation
-Commit: 345e7cfaa39f288291daab2ccbbe9a17143e2796
+Commit: ae6476ed3743a8d13c76e0428351d377ee773ebf
 
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
@@ -16,7 +16,7 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 702 packages, and audited 703 packages in 30s
+added 702 packages, and audited 703 packages in 18s
 
 53 packages are looking for funding
   run `npm fund` for details
@@ -38,10 +38,9 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 10.2% ( 62/194)
-Android ./index.js ▓▓▓▓▓▓▓▓░░░░░░░░ 53.1% (325/446)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.0% (591/594)
-Android Bundled 13233ms index.js (657 modules)
+Android ./index.js ▓▓▓▓▓░░░░░░░░░░░ 34.4% (176/300)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 91.4% (556/585)
+Android Bundled 9072ms index.js (657 modules)
 
 › Assets (19):
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf (130 kB)
@@ -65,7 +64,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-0f2f5ade3ec37c09c6789a06a97b959e.hbc (2.34 MB)
+_expo/static/js/android/index-20378300a206febd55005b213de8bd41.hbc (2.34 MB)
 
 › Files (1):
 metadata.json (1.35 kB)
