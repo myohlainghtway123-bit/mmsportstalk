@@ -11,6 +11,8 @@ import { NativeArticleScreen, NativeEntityScreen, NativeMatchScreen } from "./fi
 
 const SITE = "https://myanmarsportstalk.com";
 const YOUTUBE = "https://www.youtube.com/@MyanmarSportsTalk";
+const FACEBOOK = "https://www.facebook.com/myanmar.sports.talk";
+const TIKTOK = "https://www.tiktok.com/search?q=Myanmar%20Sports%20Talk";
 
 const C = { bg:"#080A0C", bg2:"#0B0E10", card:"#111416", border:"#24292D", border2:"#1D2226", red:"#F3262D", text:"#FFFFFF", text2:"#D0D2D4", muted:"#92979B" };
 const NAV = [
@@ -38,19 +40,22 @@ function MoreScreen({ navigate, openAccount, openNotifications }) {
     ["football-outline", "Predictions", "My picks, points and leaderboard", () => navigate("prediction")],
     ["notifications-outline", "Notifications", "News, live scores, transfers and predictions", openNotifications],
     ["settings-outline", "Settings", "App and account settings", () => navigate("settings")],
-    ["information-circle-outline", "About MST", "Myanmar Sports Talk mobile app", () => navigate("about")],
+    ["information-circle-outline", "About MST", "MST Score mobile app", () => navigate("about")],
+  ];
+  const socials = [
+    ["logo-youtube", "YouTube", "Latest MST videos", YOUTUBE, C.red],
+    ["logo-facebook", "Facebook", "Myanmar Sports Talk page", FACEBOOK, "#4C8BF5"],
+    ["logo-tiktok", "TikTok", "Find Myanmar Sports Talk", TIKTOK, C.text],
+    ["globe-outline", "Website", "myanmarsportstalk.com", SITE, C.text2],
   ];
   return <View style={s.screen}>
-    <View style={s.header}><View><Text style={s.title}>More</Text><Text style={s.subtitle}>Myanmar Sports Talk</Text></View><Pressable hitSlop={8} onPress={openAccount}><Ionicons name="person-circle-outline" size={31} color={C.text}/></Pressable></View>
+    <View style={s.header}><View><Text style={s.title}>More</Text><Text style={s.subtitle}>MST Score</Text></View><Pressable hitSlop={8} onPress={openAccount}><Ionicons name="person-circle-outline" size={31} color={C.text}/></Pressable></View>
     <ScrollView contentContainerStyle={s.content}>
       <Pressable style={s.accountHero} onPress={openAccount}><View style={s.accountIcon}><Text style={s.mst}>MST</Text></View><View style={{flex:1}}><Text style={s.accountTitle}>My MST Account</Text><Text style={s.accountText}>Use the same account as myanmarsportstalk.com.</Text></View><Ionicons name="chevron-forward" size={20} color={C.muted}/></Pressable>
       <Text style={s.section}>ACCOUNT & APP</Text>
       <View style={s.card}>{rows.map(([icon,title,subtitle,action],index) => <Pressable key={title} style={[s.row,index !== rows.length - 1 && s.rowBorder]} onPress={action}><Ionicons name={icon} size={22} color={title === "My Account" ? C.red : C.text2}/><View style={{flex:1}}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View><Ionicons name="chevron-forward" size={18} color={C.muted}/></Pressable>)}</View>
-      <Text style={s.section}>MST ONLINE</Text>
-      <View style={s.card}>
-        <Pressable style={[s.row,s.rowBorder]} onPress={() => Linking.openURL(YOUTUBE).catch(() => {})}><Ionicons name="logo-youtube" size={22} color={C.red}/><View style={{flex:1}}><Text style={s.rowTitle}>MST YouTube</Text><Text style={s.rowSub}>Watch Myanmar Sports Talk videos</Text></View><Ionicons name="open-outline" size={18} color={C.muted}/></Pressable>
-        <Pressable style={s.row} onPress={() => Linking.openURL(SITE).catch(() => {})}><Ionicons name="globe-outline" size={22} color={C.text2}/><View style={{flex:1}}><Text style={s.rowTitle}>MST Website</Text><Text style={s.rowSub}>myanmarsportstalk.com</Text></View><Ionicons name="open-outline" size={18} color={C.muted}/></Pressable>
-      </View>
+      <Text style={s.section}>FOLLOW MST</Text>
+      <View style={s.card}>{socials.map(([icon,title,subtitle,url,color],index) => <Pressable key={title} style={[s.row,index !== socials.length - 1 && s.rowBorder]} onPress={() => Linking.openURL(url).catch(() => {})}><Ionicons name={icon} size={22} color={color}/><View style={{flex:1}}><Text style={s.rowTitle}>{title}</Text><Text style={s.rowSub}>{subtitle}</Text></View><Ionicons name="open-outline" size={18} color={C.muted}/></Pressable>)}</View>
     </ScrollView>
   </View>;
 }
