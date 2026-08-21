@@ -2,9 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const RED = [243, 38, 45, 255];
-const BLACK = [8, 10, 12, 255];
-const WHITE = [255, 255, 255, 255];
+const RED = [243, 39, 53, 255];
+const RED_DARK = [188, 22, 34, 255];
+const BLACK = [7, 9, 11, 255];
+const PANEL = [14, 18, 22, 255];
+const WHITE = [247, 248, 249, 255];
 const TRANSPARENT = [0, 0, 0, 0];
 
 function crc32(buf) {
@@ -98,28 +100,39 @@ function polygon(c, points, color) {
 }
 
 function drawMST(c, centerX, centerY, scale, color) {
-  const W=560*scale, H=220*scale;
+  const W=600*scale, H=226*scale;
   const x=centerX-W/2, y=centerY-H/2;
   const s=scale;
 
-  // M — strong vertical stems with sharp inner chevrons.
-  rect(c,x,y,34*s,220*s,color);
-  rect(c,x+156*s,y,34*s,220*s,color);
-  polygon(c,[[x+28*s,y],[x+68*s,y],[x+104*s,y+82*s],[x+80*s,y+119*s]],color);
-  polygon(c,[[x+162*s,y],[x+122*s,y],[x+86*s,y+82*s],[x+110*s,y+119*s]],color);
+  // M: bold geometric sports monogram with a clean center V.
+  roundedRect(c,x,y,38*s,226*s,8*s,color);
+  roundedRect(c,x+164*s,y,38*s,226*s,8*s,color);
+  polygon(c,[[x+30*s,y],[x+78*s,y],[x+116*s,y+86*s],[x+94*s,y+132*s]],color);
+  polygon(c,[[x+172*s,y],[x+124*s,y],[x+86*s,y+86*s],[x+108*s,y+132*s]],color);
 
-  // S — compact sport-display shape with softened corners.
-  const sx=x+220*s;
-  roundedRect(c,sx,y,140*s,30*s,10*s,color);
-  roundedRect(c,sx,y,30*s,108*s,10*s,color);
-  roundedRect(c,sx,y+95*s,140*s,30*s,10*s,color);
-  roundedRect(c,sx+110*s,y+112*s,30*s,108*s,10*s,color);
-  roundedRect(c,sx,y+190*s,140*s,30*s,10*s,color);
+  // S: compact five-stroke scoreboard form.
+  const sx=x+238*s;
+  roundedRect(c,sx,y,142*s,34*s,12*s,color);
+  roundedRect(c,sx,y,34*s,113*s,12*s,color);
+  roundedRect(c,sx,y+96*s,142*s,34*s,12*s,color);
+  roundedRect(c,sx+108*s,y+113*s,34*s,113*s,12*s,color);
+  roundedRect(c,sx,y+192*s,142*s,34*s,12*s,color);
 
-  // T — wide top, narrow stem.
-  const tx=x+390*s;
-  roundedRect(c,tx,y,170*s,32*s,10*s,color);
-  roundedRect(c,tx+68*s,y+20*s,36*s,200*s,10*s,color);
+  // T: wide head and strong stem.
+  const tx=x+418*s;
+  roundedRect(c,tx,y,182*s,36*s,12*s,color);
+  roundedRect(c,tx+72*s,y+18*s,38*s,208*s,10*s,color);
+}
+
+function drawBadge(c, x, y, size) {
+  const r=size*0.245;
+  roundedRect(c,x,y,size,size,r,RED_DARK);
+  roundedRect(c,x+size*0.018,y+size*0.018,size*0.964,size*0.964,r*0.94,RED);
+  roundedRect(c,x+size*0.055,y+size*0.055,size*0.89,size*0.89,r*0.84,PANEL);
+  // Small live-score accent in the top-right corner.
+  circle(c,x+size*0.78,y+size*0.22,size*0.035,RED);
+  circle(c,x+size*0.78,y+size*0.22,size*0.014,WHITE);
+  drawMST(c,x+size*0.50,y+size*0.51,size/1024*1.10,WHITE);
 }
 
 function save(name, c) {
@@ -129,22 +142,17 @@ function save(name, c) {
   console.log(`generated ${out}`);
 }
 
-// Main launcher icon: simple red sports tile with a crisp white MST mark.
-const icon = canvas(1024,1024,RED);
-drawMST(icon,512,500,1.12,WHITE);
-roundedRect(icon,368,710,288,18,9,BLACK);
+// Premium launcher icon: dark score-app tile, red MST frame, large white monogram.
+const icon = canvas(1024,1024,BLACK);
+drawBadge(icon,86,86,852);
 save('icon.png',icon);
 
-// Android adaptive foreground: compact tile kept well inside every launcher mask.
+// Android adaptive foreground: keep the complete badge inside common circle/squircle masks.
 const adaptive = canvas(1024,1024,TRANSPARENT);
-roundedRect(adaptive,188,188,648,648,150,RED);
-drawMST(adaptive,512,500,0.72,WHITE);
-roundedRect(adaptive,420,650,184,13,7,BLACK);
+drawBadge(adaptive,185,185,654);
 save('adaptive-icon.png',adaptive);
 
-// Splash screen uses the same badge so launch branding matches the launcher.
+// Splash: restrained black field with the exact same app badge.
 const splash = canvas(1242,2436,BLACK);
-roundedRect(splash,391,923,460,460,108,RED);
-drawMST(splash,621,1124,0.52,WHITE);
-roundedRect(splash,560,1260,122,10,5,BLACK);
+drawBadge(splash,401,998,440);
 save('splash.png',splash);
