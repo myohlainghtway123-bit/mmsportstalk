@@ -1,5 +1,5 @@
 MST Android validation
-Commit: 0f0786835667e27225ead0bf512bed6c50b2f14c
+Commit: 36865e9a09f27c8550349b5f6f70511353d065f0
 
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
@@ -39,9 +39,9 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
 Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 69/211)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 69.8% (407/487)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (661/661)
-Android Bundled 12081ms index.js (661 modules)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 65.4% (389/481)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.7% (706/729)
+Android Bundled 12886ms index.js (799 modules)
 
 › Assets (19):
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf (130 kB)
@@ -65,7 +65,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-a5e1c491819e5766eb979cd7da1ad379.hbc (2.45 MB)
+_expo/static/js/android/index-10a774fca9aa51c982cd818782ffa53f.hbc (2.69 MB)
 
 › Files (1):
 metadata.json (1.35 kB)
