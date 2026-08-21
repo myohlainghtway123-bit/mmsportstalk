@@ -32,6 +32,23 @@ async function fetchJson(url) {
   }
 }
 
+function directBackendOdds(payload) {
+  const data = payload?.data;
+  if (!data || typeof data !== "object") return null;
+  if (!("available" in data) || !("markets" in data)) return null;
+  if (!data.available || !data.bookmaker) return null;
+  return {
+    bookmaker: data.bookmaker,
+    sourceName: data.sourceName || data.bookmaker,
+    matchWinner: data.markets?.matchWinner || null,
+    overUnder25: data.markets?.overUnder25 || null,
+    btts: data.markets?.btts || null,
+    all: [],
+    updatedAt: data.updatedAt || payload?.meta?.fetchedAt || null,
+    backendMeta: payload?.meta || null,
+  };
+}
+
 function walk(value, visit, depth = 0) {
   if (depth > 8 || value == null) return;
   visit(value);
@@ -105,6 +122,9 @@ function normalizeMarkets(bets) {
 }
 
 function selectPriorityBookmaker(payload) {
+  const direct = directBackendOdds(payload);
+  if (direct) return direct;
+
   const bookmakers = collectBookmakers(payload);
   for (const priority of BOOKMAKER_PRIORITY) {
     const match = bookmakers.find((item) => cleanName(item.name).includes(priority.key));
