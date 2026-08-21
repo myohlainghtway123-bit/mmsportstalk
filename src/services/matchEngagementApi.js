@@ -116,11 +116,11 @@ export async function removeMatchAlert(matchId) {
 }
 
 export async function getMatchPoll(matchId) {
-  const payload = await api(`/football/matches/${encodeURIComponent(String(matchId))}/poll`);
+  const payload = await api(`/football/poll?matchId=${encodeURIComponent(String(matchId))}`);
   return payload?.data || null;
 }
 
 export async function voteMatchPoll(matchId, pick) {
-  const payload = await api(`/football/matches/${encodeURIComponent(String(matchId))}/poll`, { method: "POST", body: { pick } });
+  const payload = await api("/football/poll", { method: "POST", body: { matchId: String(matchId), pick } });
   return payload?.data || null;
 }
