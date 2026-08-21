@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { isLiveMatch } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
@@ -46,10 +46,10 @@ function useMatches(date) {
     const saved = peekFastFootballMatches(date);
     setState((prev) => ({
       ...prev,
-      loading: !refresh && !saved,
+      loading: !refresh && !saved && !prev.matches.length,
       refreshing: refresh,
       error: "",
-      matches: saved?.matches || (refresh ? prev.matches : []),
+      matches: saved?.matches || prev.matches,
     }));
     try {
       const result = await fetchFastFootballMatches({ date, force: refresh });
@@ -65,9 +65,9 @@ function useMatches(date) {
 
 function TeamLogo({ uri }) {
   return uri ? (
-    <Image source={{ uri }} resizeMode="contain" style={s.logo} />
+    <Image source={{ uri }} resizeMode="contain" style={s.logo} fadeDuration={0} />
   ) : (
-    <View style={s.logoFallback}><Ionicons name="football-outline" size={28} color={C.muted} /></View>
+    <View style={s.logoFallback}><Ionicons name="football-outline" size={26} color={C.muted} /></View>
   );
 }
 
@@ -77,11 +77,11 @@ function statusText(match) {
   return match.minute || "—";
 }
 
-function MatchCard({ match, onOpen }) {
+const MatchCard = memo(function MatchCard({ match, onOpen }) {
   const live = isLiveMatch(match);
   const hasScore = match.homeScore !== null && match.homeScore !== undefined && match.awayScore !== null && match.awayScore !== undefined;
   return (
-    <Pressable style={s.card} onPress={() => onOpen?.(match)}>
+    <Pressable style={s.card} onPress={() => onOpen?.(match)} android_ripple={{ color: "rgba(255,255,255,0.04)" }}>
       <View style={s.cardTop}>
         <Text numberOfLines={1} style={s.comp}>{match.competition}</Text>
         <View style={s.statusWrap}>
@@ -104,7 +104,7 @@ function MatchCard({ match, onOpen }) {
       </View>
     </Pressable>
   );
-}
+});
 
 export default function QuickScoresScreen({ openMatch }) {
   const [tab, setTab] = useState("TODAY");
@@ -122,6 +122,21 @@ export default function QuickScoresScreen({ openMatch }) {
     return 0;
   }), [api.matches]);
 
+  const renderMatch = useCallback(({ item }) => <MatchCard match={item} onOpen={openMatch} />, [openMatch]);
+  const keyExtractor = useCallback((item) => `${date}-${item.id}`, [date]);
+
+  const listHeader = (
+    <>
+      <View style={s.section}>
+        <Text style={s.sectionTitle}>{tab === "TODAY" ? "TODAY'S MATCHES" : tab}</Text>
+        <Text style={s.count}>{matches.length} matches</Text>
+      </View>
+      {api.loading && !matches.length ? <View style={s.state}><ActivityIndicator color={C.red} /><Text style={s.stateText}>Loading {tab.toLowerCase()} matches…</Text></View> : null}
+      {!api.loading && api.error && !matches.length ? <View style={s.state}><Ionicons name="cloud-offline-outline" size={25} color={C.muted} /><Text style={s.stateText}>{api.error}</Text><Pressable style={s.retry} onPress={api.reload}><Text style={s.retryText}>RETRY</Text></Pressable></View> : null}
+      {!api.loading && !api.error && !matches.length ? <View style={s.state}><Ionicons name="football-outline" size={25} color={C.muted} /><Text style={s.stateText}>No matches found for {date}.</Text></View> : null}
+    </>
+  );
+
   return (
     <View style={s.screen}>
       <View style={s.header}>
@@ -134,32 +149,28 @@ export default function QuickScoresScreen({ openMatch }) {
 
       <View style={s.tabs}>
         {DAY_TABS.map((item) => (
-          <Pressable
-            key={item}
-            hitSlop={6}
-            style={[s.tab, tab === item && s.tabOn]}
-            onPress={() => setTab(item)}
-          >
+          <Pressable key={item} hitSlop={6} style={[s.tab, tab === item && s.tabOn]} onPress={() => setTab(item)}>
             <Text style={[s.tabText, tab === item && s.tabTextOn]}>{item}</Text>
           </Pressable>
         ))}
       </View>
 
-      <ScrollView
+      <FlatList
+        data={matches}
+        renderItem={renderMatch}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={listHeader}
+        ListFooterComponent={<View style={{ height: 28 }} />}
         contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={api.refreshing} onRefresh={api.refresh} tintColor={C.red} colors={[C.red]} />}
-      >
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>{tab === "TODAY" ? "TODAY'S MATCHES" : tab}</Text>
-          <Text style={s.count}>{matches.length} matches</Text>
-        </View>
-
-        {api.loading && !matches.length ? <View style={s.state}><ActivityIndicator color={C.red} /><Text style={s.stateText}>Loading {tab.toLowerCase()} matches…</Text></View> : null}
-        {!api.loading && api.error && !matches.length ? <View style={s.state}><Ionicons name="cloud-offline-outline" size={25} color={C.muted} /><Text style={s.stateText}>{api.error}</Text><Pressable style={s.retry} onPress={api.reload}><Text style={s.retryText}>RETRY</Text></Pressable></View> : null}
-        {!api.loading && !api.error && !matches.length ? <View style={s.state}><Ionicons name="football-outline" size={25} color={C.muted} /><Text style={s.stateText}>No matches found for {date}.</Text></View> : null}
-        {matches.map((match) => <MatchCard key={`${date}-${match.id}`} match={match} onOpen={openMatch} />)}
-        <View style={{ height: 28 }} />
-      </ScrollView>
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        updateCellsBatchingPeriod={32}
+        windowSize={5}
+        removeClippedSubviews
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
@@ -178,7 +189,7 @@ const s = StyleSheet.create({
   section: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   sectionTitle: { fontSize: 12.5, fontWeight: "900", color: C.text2 },
   count: { fontSize: 10.5, color: C.muted },
-  card: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border2, borderRadius: 13, padding: 13, marginBottom: 9 },
+  card: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border2, borderRadius: 13, padding: 13, marginBottom: 9, overflow: "hidden" },
   cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   comp: { flex: 1, fontSize: 10.5, fontWeight: "800", color: C.text2 },
   statusWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -187,12 +198,12 @@ const s = StyleSheet.create({
   time: { fontSize: 10.5, color: C.muted, fontWeight: "700" },
   matchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 13 },
   teamBox: { width: "35%", alignItems: "center", gap: 7 },
-  logo: { width: 54, height: 54 },
-  logoFallback: { width: 54, height: 54, borderRadius: 27, backgroundColor: C.card2, alignItems: "center", justifyContent: "center" },
+  logo: { width: 52, height: 52 },
+  logoFallback: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.card2, alignItems: "center", justifyContent: "center" },
   teamName: { color: C.text, fontSize: 12.5, textAlign: "center", lineHeight: 16 },
   scoreCenter: { width: "25%", alignItems: "center" },
   score: { color: C.text, fontSize: 29, fontWeight: "900" },
-  state: { minHeight: 130, backgroundColor: C.card, borderWidth: 1, borderColor: C.border2, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 9, padding: 18 },
+  state: { minHeight: 120, backgroundColor: C.card, borderWidth: 1, borderColor: C.border2, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 9, padding: 18, marginBottom: 10 },
   stateText: { fontSize: 11, color: C.muted, textAlign: "center" },
   retry: { backgroundColor: C.red, borderRadius: 7, paddingHorizontal: 16, paddingVertical: 8 },
   retryText: { fontSize: 10, fontWeight: "900", color: C.text },
