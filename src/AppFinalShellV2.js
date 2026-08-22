@@ -72,11 +72,16 @@ function MoreScreen({ navigate, openAccount, openNotifications, language, setLan
   </View>;
 }
 
-export default function AppFinalShellV2() {
+export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChange } = {}) {
   const [mode,setMode] = useState("home");
   const [selected,setSelected] = useState(null);
   const [returnMode,setReturnMode] = useState("home");
-  const [language,setLanguage] = useState("my");
+  const [language,setLanguageState] = useState(initialLanguage === "en" ? "en" : "my");
+  const setLanguage = (value) => {
+    const next = value === "en" ? "en" : "my";
+    setLanguageState(next);
+    onLanguageChange?.(next);
+  };
 
   const rememberOrigin = () => mode || "home";
   const goHome = () => { setSelected(null); setReturnMode("home"); setMode("home"); };
