@@ -108,3 +108,22 @@ Preferred architecture:
 Mobile app -> myanmarsportstalk.com backend -> football/odds providers.
 
 Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
+
+
+## V7 — Match Chat + MST Tips Marketplace
+
+### Match Center
+Tabs: **FACTS · CHAT · LINEUP · STATS · H2H · TABLE · ODDS**. CHAT is public-read / signed-in-write match discussion with moderation. TABLE uses the match competition standings. Normal exact-score Prediction remains free and separate.
+
+### MST Tips
+Premium creator marketplace. Users apply to become Tipsters and MST admin approval is required. Levels control both daily publishing limits and maximum fixed prices:
+- Level 1 Rookie: 1 tip/day, max 5 Credits
+- Level 2 Rising: 2/day, max 10 Credits
+- Level 3 Skilled: 3/day, max 20 Credits
+- Level 4 Pro: 4/day, max 30 Credits
+- Level 5 Elite: 5/day, max 40 Credits
+
+Allowed prices are 5/10/20/30/40 Credits within the level cap. One official Tipster pick per match. Tips lock permanently at kickoff; losses cannot be deleted. Verified W/L/V, win rate, current streak and best win streak are system-calculated. Guaranteed-win/fixed-match claims are prohibited.
+
+### Credits + earnings
+Reference value: **100 MST Credits = THB 250**. Credit pack design: 100/฿250, 220/฿500, 480/฿1,000, 1,000/฿2,000. Buyer Credits and free Prediction Points are separate. Tip unlock revenue accounting: **70% Tipster / 30% MST**. Tipster earned Credits can request payout after 800 earned Credits, in a supported preferred payout currency. Real App Store / Google Play checkout and receipt verification must be connected before public paid-credit sales are enabled.
