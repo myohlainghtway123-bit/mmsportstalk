@@ -38,6 +38,14 @@ export const applyTipster = (input) => api("/tipsters/apply", { method:"POST", b
 export const publishTip = (input) => api("/tips", { method:"POST", body:input });
 export const requestTipsterPayout = ({ credits, currency }) => api("/tipsters/payout", { method:"POST", body:{ credits:Number(credits), currency:String(currency||"THB").toUpperCase() } });
 
+export const getTipsterQualification = () => api("/tipsters/qualification");
+export const startTipsterQualification = () => api("/tipsters/qualification", { method:"POST", body:{ action:"start" } });
+export const submitQualificationTip = (input) => api("/tipsters/qualification", { method:"POST", body:{ ...input, action:"submit" } });
+
+export const getTipsterPartner = () => api("/tipsters/partner");
+export const applyTipsterPartner = (input) => api("/tipsters/partner", { method:"POST", body:input });
+export const claimPartnerReferral = (code) => api("/partners/referral", { method:"POST", body:{ code:String(code||"").trim().toUpperCase() } });
+
 export const TIPSTER_LEVEL_FALLBACK = {
   1:{ name:"Rookie", dailyTips:1, maxPrice:5 },
   2:{ name:"Rising", dailyTips:2, maxPrice:10 },
@@ -47,3 +55,5 @@ export const TIPSTER_LEVEL_FALLBACK = {
 };
 export const TIP_PRICES = [5,10,20,30,40];
 export const CREDIT_REFERENCE = { credits:100, thb:250 };
+export const QUALIFICATION_RULES = { totalTips:10, minWins:7, maxTipsPerDay:2, cooldownDays:30 };
+export const PARTNER_DEFAULTS = { commissionPercent:10, durationMonths:6 };
