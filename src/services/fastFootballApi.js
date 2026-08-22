@@ -1,8 +1,8 @@
 import { extractArray, normalizeFootballMatch } from "./footballApi";
 
-const FOOTBALL_API_BASE = "https://myanmarsportstalk.com/api/football";
+export const FOOTBALL_API_BASE = "https://myanmarsportstalk.com/api/football";
 const APP_TIME_ZONE = "Asia/Bangkok";
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 15000;
 
 const root = globalThis;
 if (!root.__MST_MATCH_CACHE__) root.__MST_MATCH_CACHE__ = new Map();
@@ -48,7 +48,13 @@ function sortMatches(matches) {
   });
 }
 
-async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+function directDateKey(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+async function fetchJson(url, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   let timer = null;
   let abortListener = null;
@@ -60,51 +66,84 @@ async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
       signal.addEventListener?.("abort", abortListener, { once: true });
     }
   }
-
   timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(
-      `${FOOTBALL_API_BASE}/matches?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(APP_TIME_ZONE)}`,
-      {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`MST football API ${response.status}${text ? `: ${text.slice(0, 140)}` : ""}`);
-    }
-
-    const payload = await response.json();
-    const normalized = extractArray(payload)
-      .map((item, index) => normalizeFootballMatch(item, index))
-      .filter((match) => match.home?.name && match.away?.name);
-    const matches = sortMatches(normalized.filter((match) => dateKeyInBangkok(match.kickoff) === date));
-
-    const result = {
-      matches,
-      payload,
-      rawCount: normalized.length,
-      filteredCount: matches.length,
-      requestedDate: date,
-      cached: false,
-      stale: false,
-      fetchedAt: Date.now(),
-    };
-    cache.set(date, result);
-    return result;
-  } catch (error) {
-    const saved = cache.get(date);
-    if (saved) return { ...saved, cached: true, stale: true };
-    if (error?.name === "AbortError") throw new Error("Football data is taking too long. Pull to refresh in a moment.");
-    throw error;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`MST football API ${response.status}${text ? `: ${text.slice(0, 160)}` : ""}`);
+    try { return text ? JSON.parse(text) : {}; }
+    catch (_) { throw new Error("MST football API returned invalid JSON."); }
   } finally {
     if (timer) clearTimeout(timer);
     if (abortListener) signal?.removeEventListener?.("abort", abortListener);
   }
+}
+
+function chooseRequestedDateMatches(normalized, date) {
+  const bangkok = normalized.filter((match) => dateKeyInBangkok(match.kickoff) === date);
+  if (bangkok.length) return bangkok;
+
+  // Some cached/provider payloads expose a date-only value without enough timezone
+  // information for Intl to recover the requested Bangkok day. Use the raw date as
+  // a safe second pass before declaring the screen empty.
+  const direct = normalized.filter((match) => directDateKey(match.kickoff) === date);
+  if (direct.length) return direct;
+
+  // If the endpoint itself returned only one calendar date, preserve those rows.
+  // This avoids a false "0 matches" screen while still rejecting broad multi-day caches.
+  const distinct = [...new Set(normalized.map((m) => dateKeyInBangkok(m.kickoff) || directDateKey(m.kickoff)).filter(Boolean))];
+  if (normalized.length && distinct.length <= 1) return normalized;
+
+  return [];
+}
+
+async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  const encodedDate = encodeURIComponent(date);
+  const encodedTz = encodeURIComponent(APP_TIME_ZONE);
+  const urls = [
+    `${FOOTBALL_API_BASE}/matches?date=${encodedDate}&timezone=${encodedTz}`,
+    `${FOOTBALL_API_BASE}/matches?date=${encodedDate}`,
+  ];
+
+  let payload = null;
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      payload = await fetchJson(url, { signal, timeoutMs });
+      break;
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || "");
+      // Retry only when the server rejected the query shape. Network/5xx errors
+      // should surface rather than creating duplicate provider traffic.
+      if (!/MST football API (400|404|405|422)/.test(message)) throw error;
+    }
+  }
+  if (!payload) throw lastError || new Error("MST football API is unavailable.");
+
+  const normalized = extractArray(payload)
+    .map((item, index) => normalizeFootballMatch(item, index))
+    .filter((match) => match.home?.name && match.away?.name);
+  const matches = sortMatches(chooseRequestedDateMatches(normalized, date));
+
+  const result = {
+    matches,
+    payload,
+    rawCount: normalized.length,
+    filteredCount: matches.length,
+    requestedDate: date,
+    cached: false,
+    stale: false,
+    fetchedAt: Date.now(),
+    apiBase: FOOTBALL_API_BASE,
+  };
+  cache.set(date, result);
+  return result;
 }
 
 function startRequest(date, options = {}) {
@@ -120,24 +159,26 @@ export async function fetchFastFootballMatches({ date = todayBangkok(), signal, 
   const saved = cache.get(date);
   const age = saved ? Date.now() - saved.fetchedAt : Number.POSITIVE_INFINITY;
 
-  if (!force && saved && age < ttlFor(date)) {
-    return { ...saved, cached: true, stale: false };
-  }
-
+  if (!force && saved && age < ttlFor(date)) return { ...saved, cached: true, stale: false };
   if (!force && saved) {
     startRequest(date, { signal, timeoutMs }).catch(() => {});
     return { ...saved, cached: true, stale: true };
   }
 
-  return startRequest(date, { signal, timeoutMs });
+  try {
+    return await startRequest(date, { signal, timeoutMs });
+  } catch (error) {
+    if (saved) return { ...saved, cached: true, stale: true };
+    if (error?.name === "AbortError") throw new Error("Football data is taking too long. Pull to refresh in a moment.");
+    throw error;
+  }
 }
 
 export function prefetchFastFootballMatches(dates = []) {
-  const unique = [...new Set(dates.filter(Boolean))];
-  unique.forEach((date) => {
+  [...new Set(dates.filter(Boolean))].forEach((date) => {
     const saved = cache.get(date);
     if (saved && Date.now() - saved.fetchedAt < ttlFor(date)) return;
-    startRequest(date, { timeoutMs: 8000 }).catch(() => {});
+    startRequest(date, { timeoutMs: 10000 }).catch(() => {});
   });
 }
 
@@ -148,4 +189,15 @@ export function peekFastFootballMatches(date) {
 
 export function clearFastFootballDate(date) {
   cache.delete(date);
+}
+
+export async function verifyFootballApiConnection({ date = todayBangkok(), signal } = {}) {
+  const result = await requestDate(date, { signal, timeoutMs: 12000 });
+  return {
+    ok: true,
+    apiBase: FOOTBALL_API_BASE,
+    date,
+    rawCount: result.rawCount,
+    matchCount: result.matches.length,
+  };
 }

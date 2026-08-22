@@ -145,3 +145,18 @@ Preferred architecture:
 Mobile app -> myanmarsportstalk.com backend -> football/odds providers.
 
 Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
+
+
+## First-launch onboarding — V7.4
+- Every app launch opens with a **1.5 second MST Score logo motion** before the app content.
+- On first install only, language selection follows the logo motion. **Language is mandatory and cannot be skipped.**
+- Supported onboarding languages: Myanmar and English. The choice becomes the app interface language and can later be changed from More.
+- Next, the user may choose favorite teams and favorite competitions. This step is **skippable**.
+- First-launch favorites are stored locally immediately; when the same user later authenticates with an MST account, pending favorites are synced to the existing MST favorites API.
+
+## Football data connection — V7.4
+- Mobile football data must use `https://myanmarsportstalk.com/api/football` as the canonical backend.
+- Provider/API secrets remain server-side and are never packaged in the APK/IPA.
+- Match loading retries the backend without the timezone query only if the canonical request shape is explicitly rejected (400/404/405/422).
+- Date normalization uses Bangkok calendar time first, then a conservative raw-date fallback to avoid false empty match screens.
+- Build installer performs a live backend JSON connectivity check before creating the Android build.
