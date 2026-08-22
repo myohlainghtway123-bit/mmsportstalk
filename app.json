@@ -4,7 +4,7 @@
     "slug": "mst-app",
     "owner": "myohlainghtway",
     "description": "MST Score — live football scores, news, transfers, favorites and predictions by Myanmar Sports Talk.",
-    "version": "1.2.0",
+    "version": "1.5.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#07090B",
@@ -28,11 +28,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.myanmarsportstalk.mst",
-      "buildNumber": "6"
+      "buildNumber": "11"
     },
     "android": {
       "package": "com.myanmarsportstalk.mst",
-      "versionCode": 6,
+      "versionCode": 11,
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
