@@ -1,0 +1,61 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { getAuthStatus } from "../services/accountApi";
+import { fetchFastFootballMatches, peekFastFootballMatches, prefetchFastFootballMatches } from "../services/fastFootballApi";
+import {
+  applyTipster,
+  applyTipsterPartner,
+  claimPartnerReferral,
+  CREDIT_REFERENCE,
+  getTips,
+  getTipsMe,
+  getTipsters,
+  PARTNER_DEFAULTS,
+  publishTip,
+  QUALIFICATION_RULES,
+  requestTipsterPayout,
+  startTipsterQualification,
+  submitQualificationTip,
+  TIP_PRICES,
+  TIPSTER_LEVEL_FALLBACK,
+  unlockTip,
+} from "../services/tipsApi";
+
+const C={bg:"#07090B",panel:"#0D1013",card:"#111519",card2:"#151A1F",border:"#20262C",border2:"#181D22",red:"#F32735",redSoft:"rgba(243,39,53,.12)",text:"#F7F8F9",text2:"#D7DBDF",muted:"#858C93",muted2:"#5F666D",green:"#22C777",gold:"#F4C84D",blue:"#43A9E8"};
+const TABS=["TIPS","TIPSTERS","CREDITS","TIPSTER","PARTNER"];
+const MARKETS={
+  "1x2":{label:"MATCH RESULT",selections:[["home","HOME"],["draw","DRAW"],["away","AWAY"]]},
+  ou25:{label:"TOTAL GOALS 2.5",selections:[["over","OVER 2.5"],["under","UNDER 2.5"]]},
+  btts:{label:"BOTH TEAMS TO SCORE",selections:[["yes","YES"],["no","NO"]]},
+};
+
+const tx=(my,en,myText)=>my?myText:en;
+function bangkokDate(offset=0){const date=new Date(Date.now()+offset*86400000);try{const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));return `${v.year}-${v.month}-${v.day}`;}catch(_){return date.toISOString().slice(0,10);}}
+function fmtDate(value){if(!value)return"";const d=new Date(value);return Number.isNaN(d.getTime())?"":d.toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}
+function Logo({uri,size=34}){return uri?<Image source={{uri}} resizeMode="contain" fadeDuration={0} style={{width:size,height:size}}/>:<View style={[s.logoFallback,{width:size,height:size,borderRadius:size/2}]}><Ionicons name="football-outline" size={size*.5} color={C.muted}/></View>;}
+function levelName(level,me){return me?.economy?.levels?.[level]?.name||TIPSTER_LEVEL_FALLBACK[level]?.name||`Level ${level}`;}
+function marketLabel(market,selection){return MARKETS[market]?.selections?.find(([id])=>id===selection)?.[1]||selection||"";}
+function streakTone(streak){return String(streak||"").startsWith("W")?C.green:String(streak||"").startsWith("L")?C.red:C.muted;}
+function qualificationGrade(q){if(!q||q.status!=="passed")return null;const wins=Number(q.wins||0);return wins>=10?"PERFECT":wins===9?"EXCELLENT":wins===8?"STRONG":"PASSED";}
+
+function LevelBadge({level=1,name}){return <View style={[s.levelBadge,level>=5&&{borderColor:C.gold}]}><Ionicons name={level>=4?"diamond-outline":"shield-checkmark-outline"} size={11} color={level>=5?C.gold:C.red}/><Text style={[s.levelText,level>=5&&{color:C.gold}]}>LV.{level} {String(name||"").toUpperCase()}</Text></View>;}
+
+function TipCard({tip,onUnlock,unlocking,authenticated,openAccount,my}){
+  const stats=tip?.tipster||{};const locked=Boolean(tip?.locked);const result=tip?.result;
+  return <View style={s.tipCard}>
+    <View style={s.tipTop}><View style={{flex:1}}><Text numberOfLines={1} style={s.competition}>{tip.competition||"Football"}</Text><Text style={s.kickoff}>{fmtDate(tip.kickoff)}</Text></View>{result?<View style={[s.resultBadge,result==="win"?s.resultWin:result==="loss"?s.resultLoss:s.resultVoid]}><Text style={s.resultText}>{String(result).toUpperCase()}</Text></View>:null}</View>
+    <View style={s.matchRow}><Text numberOfLines={1} style={s.matchTeam}>{tip.homeTeam}</Text><Text style={s.vs}>VS</Text><Text numberOfLines={1} style={[s.matchTeam,{textAlign:"right"}]}>{tip.awayTeam}</Text></View>
+    <View style={s.tipsterRow}><View style={s.tipsterAvatar}><Ionicons name="person" size={17} color={C.text2}/></View><View style={{flex:1}}><Text numberOfLines={1} style={s.tipsterName}>{stats.displayName||"MST Tipster"}</Text><View style={s.inline}><LevelBadge level={Number(stats.level||1)} name={levelName(Number(stats.level||1))}/>{stats.currentStreak?<Text style={[s.streak,{color:streakTone(stats.currentStreak)}]}>{stats.currentStreak}</Text>:null}</View></View><View style={s.winBox}><Text style={s.winNum}>{Number(stats.winRate||0).toFixed(1)}%</Text><Text style={s.winLabel}>WIN RATE</Text></View></View>
+    <View style={s.tipMeta}><View style={s.metaItem}><Text style={s.metaLabel}>CONFIDENCE</Text><Text style={s.metaValue}>{tip.confidence}/10</Text></View><View style={s.metaItem}><Text style={s.metaLabel}>RECORD</Text><Text style={s.metaValue}>{stats.wins||0}W · {stats.losses||0}L</Text></View><View style={s.metaItem}><Text style={s.metaLabel}>PRICE</Text><Text style={[s.metaValue,{color:C.gold}]}>{tip.priceCredits} CR</Text></View></View>
+    {locked?<View style={s.lockedBox}><Ionicons name="lock-closed" size={20} color={C.muted}/><View style={{flex:1}}><Text style={s.lockedTitle}>{tx(my,"Premium tip locked","Premium Tip ပိတ်ထားသည်")}</Text><Text style={s.lockedText}>{tx(my,"Unlock to see the pick and Tipster analysis.","ရွေးချယ်မှုနှင့် Tipster သုံးသပ်ချက်ကြည့်ရန် Unlock လုပ်ပါ။")}</Text></View><Pressable disabled={unlocking} style={s.unlockButton} onPress={()=>authenticated?onUnlock?.(tip):openAccount?.()}>{unlocking?<ActivityIndicator size="small" color={C.text}/>:<><Text style={s.unlockPrice}>{tip.priceCredits}</Text><Text style={s.unlockSmall}>CREDITS</Text></>}</Pressable></View>:<View style={s.revealed}><View style={s.pickHead}><Text style={s.marketName}>{MARKETS[tip.market]?.label||String(tip.market||"").toUpperCase()}</Text><Text style={s.pick}>{marketLabel(tip.market,tip.selection)}</Text></View><Text style={s.analysis}>{tip.analysis}</Text></View>}
+    <View style={s.disclaimer}><Ionicons name="information-circle-outline" size={12} color={C.muted}/><Text style={s.disclaimerText}>{tx(my,"Football analysis only · results are never guaranteed.","ဘောလုံးသုံးသပ်ချက်သာ ဖြစ်ပြီး ရလဒ်အာမခံမရှိပါ။")}</Text></View>
+  </View>;
+}
+
+function TipsterCard({item}){const stats=item.stats||{};const q=item.qualification;return <View style={s.personCard}><View style={s.personAvatar}><Ionicons name="person" size={22} color={C.text2}/></View><View style={{flex:1}}><Text style={s.personName}>{item.displayName||"MST Tipster"}</Text><View style={s.inline}><LevelBadge level={item.level} name={item.name}/>{item.partner?.status==="approved"?<View style={s.partnerBadge}><Ionicons name="link" size={9} color={C.gold}/><Text style={s.partnerBadgeText}>PARTNER</Text></View>:null}{stats.currentStreak?<Text style={[s.streak,{color:streakTone(stats.currentStreak)}]}>{stats.currentStreak}</Text>:null}</View><Text numberOfLines={2} style={s.personBio}>{item.bio||item.specialties||"Verified MST Tipster"}</Text>{q?.status==="passed"?<Text style={s.qualificationMini}>Qualification {q.wins}W/{q.submitted} · {qualificationGrade(q)}</Text>:null}</View><View style={s.personStats}><Text style={s.personRate}>{Number(stats.winRate||0).toFixed(1)}%</Text><Text style={s.personMini}>{stats.wins||0}W · {stats.losses||0}L</Text><Text style={s.personMini}>{stats.totalTips||0} tips</Text></View></View>;}
+
+function CreditPanel({me,authenticated,openAccount,my,onClaimReferral,loading}){
+  const balance=me?.wallet?.balance??0;const [code,setCode]=useState("");const packs=[[100,250],[220,500],[480,1000],[1000,2000]];
+  return <>
+    <View style={s.walletHero}><View><Text style={s.eyebrow}>MST CREDITS</Text><Text style={s.walletNumber}>{Number(balance).toLocaleString()}</Text><Text style={s.walletSub}>{tx(my,"Available b
