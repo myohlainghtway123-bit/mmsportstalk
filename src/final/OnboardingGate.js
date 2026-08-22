@@ -3,6 +3,7 @@ import {
   Animated,
   Image,
   Pressable,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -144,6 +145,7 @@ export default function OnboardingGate({ children }) {
   }, [loaded, phase]);
 
   const my = languageChoice === "my";
+  const androidTop = Platform.OS === "android" ? Math.max(StatusBar.currentHeight || 0, 20) : 0;
   const teamSet = useMemo(() => new Set(teams.map(String)), [teams]);
   const competitionSet = useMemo(() => new Set(competitions.map(String)), [competitions]);
   const toggle = (kind, id) => {
@@ -225,13 +227,13 @@ export default function OnboardingGate({ children }) {
     return (
       <SafeAreaView style={s.root}>
         <StatusBar barStyle="light-content" backgroundColor={C.bg} />
-        <View style={s.favoriteTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.step}>2 / 2</Text>
-            <Text style={s.favoriteTitle}>{my ? "သင်နှစ်သက်ရာကို ရွေးပါ" : "Choose your favorites"}</Text>
-            <Text style={s.favoriteSub}>{my ? "အသင်းနဲ့ ပြိုင်ပွဲတွေကိုရွေးပြီး MST Score ကို သင့်အတွက် ပိုကိုက်ညီအောင်လုပ်ပါ။" : "Pick teams and competitions to personalize MST Score. You can change them later."}</Text>
+        <View style={[s.favoriteTop, { paddingTop: androidTop + 10 }]}>
+          <View style={s.favoriteTopRow}>
+            <Text style={[s.step, s.favoriteStep]}>2 / 2</Text>
+            <Pressable onPress={() => complete(true)} hitSlop={10} style={s.skipButton}><Text style={s.skip}>{my ? "ကျော်ရန်" : "Skip"}</Text></Pressable>
           </View>
-          <Pressable onPress={() => complete(true)} hitSlop={10}><Text style={s.skip}>{my ? "ကျော်ရန်" : "Skip"}</Text></Pressable>
+          <Text numberOfLines={2} maxFontSizeMultiplier={1.15} style={s.favoriteTitle}>{my ? "သင်နှစ်သက်ရာကို ရွေးပါ" : "Choose your favorites"}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={s.favoriteSub}>{my ? "အသင်းနဲ့ ပြိုင်ပွဲတွေကိုရွေးပြီး MST Score ကို သင့်အတွက် ပိုကိုက်ညီအောင်လုပ်ပါ။" : "Pick teams and competitions to personalize MST Score. You can change them later."}</Text>
         </View>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           <View style={s.sectionHead}>
@@ -283,16 +285,19 @@ const s = StyleSheet.create({
   primaryDisabled: { opacity: 0.32 },
   primaryText: { color: "#fff", fontSize: 14, fontWeight: "900" },
   required: { color: C.muted, fontSize: 10, marginTop: 10 },
-  favoriteTop: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 16, flexDirection: "row", gap: 14, borderBottomWidth: 1, borderBottomColor: C.border },
-  favoriteTitle: { color: C.text, fontSize: 25, fontWeight: "900" },
-  favoriteSub: { color: C.muted, fontSize: 12, lineHeight: 18, marginTop: 8 },
-  skip: { color: C.red, fontSize: 13, fontWeight: "900", paddingTop: 3 },
-  scroll: { padding: 18, paddingBottom: 116 },
+  favoriteTop: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+  favoriteTopRow: { minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 7 },
+  favoriteStep: { marginBottom: 0 },
+  favoriteTitle: { color: C.text, fontSize: 25, lineHeight: 34, fontWeight: "900", flexShrink: 1 },
+  favoriteSub: { color: C.muted, fontSize: 12, lineHeight: 18, marginTop: 7, maxWidth: 360 },
+  skipButton: { minWidth: 58, minHeight: 32, alignItems: "flex-end", justifyContent: "center" },
+  skip: { color: C.red, fontSize: 13, fontWeight: "900" },
+  scroll: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 132 },
   sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   sectionTitle: { color: C.text, fontSize: 15, fontWeight: "900" },
   selectedCount: { color: C.muted, fontSize: 10, fontWeight: "700" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
-  tile: { width: "31.5%", minHeight: 108, borderRadius: 13, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, alignItems: "center", justifyContent: "center", padding: 8, position: "relative" },
+  tile: { width: "48.5%", minHeight: 112, borderRadius: 13, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, alignItems: "center", justifyContent: "center", padding: 8, position: "relative" },
   tileOn: { borderColor: C.red, backgroundColor: C.redSoft },
   logoWrap: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#F5F6F7", alignItems: "center", justifyContent: "center", overflow: "hidden", marginBottom: 8 },
   logo: { width: 36, height: 36 },

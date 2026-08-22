@@ -160,3 +160,11 @@ Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
 - Match loading retries the backend without the timezone query only if the canonical request shape is explicitly rejected (400/404/405/422).
 - Date normalization uses Bangkok calendar time first, then a conservative raw-date fallback to avoid false empty match screens.
 - Build installer performs a live backend JSON connectivity check before creating the Android build.
+## V7.5 API + favorite-selection hotfix
+- Football fixtures remain app -> MST backend -> provider; no provider secret in the app.
+- Date requests retry the backend without timezone only when the canonical request yields no requested-day fixtures.
+- Changing the date resets match filters to ALL so a stale LIVE/FINISHED filter cannot look like missing API data.
+- Favorite onboarding header uses Android status-bar-safe spacing and a non-competing title/Skip layout.
+- Favorite team/competition cards use a stable two-column mobile grid.
+- This hotfix intentionally does not change the refresh indicator/white refresh circle or unrelated screens.
+
