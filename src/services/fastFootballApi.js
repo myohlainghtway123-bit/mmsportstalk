@@ -114,6 +114,8 @@ async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
       const payload = await fetchJson(url, { signal, timeoutMs });
       const candidate = candidateFromPayload(payload, date, url);
       candidates.push(candidate);
+      // Stop immediately when the canonical timezone request actually contains
+      // requested-date rows. Only use the second endpoint shape as a recovery path.
       if (candidate.requested.length) break;
     } catch (error) {
       lastError = error;
@@ -127,6 +129,8 @@ async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 
   if (!candidates.length) throw lastError || new Error("MST football API is unavailable.");
 
+  // Prefer the response that yields actual fixtures for the selected Bangkok day.
+  // If neither does, keep the most informative payload instead of discarding it.
   candidates.sort((a, b) => b.requested.length - a.requested.length || b.normalized.length - a.normalized.length);
   const best = candidates[0];
   const matches = best.requested;

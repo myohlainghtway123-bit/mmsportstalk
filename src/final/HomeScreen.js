@@ -62,6 +62,7 @@ export default function HomeScreen({openMatch,openNotifications,openSearch,langu
 
   const load=useCallback(async(force=false,silent=false)=>{const saved=peekFastFootballMatches(date);if(!silent)setState((p)=>({...p,loading:!force&&!saved&&!p.matches.length,refreshing:force,error:"",matches:saved?.matches||p.matches}));try{const result=await fetchFastFootballMatches({date,force});setState({loading:false,refreshing:false,error:"",matches:result.matches||[]});}catch(e){setState((p)=>({...p,loading:false,refreshing:false,error:e?.message||"Could not update matches."}));}},[date]);
 
+  useEffect(()=>{setFilter("ALL");setCompetition("ALL");},[date]);
   useEffect(()=>{const saved=peekFastFootballMatches(date);setState({loading:!saved,refreshing:false,error:"",matches:saved?.matches||[]});load(false,false);},[date,load]);
   useEffect(()=>{prefetchFastFootballMatches([bangkokDate(offset-1),bangkokDate(offset),bangkokDate(offset+1)]);},[offset]);
   useEffect(()=>{const timer=setInterval(()=>{if(offset===0)load(true,true);},15000);return()=>clearInterval(timer);},[load,offset]);

@@ -1,3 +1,4 @@
+import { syncStoredOnboardingFavorites } from "./onboardingStore";
 const API_BASE = "https://myanmarsportstalk.com/api";
 
 export class MstApiError extends Error {
@@ -60,7 +61,9 @@ export function isAuthenticatedPayload(payload) {
 export async function getAuthStatus(options) {
   try {
     const payload = await api("/auth/status", options);
-    return { authenticated: isAuthenticatedPayload(payload), user: extractUser(payload), payload };
+    const result = { authenticated: isAuthenticatedPayload(payload), user: extractUser(payload), payload };
+    if (result.authenticated) syncStoredOnboardingFavorites(setFavorite).catch(() => false);
+    return result;
   } catch (error) {
     if (error instanceof MstApiError && error.status === 401) return { authenticated: false, user: null, payload: error.payload };
     throw error;

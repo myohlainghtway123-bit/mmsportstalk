@@ -139,6 +139,7 @@ export default function OnboardingGate({ children }) {
     setPhase(prefs?.completed ? "app" : "language");
   };
 
+  // Avoid stale closure if storage finishes during the 1.5 s animation.
   useEffect(() => {
     if (phase === "splash" || !loaded) return;
   }, [loaded, phase]);
@@ -185,6 +186,7 @@ export default function OnboardingGate({ children }) {
 
   if (phase === "splash") {
     return <SplashMotion done={() => {
+      // Read storage again at the exact end of the animation so first launch routing is deterministic.
       loadOnboardingPreferences().then((latest) => {
         setPrefs(latest);
         setLanguageChoice(latest.language);

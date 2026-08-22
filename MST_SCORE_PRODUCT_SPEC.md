@@ -146,6 +146,7 @@ Mobile app -> myanmarsportstalk.com backend -> football/odds providers.
 
 Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
 
+
 ## First-launch onboarding — V7.4
 - Every app launch opens with a **1.5 second MST Score logo motion** before the app content.
 - On first install only, language selection follows the logo motion. **Language is mandatory and cannot be skipped.**
@@ -171,3 +172,4 @@ Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
 ## GitHub source-of-truth rule
 - Every completed MST Score app change must be synced to the GitHub `main` branch before it is treated as finished.
 - Local/EAS-only changes are not considered complete until GitHub contains the same source/version state.
+
