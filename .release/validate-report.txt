@@ -1,8 +1,8 @@
 MST Android validation
-Commit: b25f952ee706c555f19e0519a352194406bd6944
+Commit: e75d1d96c950499bede30898dd9669efecfdb9b2
 
-npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated uuid@7.0.3: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
@@ -16,9 +16,9 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 741 packages, and audited 742 packages in 25s
+added 745 packages, and audited 746 packages in 12s
 
-75 packages are looking for funding
+76 packages are looking for funding
   run `npm fund` for details
 
 17 vulnerabilities (8 moderate, 9 high)
@@ -38,12 +38,14 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 11.8% ( 69/201)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 64.0% (376/470)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.7% (707/729)
-Android Bundled 12859ms index.js (799 modules)
+Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 68/201)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.1% (411/495)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 90.9% (619/662)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (812/812)
+Android Bundled 13643ms index.js (812 modules)
 
-› Assets (19):
+› Assets (20):
+assets/icon.png (993 kB)
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf (130 kB)
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Entypo.ttf (66.2 kB)
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/EvilIcons.ttf (13.5 kB)
@@ -65,10 +67,10 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-0cfeb3d8186a7ca92abbf223e816e180.hbc (2.7 MB)
+_expo/static/js/android/index-2f80250f584af97b5a353f7160e3608f.hbc (2.84 MB)
 
 › Files (1):
-metadata.json (1.35 kB)
+metadata.json (1.41 kB)
 
 Exported: dist-ci
 
