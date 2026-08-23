@@ -20,7 +20,7 @@ const NAV = [
 
 function LazyContent(props) { const Screen = require("./phase3/ContentScreens").default; return <Screen {...props}/>; }
 function LazyScores(props) { const Screen = require("./final/QuickScoresScreen").default; return <Screen {...props}/>; }
-function LazyFavorites(props) { const Screen = require("./phase2/Phase2Screens").FavoritesScreen; return <Screen {...props}/>; }
+function LazyFavorites(props) { const Screen = require("./final/FavoritesScreenV2").default; return <Screen {...props}/>; }
 function LazyTips(props) { const Screen = require("./final/TipsScreen").default; return <Screen {...props}/>; }
 function LazyPrediction(props) { const Screen = require("./final/PredictionScreenV2").default; return <Screen {...props}/>; }
 function LazyAccount(props) { const Screen = require("./phase2/Phase2Screens").AccountScreen; return <Screen {...props}/>; }
