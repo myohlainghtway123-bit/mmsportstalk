@@ -6,6 +6,12 @@ const LIVE_CLOCK_CODES = new Set(["1H", "2H", "ET", "LIVE"]);
 const NON_ACTIVE_CODES = new Set(["SUSP", "INT", "PST", "CANC", "ABD"]);
 const FINISHED_CODES = new Set(["FT", "AET", "PEN"]);
 
+const root = globalThis;
+if (!root.__MST_FOOTBALL_RESPONSE_CACHE__) root.__MST_FOOTBALL_RESPONSE_CACHE__ = new Map();
+if (!root.__MST_MATCH_DETAIL_CACHE__) root.__MST_MATCH_DETAIL_CACHE__ = new Map();
+const responseCache = root.__MST_FOOTBALL_RESPONSE_CACHE__;
+const detailCache = root.__MST_MATCH_DETAIL_CACHE__;
+
 const COMPETITION_ALIASES = {
   ucl: 2,
   "champions league": 2,
@@ -57,7 +63,7 @@ export function extractArray(payload) {
   const keys = [
     "matches", "response", "data", "items", "fixtures", "results", "events",
     "lineups", "statistics", "players", "injuries", "teams", "scorers",
-    "seasons", "standings", "squad", "transfers", "trophies", "competitions",
+    "seasons", "standings", "groups", "squad", "transfers", "trophies", "competitions",
   ];
 
   for (const key of keys) {
@@ -286,6 +292,42 @@ function validMatchIdentity(match) {
   );
 }
 
+function scheduledSnapshot(match) {
+  return ["", "NS", "TBD", "SCHEDULED", "NOT_STARTED", "UPCOMING", "UNKNOWN"].includes(canonicalStatus(match?.statusCode ?? match?.status));
+}
+
+function mergeMatchDetail(previous, fresh) {
+  if (!previous) return fresh;
+  if (!fresh) return previous;
+  const merged = {
+    ...previous,
+    ...fresh,
+    home: { ...(previous.home || {}), ...(fresh.home || {}) },
+    away: { ...(previous.away || {}), ...(fresh.away || {}) },
+  };
+  if (fresh.homeScore == null && previous.homeScore != null) merged.homeScore = previous.homeScore;
+  if (fresh.awayScore == null && previous.awayScore != null) merged.awayScore = previous.awayScore;
+  if ((previous.isLive || previous.isFinished) && scheduledSnapshot(fresh)) {
+    merged.status = previous.status;
+    merged.statusCode = previous.statusCode;
+    merged.statusLong = previous.statusLong;
+    merged.isLive = previous.isLive;
+    merged.isFinished = previous.isFinished;
+    merged.minute = previous.minute;
+    merged.elapsed = previous.elapsed;
+  }
+  if (previous.isFinished && !fresh.isFinished) {
+    merged.status = previous.status;
+    merged.statusCode = previous.statusCode;
+    merged.statusLong = previous.statusLong;
+    merged.isLive = false;
+    merged.isFinished = true;
+    merged.minute = previous.minute;
+    merged.elapsed = previous.elapsed;
+  }
+  return merged;
+}
+
 export function isLiveMatch(match) {
   const code = canonicalStatus(match?.statusCode ?? match?.status);
   if (NON_ACTIVE_CODES.has(code)) return false;
@@ -359,6 +401,20 @@ async function apiGet(path, { signal } = {}) {
   return response.json();
 }
 
+async function apiGetCached(path, maxAgeMs, options = {}) {
+  const key = String(path);
+  const saved = responseCache.get(key);
+  if (saved && Date.now() - saved.fetchedAt < maxAgeMs) return saved.data;
+  try {
+    const data = await apiGet(path, options);
+    responseCache.set(key, { data, fetchedAt: Date.now() });
+    return data;
+  } catch (error) {
+    if (saved) return saved.data;
+    throw error;
+  }
+}
+
 export async function fetchFootballMatches({ date = localDateString(), signal } = {}) {
   const payload = await apiGet(
     `/matches?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(APP_TIME_ZONE)}`,
@@ -385,16 +441,20 @@ export async function fetchFootballMatches({ date = localDateString(), signal } 
 export async function fetchMatchDetail(id, options) {
   const payload = await apiGet(`/matches/${encodeURIComponent(id)}`, options);
   const raw = extractObject(payload);
-  const match = raw ? normalizeFootballMatch(raw) : null;
-  return { match: validMatchIdentity(match) ? match : null, payload };
+  const fresh = raw ? normalizeFootballMatch(raw) : null;
+  const key = String(id);
+  const previous = detailCache.get(key) || null;
+  const match = validMatchIdentity(fresh) ? mergeMatchDetail(previous, fresh) : previous;
+  if (match) detailCache.set(key, match);
+  return { match: match || null, payload };
 }
 
 export const fetchMatchEvents = (id, options) => apiGet(`/matches/${encodeURIComponent(id)}/events`, options);
-export const fetchMatchLineups = (id, options) => apiGet(`/matches/${encodeURIComponent(id)}/lineups`, options);
+export const fetchMatchLineups = (id, options) => apiGetCached(`/matches/${encodeURIComponent(id)}/lineups`, 60_000, options);
 export const fetchMatchStatistics = (id, options) => apiGet(`/matches/${encodeURIComponent(id)}/statistics`, options);
-export const fetchMatchH2H = (id, options) => apiGet(`/matches/${encodeURIComponent(id)}/h2h`, options);
-export const fetchMatchPlayers = (id, options) => apiGet(`/matches/${encodeURIComponent(id)}/players`, options);
-export const fetchMatchInjuries = (id, options) => apiGet(`/matches/${encodeURIComponent(id)}/injuries`, options);
+export const fetchMatchH2H = (id, options) => apiGetCached(`/matches/${encodeURIComponent(id)}/h2h`, 30 * 60_000, options);
+export const fetchMatchPlayers = (id, options) => apiGetCached(`/matches/${encodeURIComponent(id)}/players`, 60_000, options);
+export const fetchMatchInjuries = (id, options) => apiGetCached(`/matches/${encodeURIComponent(id)}/injuries`, 5 * 60_000, options);
 
 async function settleBundle(tasks, base = {}) {
   const keys = Object.keys(tasks);
@@ -510,12 +570,18 @@ export function flattenDisplayRows(value, prefix = "", depth = 0) {
 }
 
 export function normalizeStandings(payload) {
-  const raw = extractArray(payload);
-  let rows = raw;
+  const data = payload?.data ?? payload;
+  let rows = [];
 
-  if (raw.length === 1 && raw[0]?.league?.standings) rows = raw[0].league.standings.flat();
-  else if (raw.length === 1 && raw[0]?.standings) rows = raw[0].standings.flat();
-  else if (Array.isArray(payload?.response?.[0]?.league?.standings)) rows = payload.response[0].league.standings.flat();
+  if (Array.isArray(data?.groups)) rows = data.groups.flat();
+  else {
+    const raw = extractArray(payload);
+    rows = raw;
+    if (raw.length === 1 && raw[0]?.league?.standings) rows = raw[0].league.standings.flat();
+    else if (raw.length === 1 && raw[0]?.standings) rows = raw[0].standings.flat();
+    else if (raw.length && raw.every((entry) => Array.isArray(entry))) rows = raw.flat();
+    else if (Array.isArray(payload?.response?.[0]?.league?.standings)) rows = payload.response[0].league.standings.flat();
+  }
 
   return rows.map((row, index) => {
     const all = row?.all ?? row?.stats ?? {};
@@ -539,7 +605,7 @@ export function normalizeStandings(payload) {
       pts: pick(row?.points, row?.pts, "-"),
       form: row?.form ?? null,
     };
-  });
+  }).filter((row) => row.teamId || row.team !== "Team");
 }
 
 export function normalizePlayers(payload) {
