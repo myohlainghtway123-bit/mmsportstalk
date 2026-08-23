@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 import { Ionicons } from "@expo/vector-icons";
 import { extractArray, fetchCompetitionCatalog } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
+import { fetchFifaMenRanking, peekFifaMenRanking } from "../services/fifaRankingApi";
 
 const C = { bg:"#080A0C", card:"#111416", card2:"#15191C", border:"#24292D", border2:"#1D2226", red:"#F3262D", text:"#FFFFFF", text2:"#D0D2D4", muted:"#92979B" };
 
@@ -64,21 +65,39 @@ function name(value) {
   return value?.name || value?.title || value?.competition || value?.leagueName || "Football";
 }
 
-function ResultRow({ icon, image, title, subtitle, onPress }) {
-  return <Pressable style={s.row} onPress={onPress}>
-    {image ? <Image source={{ uri:image }} resizeMode="contain" style={s.image}/> : <View style={s.icon}><Ionicons name={icon} size={22} color={C.text2}/></View>}
-    <View style={{flex:1}}><Text numberOfLines={1} style={s.rowTitle}>{title}</Text>{subtitle ? <Text numberOfLines={1} style={s.rowSub}>{subtitle}</Text> : null}</View>
-    <Ionicons name="chevron-forward" size={18} color={C.muted}/>
+function rankingSubtitle(entry) {
+  const parts = [`FIFA #${entry.rank}`];
+  if (entry.confederation) parts.push(entry.confederation);
+  if (Number.isFinite(Number(entry.points))) parts.push(`${Number(entry.points).toFixed(2)} pts`);
+  return parts.join(" · ");
+}
+
+function rankingDateLabel(value) {
+  if (!value) return "Official FIFA";
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "Official FIFA";
+  return `Official FIFA · ${date.toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })}`;
+}
+
+function ResultRow({ icon, image, title, subtitle, onPress, accent = false }) {
+  return <Pressable disabled={!onPress} style={[s.row,accent&&s.rowAccent]} onPress={onPress}>
+    {image ? <Image source={{ uri:image }} resizeMode="contain" style={s.image}/> : <View style={s.icon}><Ionicons name={icon} size={22} color={accent?C.red:C.text2}/></View>}
+    <View style={{flex:1}}><Text numberOfLines={1} style={[s.rowTitle,accent&&s.rowTitleAccent]}>{title}</Text>{subtitle ? <Text numberOfLines={1} style={s.rowSub}>{subtitle}</Text> : null}</View>
+    {onPress ? <Ionicons name="chevron-forward" size={18} color={C.muted}/> : null}
   </Pressable>;
 }
 
 export default function SearchScreen({ goBack, openMatch, openEntity }) {
   const today = todayBangkok();
   const initial = peekFastFootballMatches(today);
+  const initialRanking = peekFifaMenRanking();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(!initial);
   const [matches, setMatches] = useState(initial?.matches || []);
   const [competitions, setCompetitions] = useState([]);
+  const [ranking, setRanking] = useState(initialRanking);
+  const [rankingLoading, setRankingLoading] = useState(!initialRanking);
+  const [rankingError, setRankingError] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -88,14 +107,21 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       if (results[1].status === "fulfilled") setCompetitions(extractArray(results[1].value));
       setLoading(false);
     });
+    fetchFifaMenRanking().then((value) => {
+      if (!alive) return;
+      setRanking(value);
+      setRankingError("");
+    }).catch(() => {
+      if (!alive) return;
+      setRankingError("Official FIFA ranking is temporarily unavailable.");
+    }).finally(() => { if (alive) setRankingLoading(false); });
     return () => { alive = false; };
   }, [today]);
 
   const q = query.trim().toLowerCase();
   const data = useMemo(() => {
-    if (!q) return { matches:[], teams:[], players:[], competitions:[] };
+    if (!q) return { matches:[], teams:[], players:[], competitions:[], rankings:[] };
 
-    // Matches
     const foundMatches = matches
       .map((m) => {
         const text = `${m.home?.name} ${m.away?.name} ${m.competition}`.toLowerCase();
@@ -107,7 +133,6 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       .map((x) => x.match)
       .slice(0, 10);
 
-    // Teams (combining popular index + today's fixture teams)
     const teamMap = new Map();
     POPULAR_SEARCH_TEAMS.forEach((t) => teamMap.set(String(t.id), t));
     matches.forEach((m) => [m.home, m.away].forEach((team) => {
@@ -125,7 +150,6 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       .map((x) => x.team)
       .slice(0, 10);
 
-    // Players (popular stars search)
     const foundPlayers = POPULAR_SEARCH_PLAYERS
       .map((player) => {
         const score = scoreSearchRelevance(player.name, q, player.priority);
@@ -136,7 +160,6 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       .map((x) => x.player)
       .slice(0, 8);
 
-    // Competitions
     const foundCompetitions = competitions
       .map((raw) => raw?.league || raw?.competition || raw)
       .filter((item) => item?.id)
@@ -151,28 +174,52 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       .map((x) => x.item)
       .slice(0, 10);
 
-    return { matches: foundMatches, teams: foundTeams, players: foundPlayers, competitions: foundCompetitions };
-  }, [q, matches, competitions]);
+    const foundRankings = (ranking?.entries || [])
+      .map((entry) => {
+        const text = `${entry.name} ${entry.fifaCode || ""}`;
+        const basePriority = entry.aseanKey === "myanmar" ? 180 : entry.regionalPriority ? 110 : 0;
+        return { entry, score:scoreSearchRelevance(text, q, basePriority) };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || a.entry.rank - b.entry.rank)
+      .map((x) => x.entry)
+      .slice(0, 10);
 
-  const total = data.matches.length + data.teams.length + data.players.length + data.competitions.length;
+    return { matches: foundMatches, teams: foundTeams, players: foundPlayers, competitions: foundCompetitions, rankings: foundRankings };
+  }, [q, matches, competitions, ranking]);
+
+  const total = data.matches.length + data.teams.length + data.players.length + data.competitions.length + data.rankings.length;
+  const asean = ranking?.asean || [];
+  const myanmar = ranking?.myanmar || null;
+  const otherAsean = asean.filter((entry) => entry.aseanKey !== "myanmar");
 
   return <View style={s.screen}>
     <View style={s.header}>
       <Pressable hitSlop={10} onPress={goBack}><Ionicons name="chevron-back" size={28} color={C.text}/></Pressable>
-      <View style={s.searchBox}><Ionicons name="search-outline" size={20} color={C.muted}/><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Search teams, matches, competitions" placeholderTextColor={C.muted} style={s.input}/>{query ? <Pressable onPress={() => setQuery("")}><Ionicons name="close-circle" size={19} color={C.muted}/></Pressable> : null}</View>
+      <View style={s.searchBox}><Ionicons name="search-outline" size={20} color={C.muted}/><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Search teams, players, countries…" placeholderTextColor={C.muted} style={s.input}/>{query ? <Pressable onPress={() => setQuery("")}><Ionicons name="close-circle" size={19} color={C.muted}/></Pressable> : null}</View>
     </View>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      {loading && !matches.length ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading football search…</Text></View> : null}
-      {!loading && !q ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>Search MST football</Text><Text style={s.stateText}>Find today's matches, teams and competitions.</Text></View> : null}
-      {!loading && q && !total ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>No results</Text><Text style={s.stateText}>Try another team or competition name.</Text></View> : null}
+      {loading && !matches.length && q ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading football search…</Text></View> : null}
+      {!q ? <>
+        <View style={s.regionIntro}><View style={s.regionIcon}><Ionicons name="earth-outline" size={22} color={C.red}/></View><View style={{flex:1}}><Text style={s.stateTitle}>Myanmar & ASEAN</Text><Text style={s.stateText}>Senior national teams with verified FIFA men&apos;s ranking.</Text></View></View>
+        {rankingLoading && !ranking ? <View style={s.rankingLoading}><ActivityIndicator size="small" color={C.red}/><Text style={s.stateText}>Loading official FIFA ranking…</Text></View> : null}
+        {rankingError && !ranking ? <View style={s.rankingError}><Ionicons name="cloud-offline-outline" size={18} color={C.muted}/><Text style={s.stateText}>{rankingError}</Text></View> : null}
+        {ranking ? <>
+          <View style={s.sectionLine}><Text style={s.section}>FIFA MEN&apos;S RANKING</Text><Text style={s.source}>{rankingDateLabel(ranking.publishedAt)}</Text></View>
+          {myanmar ? <View style={[s.card,s.myanmarCard]}><ResultRow icon="flag-outline" image={myanmar.flagUrl} title={`Myanmar · #${myanmar.rank}`} subtitle={rankingSubtitle(myanmar)} accent /></View> : null}
+          {otherAsean.length ? <><Text style={s.section}>ASEAN NATIONAL TEAMS</Text><View style={s.card}>{otherAsean.map((entry,index) => <View key={`${entry.fifaCode || entry.name}-${entry.rank}`} style={index !== otherAsean.length-1 ? s.border : null}><ResultRow icon="flag-outline" image={entry.flagUrl} title={`${entry.name} · #${entry.rank}`} subtitle={rankingSubtitle(entry)}/></View>)}</View></> : null}
+        </> : null}
+      </> : null}
+      {!loading && q && !total ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>No results</Text><Text style={s.stateText}>Try another team, player, country or competition name.</Text></View> : null}
       {data.matches.length ? <><Text style={s.section}>MATCHES</Text><View style={s.card}>{data.matches.map((m,index) => <View key={m.id} style={index !== data.matches.length-1 ? s.border : null}><ResultRow icon="football-outline" title={`${m.home?.name} vs ${m.away?.name}`} subtitle={m.competition} onPress={() => openMatch?.(m)}/></View>)}</View></> : null}
       {data.teams.length ? <><Text style={s.section}>TEAMS</Text><View style={s.card}>{data.teams.map((team,index) => <View key={team.id} style={index !== data.teams.length-1 ? s.border : null}><ResultRow icon="shield-outline" image={team.logo} title={team.name} subtitle="Team" onPress={() => openEntity?.("team",team)}/></View>)}</View></> : null}
       {data.players.length ? <><Text style={s.section}>PLAYERS</Text><View style={s.card}>{data.players.map((player,index) => <View key={player.id} style={index !== data.players.length-1 ? s.border : null}><ResultRow icon="person-outline" title={player.name} subtitle={[player.team, player.nationality].filter(Boolean).join(" · ") || "Player"} onPress={() => openEntity?.("player",player)}/></View>)}</View></> : null}
+      {data.rankings.length ? <><Text style={s.section}>FIFA NATIONAL TEAMS</Text><View style={s.card}>{data.rankings.map((entry,index) => <View key={`${entry.fifaCode || entry.name}-${entry.rank}`} style={index !== data.rankings.length-1 ? s.border : null}><ResultRow icon="flag-outline" image={entry.flagUrl} title={`${entry.name} · #${entry.rank}`} subtitle={rankingSubtitle(entry)} accent={entry.aseanKey === "myanmar"}/></View>)}</View></> : null}
       {data.competitions.length ? <><Text style={s.section}>COMPETITIONS</Text><View style={s.card}>{data.competitions.map((item,index) => <View key={item.id} style={index !== data.competitions.length-1 ? s.border : null}><ResultRow icon="trophy-outline" image={logo(item)} title={name(item)} subtitle={item.country || "Competition"} onPress={() => openEntity?.("competition",{ id:item.id, name:name(item), logo:logo(item) })}/></View>)}</View></> : null}
     </ScrollView>
   </View>;
 }
 
 const s = StyleSheet.create({
-  screen:{flex:1,backgroundColor:C.bg},header:{minHeight:66,paddingHorizontal:14,flexDirection:"row",alignItems:"center",gap:10,borderBottomWidth:1,borderBottomColor:C.border2},searchBox:{flex:1,minHeight:42,borderWidth:1,borderColor:C.border,borderRadius:10,backgroundColor:C.card,flexDirection:"row",alignItems:"center",paddingHorizontal:11,gap:8},input:{flex:1,color:C.text,fontSize:12.5,paddingVertical:8},content:{padding:16,paddingBottom:40},section:{color:C.text2,fontSize:11,fontWeight:"900",marginTop:14,marginBottom:8},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},border:{borderBottomWidth:1,borderBottomColor:C.border2},row:{minHeight:61,paddingHorizontal:12,paddingVertical:8,flexDirection:"row",alignItems:"center",gap:10},icon:{width:38,height:38,borderRadius:9,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},image:{width:38,height:38},rowTitle:{color:C.text2,fontSize:12.5,fontWeight:"800"},rowSub:{color:C.muted,fontSize:9.5,marginTop:3},state:{minHeight:150,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,alignItems:"center",justifyContent:"center",gap:8,padding:20},stateTitle:{color:C.text,fontSize:14,fontWeight:"800"},stateText:{color:C.muted,fontSize:10.5,textAlign:"center"},
+  screen:{flex:1,backgroundColor:C.bg},header:{minHeight:66,paddingHorizontal:14,flexDirection:"row",alignItems:"center",gap:10,borderBottomWidth:1,borderBottomColor:C.border2},searchBox:{flex:1,minHeight:44,borderWidth:1,borderColor:C.border,borderRadius:10,backgroundColor:C.card,flexDirection:"row",alignItems:"center",paddingHorizontal:11,gap:8},input:{flex:1,color:C.text,fontSize:13.5,paddingVertical:8},content:{padding:16,paddingBottom:40},section:{color:C.text2,fontSize:12,fontWeight:"900",marginTop:14,marginBottom:8},sectionLine:{marginTop:14,flexDirection:"row",alignItems:"flex-end",justifyContent:"space-between",gap:10},source:{color:C.muted,fontSize:9.5,fontWeight:"700",marginBottom:8},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},myanmarCard:{borderColor:"rgba(243,38,45,.55)"},border:{borderBottomWidth:1,borderBottomColor:C.border2},row:{minHeight:65,paddingHorizontal:12,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:10},rowAccent:{backgroundColor:"rgba(243,38,45,.06)"},icon:{width:40,height:40,borderRadius:9,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},image:{width:40,height:40},rowTitle:{color:C.text2,fontSize:13.5,fontWeight:"800"},rowTitleAccent:{color:C.text},rowSub:{color:C.muted,fontSize:10.5,marginTop:3},state:{minHeight:150,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,alignItems:"center",justifyContent:"center",gap:8,padding:20},regionIntro:{minHeight:72,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,flexDirection:"row",alignItems:"center",gap:12,padding:14},regionIcon:{width:42,height:42,borderRadius:12,backgroundColor:"rgba(243,38,45,.10)",alignItems:"center",justifyContent:"center"},rankingLoading:{minHeight:62,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:9},rankingError:{minHeight:64,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:8,padding:12,marginTop:12},stateTitle:{color:C.text,fontSize:15,fontWeight:"800"},stateText:{color:C.muted,fontSize:11.5,lineHeight:17},
 });
