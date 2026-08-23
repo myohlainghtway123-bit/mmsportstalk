@@ -1,9 +1,9 @@
 MST Android validation
-Commit: c124dc63f4f41b62bab2891127118d6e6e0e74f7
+Commit: 971d96b7063d9418fd55a4d71534e2df941fb362
 
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
-npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated uuid@7.0.3: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
@@ -38,11 +38,10 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 11.4% ( 71/216)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.9% (411/498)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.7% (664/686)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (812/812)
-Android Bundled 13736ms index.js (812 modules)
+Android ./index.js ▓▓░░░░░░░░░░░░░░ 14.1% ( 73/216)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 71.9% (413/492)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.8% (733/745)
+Android Bundled 12910ms index.js (812 modules)
 
 › Assets (20):
 assets/icon.png (993 kB)
@@ -67,7 +66,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-4b53600de697864a038912911c02da91.hbc (2.85 MB)
+_expo/static/js/android/index-5290ce052fd8c0abbecb3a85729e95b7.hbc (2.86 MB)
 
 › Files (1):
 metadata.json (1.41 kB)
