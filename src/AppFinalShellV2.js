@@ -85,18 +85,8 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   };
 
   const rememberOrigin = () => mode || "home";
-  const goRoot = (next = "home") => {
-    historyRef.current = [];
-    setSelected(null);
-    setReturnMode("home");
-    setMode(next || "home");
-  };
-  const pushMode = (next, origin) => {
-    const from = origin || rememberOrigin();
-    historyRef.current.push(from);
-    setReturnMode(from);
-    setMode(next);
-  };
+  const goRoot = (next = "home") => { historyRef.current = []; setSelected(null); setReturnMode("home"); setMode(next || "home"); };
+  const pushMode = (next, origin) => { const from = origin || rememberOrigin(); historyRef.current.push(from); setReturnMode(from); setMode(next); };
   const goHome = () => goRoot("home");
   const openMatch = (match,origin) => { if (!match) return; const from=origin||rememberOrigin(); historyRef.current.push(from); setReturnMode(from); setSelected(match); setMode("match"); };
   const openEntity = (type,entity,origin) => { if (!entity?.id) return; const from=origin||rememberOrigin(); historyRef.current.push(from); setReturnMode(from); setSelected({type,entity}); setMode("entity"); };
@@ -104,16 +94,8 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   const openAccount = (origin) => pushMode("account", origin);
   const openNotifications = (origin) => pushMode("notifications", origin);
   const openSearch = (origin) => pushMode("search", origin);
-  const goReturn = () => {
-    const next = historyRef.current.length ? historyRef.current.pop() : (returnMode || "home");
-    const parent = historyRef.current.length ? historyRef.current[historyRef.current.length - 1] : "home";
-    setReturnMode(parent);
-    setMode(next || "home");
-  };
-  const navigateMore = (target) => {
-    if (target === "settings" || target === "about") pushMode(target, "more");
-    else goRoot(target);
-  };
+  const goReturn = () => { const next = historyRef.current.length ? historyRef.current.pop() : (returnMode || "home"); const parent = historyRef.current.length ? historyRef.current[historyRef.current.length - 1] : "home"; setReturnMode(parent); setMode(next || "home"); };
+  const navigateMore = (target) => { if (target === "settings" || target === "about") pushMode(target, "more"); else goRoot(target); };
 
   const isContent = mode.startsWith("content-");
   const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
@@ -124,14 +106,8 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (isSubpage) {
-        goReturn();
-        return true;
-      }
-      if (mode !== "home") {
-        goHome();
-        return true;
-      }
+      if (isSubpage) { goReturn(); return true; }
+      if (mode !== "home") { goHome(); return true; }
       return false;
     });
     return () => subscription.remove();
@@ -153,7 +129,7 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
       {mode === "about" ? <LazyAbout language={language} goBack={goReturn}/> : null}
       {mode === "search" ? <LazySearch language={language} goBack={goReturn} openMatch={(x) => openMatch(x,"search")} openEntity={(type,x) => openEntity(type,x,"search")}/> : null}
       {mode === "match" ? <LazyMatch language={language} match={selected} goBack={goReturn}/> : null}
-      {mode === "entity" ? <LazyEntity language={language} type={selected?.type} entity={selected?.entity} goBack={goReturn}/> : null}
+      {mode === "entity" ? <LazyEntity language={language} type={selected?.type} entity={selected?.entity} goBack={goReturn} openAccount={() => openAccount("entity")}/> : null}
       {mode === "article" ? <LazyArticle language={language} article={selected} goBack={goReturn}/> : null}
     </View>
     {!isSubpage ? <BottomNav active={navActive} language={language} onChange={(tab) => goRoot(tab === "home" ? "home" : tab)}/> : null}
