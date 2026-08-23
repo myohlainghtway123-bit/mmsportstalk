@@ -1,5 +1,5 @@
 MST Android validation
-Commit: 6f0bedc8f363d1abf152a921e8cf3576d8f219b2
+Commit: e8199bc087e25044d25bfbc63db8dc3b4c4d0627
 
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
@@ -16,7 +16,7 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 745 packages, and audited 746 packages in 12s
+added 745 packages, and audited 746 packages in 11s
 
 76 packages are looking for funding
   run `npm fund` for details
@@ -38,10 +38,11 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 11.6% ( 73/216)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 65.5% (446/556)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.0% (671/685)
-Android Bundled 13279ms index.js (820 modules)
+Android ./index.js ▓░░░░░░░░░░░░░░░ 11.8% ( 69/201)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 67.5% (446/553)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.3% (652/675)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (821/821)
+Android Bundled 13757ms index.js (821 modules)
 
 › Assets (20):
 assets/icon.png (993 kB)
@@ -66,7 +67,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-ad1e70017a77278b0df4d15c90e7d9eb.hbc (2.94 MB)
+_expo/static/js/android/index-9fff238c59230bdce9a4bb00feb602be.hbc (2.95 MB)
 
 › Files (1):
 metadata.json (1.41 kB)
