@@ -280,7 +280,7 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
   return <View style={[s.root, { backgroundColor: colors.bg }]}>
     <StatusBar barStyle={colors.barStyle} backgroundColor={colors.bg}/>
     <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
-      {mode === "home" ? <HomeScreen language={language} openMatch={(x) => openMatch(x, "home")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")} openPredictions={() => goRoot("prediction")} openAccount={() => openAccount("home")}/> : null}
+      {mode === "home" ? <HomeScreen language={language} openMatch={(x) => openMatch(x, "home")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")} openPredictions={() => goRoot("prediction")} openAccount={() => openAccount("home")} openFavorites={() => goRoot("favorites")}/> : null}
       {isContent ? <LazyContent language={language} initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
       {mode === "scores" ? <LazyScores language={language} openMatch={(x) => openMatch(x, "scores")}/> : null}
       {mode === "favorites" ? <LazyFavorites language={language} openLeague={(x) => openEntity("competition", x, "favorites")} openTeam={(x) => openEntity("team", x, "favorites")} openPlayer={(x) => openEntity("player", x, "favorites")} openAccount={() => openAccount("favorites")}/> : null}
