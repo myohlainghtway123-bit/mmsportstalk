@@ -1,7 +1,9 @@
 const FOOTBALL_API_BASE = "https://myanmarsportstalk.com/api/football";
 const APP_TIME_ZONE = "Asia/Bangkok";
 
-const LIVE_CODES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "SUSP", "INT", "LIVE"]);
+const LIVE_CODES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE"]);
+const LIVE_CLOCK_CODES = new Set(["1H", "2H", "ET", "LIVE"]);
+const NON_ACTIVE_CODES = new Set(["SUSP", "INT", "PST", "CANC", "ABD"]);
 const FINISHED_CODES = new Set(["FT", "AET", "PEN"]);
 
 const COMPETITION_ALIASES = {
@@ -108,10 +110,20 @@ function canonicalStatus(value) {
     POSTPONED: "PST",
     CANCELLED: "CANC",
     CANCELED: "CANC",
+    ABANDONED: "ABD",
+    SUSPENDED: "SUSP",
+    INTERRUPTED: "INT",
     HALF_TIME: "HT",
     HALFTIME: "HT",
     FIRST_HALF: "1H",
     SECOND_HALF: "2H",
+    EXTRA_TIME: "ET",
+    EXTRATIME: "ET",
+    BREAK: "BT",
+    BREAK_TIME: "BT",
+    PENALTIES: "P",
+    PENALTY_SHOOTOUT: "P",
+    PENALTY_SHOOT_OUT: "P",
     IN_PLAY: "LIVE",
     INPLAY: "LIVE",
   };
@@ -135,11 +147,12 @@ function normalizeStatus(raw) {
   );
   const elapsed = numberOrNull(pick(statusObject?.elapsed, raw?.elapsed, raw?.minute, raw?.minutes));
   const long = pick(statusObject?.long, raw?.statusLong, raw?.status_long, raw?.statusLabel, code);
-  const live = LIVE_CODES.has(code) || Boolean(raw?.live === true || raw?.isLive === true);
+  const explicitLive = Boolean(raw?.live === true || raw?.isLive === true);
+  const live = !NON_ACTIVE_CODES.has(code) && (LIVE_CODES.has(code) || explicitLive);
   const finished = FINISHED_CODES.has(code);
 
   let display = code;
-  if (live && elapsed !== null && code !== "HT") display = `${elapsed}'`;
+  if (live && LIVE_CLOCK_CODES.has(code) && elapsed !== null) display = `${elapsed}'`;
   else if (code === "NS") {
     const kickoff = pick(
       fixture?.date,
@@ -274,7 +287,9 @@ function validMatchIdentity(match) {
 }
 
 export function isLiveMatch(match) {
-  return Boolean(match?.isLive || LIVE_CODES.has(canonicalStatus(match?.statusCode ?? match?.status)));
+  const code = canonicalStatus(match?.statusCode ?? match?.status);
+  if (NON_ACTIVE_CODES.has(code)) return false;
+  return Boolean(match?.isLive || LIVE_CODES.has(code));
 }
 
 export function localDateString(date = new Date()) {
