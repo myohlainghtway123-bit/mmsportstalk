@@ -251,11 +251,19 @@ export async function fetchFastFootballMatches({ date = todayBangkok(), signal, 
   }
 }
 
+let prefetchQueue = Promise.resolve();
+
 export function prefetchFastFootballMatches(dates = []) {
-  [...new Set(dates.filter(Boolean))].forEach((date) => {
-    const saved = cache.get(date);
-    if (saved && Date.now() - saved.fetchedAt < ttlFor(date)) return;
-    startRequest(date, { timeoutMs: 10000 }).catch(() => {});
+  const uniqueDates = [...new Set(dates.filter(Boolean))];
+  uniqueDates.forEach((date) => {
+    prefetchQueue = prefetchQueue.then(async () => {
+      const saved = cache.get(date);
+      if (saved && Date.now() - saved.fetchedAt < ttlFor(date)) return;
+      try {
+        await startRequest(date, { timeoutMs: 12000 });
+        await new Promise((r) => setTimeout(r, 600));
+      } catch (_) {}
+    });
   });
 }
 
@@ -265,6 +273,46 @@ export function peekFastFootballMatches(date) {
 }
 
 export function clearFastFootballDate(date) { cache.delete(date); }
+
+export function getAllFastFootballMatches() {
+  const map = new Map();
+  for (const entry of cache.values()) {
+    if (Array.isArray(entry?.matches)) {
+      for (const m of entry.matches) {
+        if (m?.id && !map.has(String(m.id))) {
+          map.set(String(m.id), m);
+        }
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+export function findTeamMatchesFromFastCache(team) {
+  if (!team) return [];
+  const teamId = team?.id != null ? String(team.id) : (typeof team === "string" || typeof team === "number" ? String(team) : null);
+  const teamName = (team?.name || (typeof team === "string" ? team : "")).trim().toLowerCase();
+  return getAllFastFootballMatches().filter((m) => {
+    if (teamId && (String(m?.home?.id) === teamId || String(m?.away?.id) === teamId)) return true;
+    if (teamName) {
+      const hName = String(m?.home?.name || "").trim().toLowerCase();
+      const aName = String(m?.away?.name || "").trim().toLowerCase();
+      if (hName === teamName || aName === teamName) return true;
+    }
+    return false;
+  });
+}
+
+export function prefetchRecentPastMatches() {
+  const dates = [];
+  const now = new Date();
+  for (let i = 1; i <= 3; i++) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    const dateStr = dateKeyInBangkok(d);
+    if (dateStr) dates.push(dateStr);
+  }
+  prefetchFastFootballMatches(dates);
+}
 
 export async function verifyFootballApiConnection({ date = todayBangkok(), signal } = {}) {
   const result = await requestDate(date, { signal, timeoutMs: 12000 });

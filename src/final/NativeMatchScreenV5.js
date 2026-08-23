@@ -22,6 +22,11 @@ import {
   normalizeFootballMatch,
   normalizeStandings,
 } from "../services/footballApi";
+import {
+  findTeamMatchesFromFastCache,
+  prefetchRecentPastMatches,
+  getAllFastFootballMatches,
+} from "../services/fastFootballApi";
 import { fetchPreferredOdds } from "../services/oddsApi";
 import {
   getAccountPredictions,
@@ -113,35 +118,289 @@ function normalizeTeamMatches(payload) {
     .filter((m) => m?.id && m?.home?.name && m?.away?.name);
 }
 
-function RecentForm({ title, team, matches, colors }) {
+function isSameTeam(a, b) {
+  if (!a || !b) return false;
+  const aId = a.id != null ? String(a.id) : (typeof a === "string" || typeof a === "number" ? String(a) : null);
+  const bId = b.id != null ? String(b.id) : (typeof b === "string" || typeof b === "number" ? String(b) : null);
+  if (aId && bId && aId === bId) return true;
+  const aName = (a.name || (typeof a === "string" ? a : "")).trim().toLowerCase();
+  const bName = (b.name || (typeof b === "string" ? b : "")).trim().toLowerCase();
+  if (aName && bName && (aName === bName || aName.includes(bName) || bName.includes(aName))) return true;
+  return false;
+}
+
+function getTeamMatchDetails(m, team) {
+  const isHome = isSameTeam(m.home, team);
+  const ownScore = isHome ? m.homeScore : m.awayScore;
+  const oppScore = isHome ? m.awayScore : m.homeScore;
+  const opponent = isHome ? m.away : m.home;
+  let outcome = "D";
+  if (ownScore != null && oppScore != null) {
+    if (ownScore > oppScore) outcome = "W";
+    else if (ownScore < oppScore) outcome = "L";
+  }
+  return {
+    isHome,
+    ownScore,
+    oppScore,
+    opponent,
+    outcome,
+    scoreText: `${m.homeScore ?? "-"}-${m.awayScore ?? "-"}`,
+  };
+}
+
+function calculateTeamFormStats(matches, team) {
   const now = Date.now();
-  const rows = matches
-    .filter((m) => finished(m) && (m.kickoff ? new Date(m.kickoff).getTime() <= now : true))
+  const rows = (matches || [])
+    .filter((m) => {
+      const matchTeam = isSameTeam(m.home, team) || isSameTeam(m.away, team);
+      const isFin = finished(m) || m.homeScore != null;
+      const isPast = m.kickoff ? new Date(m.kickoff).getTime() <= now : true;
+      return matchTeam && isFin && isPast;
+    })
     .sort((a, b) => new Date(b.kickoff || 0) - new Date(a.kickoff || 0))
     .slice(0, 5);
-  if (!team?.id || !rows.length) return null;
+
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+  let gf = 0;
+  let ga = 0;
+  let cs = 0;
+
+  const enriched = rows.map((m) => {
+    const details = getTeamMatchDetails(m, team);
+    if (details.outcome === "W") wins += 1;
+    else if (details.outcome === "L") losses += 1;
+    else draws += 1;
+    gf += details.ownScore ?? 0;
+    ga += details.oppScore ?? 0;
+    if (details.oppScore === 0) cs += 1;
+    return { ...m, ...details };
+  });
+
+  const total = enriched.length;
+  const pts = wins * 3 + draws * 1;
+  const winPct = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+  return {
+    rows: enriched,
+    wins,
+    draws,
+    losses,
+    pts,
+    total,
+    winPct,
+    gf,
+    ga,
+    cs,
+  };
+}
+
+function TeamPreviousMatchesCard({ title, team, matches, my, colors }) {
+  const stats = useMemo(() => calculateTeamFormStats(matches, team), [matches, team]);
+  if (!team?.name && !team?.id) return null;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.cardTitle, { color: colors.text }]}>{title}</Text>
-      <View style={styles.formRow}>
-        {rows.map((m) => {
-          const home = String(m.home?.id) === String(team.id);
-          const opponent = home ? m.away : m.home;
-          const a = home ? m.homeScore : m.awayScore;
-          const b = home ? m.awayScore : m.homeScore;
-          const tone = a > b ? colors.green : a < b ? colors.red : colors.muted;
-          return (
-            <View key={m.id} style={styles.formItem}>
-              <Logo uri={opponent?.logo} size={28} colors={colors} />
-              <View style={[styles.formScore, { backgroundColor: tone }]}>
-                <Text style={styles.formScoreText}>
-                  {m.homeScore ?? "-"}-{m.awayScore ?? "-"}
-                </Text>
-              </View>
+      {/* Team Header & 5-Match Form Pills */}
+      <View style={styles.formCardHeader}>
+        <View style={styles.formCardTeamWrap}>
+          <Logo uri={team?.logo} size={28} colors={colors} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={[styles.formCardTeamName, { color: colors.text }]}>
+              {title || team?.name}
+            </Text>
+            <Text style={[styles.formCardSub, { color: colors.muted }]}>
+              {tx(my, `Previous 5 matches played`, `ယခင်ကစားခဲ့သော ၅ ပွဲမှတ်တမ်း`)}
+            </Text>
+          </View>
+        </View>
+        {stats.rows.length ? (
+          <View style={styles.formPillsRow}>
+            {stats.rows.map((m, idx) => {
+              const bg = m.outcome === "W" ? colors.green : m.outcome === "L" ? colors.red : colors.muted;
+              return (
+                <View key={m.id || idx} style={[styles.formPill, { backgroundColor: bg }]}>
+                  <Text style={styles.formPillText}>{m.outcome}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
+
+      {stats.rows.length ? (
+        <>
+          {/* Form Summary Banner */}
+          <View style={[styles.formSummaryBanner, { backgroundColor: colors.panel, borderColor: colors.border2 }]}>
+            <View style={styles.formSummaryItem}>
+              <Text style={[styles.formSummaryVal, { color: colors.text }]}>
+                {stats.pts}
+                <Text style={styles.formSummarySubVal}>/15</Text>
+              </Text>
+              <Text style={[styles.formSummaryLbl, { color: colors.muted }]}>{tx(my, "PTS", "ရမှတ်")}</Text>
             </View>
-          );
-        })}
+            <View style={[styles.formSummaryDivider, { backgroundColor: colors.border2 }]} />
+            <View style={styles.formSummaryItem}>
+              <Text style={[styles.formSummaryVal, { color: colors.green }]}>
+                {stats.wins}W <Text style={{ color: colors.muted }}>{stats.draws}D</Text> <Text style={{ color: colors.red }}>{stats.losses}L</Text>
+              </Text>
+              <Text style={[styles.formSummaryLbl, { color: colors.muted }]}>{tx(my, "RECORD", "ရလဒ်")}</Text>
+            </View>
+            <View style={[styles.formSummaryDivider, { backgroundColor: colors.border2 }]} />
+            <View style={styles.formSummaryItem}>
+              <Text style={[styles.formSummaryVal, { color: colors.text }]}>
+                {stats.gf}
+                <Text style={{ color: colors.muted }}>:{stats.ga}</Text>
+              </Text>
+              <Text style={[styles.formSummaryLbl, { color: colors.muted }]}>{tx(my, "GOALS", "ဂိုး")}</Text>
+            </View>
+          </View>
+
+          {/* 5 Match Detail Rows */}
+          <View style={styles.prevMatchesList}>
+            {stats.rows.map((m, i) => {
+              const resColor = m.outcome === "W" ? colors.green : m.outcome === "L" ? colors.red : colors.muted;
+              return (
+                <View
+                  key={m.id || i}
+                  style={[
+                    styles.prevMatchRow,
+                    i > 0 && { borderTopWidth: 1, borderTopColor: colors.border2 },
+                  ]}
+                >
+                  {/* Result Badge */}
+                  <View style={[styles.prevMatchResultBadge, { backgroundColor: resColor }]}>
+                    <Text style={styles.prevMatchResultText}>{m.outcome}</Text>
+                  </View>
+
+                  {/* Match Meta (Date & Competition) */}
+                  <View style={styles.prevMatchMeta}>
+                    <Text style={[styles.prevMatchDate, { color: colors.muted }]}>
+                      {m.kickoff ? new Date(m.kickoff).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}
+                    </Text>
+                    <Text numberOfLines={1} style={[styles.prevMatchComp, { color: colors.muted2 }]}>
+                      {m.competition}
+                    </Text>
+                  </View>
+
+                  {/* Opponent & Location */}
+                  <View style={styles.prevMatchOpponent}>
+                    <View style={[styles.homeAwayTag, { backgroundColor: m.isHome ? colors.redSoft : colors.card2 }]}>
+                      <Text style={[styles.homeAwayTagText, { color: m.isHome ? colors.red : colors.muted }]}>
+                        {m.isHome ? "H" : "A"}
+                      </Text>
+                    </View>
+                    <Logo uri={m.opponent?.logo} size={20} colors={colors} />
+                    <Text numberOfLines={1} style={[styles.prevMatchOppName, { color: colors.text }]}>
+                      {m.opponent?.name}
+                    </Text>
+                  </View>
+
+                  {/* Score Pill */}
+                  <View style={[styles.prevMatchScorePill, { backgroundColor: colors.panel, borderColor: colors.border2 }]}>
+                    <Text style={[styles.prevMatchScoreText, { color: colors.text }]}>
+                      {m.scoreText}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      ) : (
+        <Text style={[styles.empty, { color: colors.muted, marginVertical: 8 }]}>
+          {tx(my, "No previous matches recorded yet for this team.", "ဤအသင်းအတွက် ယခင်ပွဲမှတ်တမ်း မရှိသေးပါ။")}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function FormComparisonMatrix({ current, homeMatches, awayMatches, my, colors }) {
+  const homeStats = useMemo(() => calculateTeamFormStats(homeMatches, current?.home?.id), [homeMatches, current?.home?.id]);
+  const awayStats = useMemo(() => calculateTeamFormStats(awayMatches, current?.away?.id), [awayMatches, current?.away?.id]);
+
+  if (!homeStats.rows.length && !awayStats.rows.length) return null;
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.cardTitleNoMargin, { color: colors.text }]}>
+        {tx(my, "Recent Form Comparison (Last 5 Games)", "နောက်ဆုံး ၅ ပွဲ နှိုင်းယှဉ်ချက်")}
+      </Text>
+      <Text style={[styles.smallMuted, { color: colors.muted }]}>
+        {tx(my, "Head-to-head performance across all recent competitions", "မကြာသေးမီက ယှဉ်ပြိုင်ခဲ့သော ပြိုင်ပွဲစုံ ခြေစွမ်းမှတ်တမ်း")}
+      </Text>
+
+      {/* Side-by-side header */}
+      <View style={styles.matrixTeamsHeader}>
+        <View style={styles.matrixTeamCol}>
+          <Logo uri={current?.home?.logo} size={26} colors={colors} />
+          <Text numberOfLines={1} style={[styles.matrixTeamName, { color: colors.text }]}>{current?.home?.name}</Text>
+        </View>
+        <Text style={[styles.matrixVs, { color: colors.muted }]}>VS</Text>
+        <View style={[styles.matrixTeamCol, { alignItems: "flex-end", justifyContent: "flex-end" }]}>
+          <Text numberOfLines={1} style={[styles.matrixTeamName, { color: colors.text, textAlign: "right" }]}>{current?.away?.name}</Text>
+          <Logo uri={current?.away?.logo} size={26} colors={colors} />
+        </View>
+      </View>
+
+      {/* Comparison rows */}
+      <View style={styles.matrixRows}>
+        {/* Form pills row */}
+        <View style={[styles.matrixRow, { borderBottomColor: colors.border2 }]}>
+          <View style={styles.matrixPills}>
+            {homeStats.rows.map((m, idx) => (
+              <View key={idx} style={[styles.matrixMiniPill, { backgroundColor: m.outcome === "W" ? colors.green : m.outcome === "L" ? colors.red : colors.muted }]}>
+                <Text style={styles.matrixMiniPillText}>{m.outcome}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={[styles.matrixMetricLbl, { color: colors.muted }]}>{tx(my, "FORM", "ခြေစွမ်း")}</Text>
+          <View style={[styles.matrixPills, { justifyContent: "flex-end" }]}>
+            {awayStats.rows.map((m, idx) => (
+              <View key={idx} style={[styles.matrixMiniPill, { backgroundColor: m.outcome === "W" ? colors.green : m.outcome === "L" ? colors.red : colors.muted }]}>
+                <Text style={styles.matrixMiniPillText}>{m.outcome}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Points row */}
+        <View style={[styles.matrixRow, { borderBottomColor: colors.border2 }]}>
+          <Text style={[styles.matrixValLeft, { color: homeStats.pts >= awayStats.pts ? colors.green : colors.text }]}>{homeStats.pts} PTS</Text>
+          <Text style={[styles.matrixMetricLbl, { color: colors.muted }]}>{tx(my, "POINTS (MAX 15)", "ရမှတ်")}</Text>
+          <Text style={[styles.matrixValRight, { color: awayStats.pts >= homeStats.pts ? colors.green : colors.text }]}>{awayStats.pts} PTS</Text>
+        </View>
+
+        {/* Win Rate row */}
+        <View style={[styles.matrixRow, { borderBottomColor: colors.border2 }]}>
+          <Text style={[styles.matrixValLeft, { color: colors.text }]}>{homeStats.winPct}%</Text>
+          <Text style={[styles.matrixMetricLbl, { color: colors.muted }]}>{tx(my, "WIN RATE", "နိုင်ပွဲ %")}</Text>
+          <Text style={[styles.matrixValRight, { color: colors.text }]}>{awayStats.winPct}%</Text>
+        </View>
+
+        {/* Goals Scored */}
+        <View style={[styles.matrixRow, { borderBottomColor: colors.border2 }]}>
+          <Text style={[styles.matrixValLeft, { color: colors.text }]}>{homeStats.gf}</Text>
+          <Text style={[styles.matrixMetricLbl, { color: colors.muted }]}>{tx(my, "GOALS SCORED", "သွင်းဂိုး")}</Text>
+          <Text style={[styles.matrixValRight, { color: colors.text }]}>{awayStats.gf}</Text>
+        </View>
+
+        {/* Goals Conceded */}
+        <View style={[styles.matrixRow, { borderBottomColor: colors.border2 }]}>
+          <Text style={[styles.matrixValLeft, { color: colors.text }]}>{homeStats.ga}</Text>
+          <Text style={[styles.matrixMetricLbl, { color: colors.muted }]}>{tx(my, "GOALS CONCEDED", "ပေးဂိုး")}</Text>
+          <Text style={[styles.matrixValRight, { color: colors.text }]}>{awayStats.ga}</Text>
+        </View>
+
+        {/* Clean Sheets */}
+        <View style={styles.matrixRow}>
+          <Text style={[styles.matrixValLeft, { color: colors.text }]}>{homeStats.cs}</Text>
+          <Text style={[styles.matrixMetricLbl, { color: colors.muted }]}>{tx(my, "CLEAN SHEETS", "ဂိုးမပေးရပွဲ")}</Text>
+          <Text style={[styles.matrixValRight, { color: colors.text }]}>{awayStats.cs}</Text>
+        </View>
       </View>
     </View>
   );
@@ -527,122 +786,176 @@ function LineupPanel({ payload, players, my, colors }) {
   );
 }
 
-function H2HPanel({ payload, my, current, colors }) {
-  const now = Date.now();
-  const homeId = String(current?.home?.id || "");
-  const awayId = String(current?.away?.id || "");
-  const rows = normalizeTeamMatches(payload)
-    .filter((m) => String(m.id) !== String(current?.id))
-    .filter((m) => {
-      const ids = new Set([String(m.home?.id || ""), String(m.away?.id || "")]);
+function H2HPanel({ payload, homeMatches, awayMatches, my, current, colors }) {
+  const h2hRows = useMemo(() => {
+    const now = Date.now();
+    const currentId = String(current?.id || "");
+    const all = [
+      ...(payload ? normalizeTeamMatches(payload) : []),
+      ...(homeMatches || []),
+      ...(awayMatches || []),
+    ];
+    const seen = new Set();
+    const list = [];
+    for (const m of all) {
+      if (!m?.id || seen.has(String(m.id)) || String(m.id) === currentId) continue;
+      const isDirectH2H =
+        (isSameTeam(m.home, current?.home) && isSameTeam(m.away, current?.away)) ||
+        (isSameTeam(m.home, current?.away) && isSameTeam(m.away, current?.home));
       const playedAt = m.kickoff ? new Date(m.kickoff).getTime() : NaN;
-      return (
-        ids.has(homeId) &&
-        ids.has(awayId) &&
+      if (
+        isDirectH2H &&
         m.homeScore != null &&
         m.awayScore != null &&
         (finished(m) || !Number.isFinite(playedAt) || playedAt <= now)
-      );
-    })
-    .sort((a, b) => new Date(b.kickoff || 0) - new Date(a.kickoff || 0))
-    .slice(0, 10);
-
-  if (!rows.length) {
-    return (
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.empty, { color: colors.muted }]}>
-          {tx(my, "Head-to-head history is unavailable.", "ထိပ်တိုက်တွေ့ဆုံမှု မှတ်တမ်း မရပါ။")}
-        </Text>
-      </View>
-    );
-  }
+      ) {
+        seen.add(String(m.id));
+        list.push(m);
+      }
+    }
+    list.sort((a, b) => new Date(b.kickoff || 0) - new Date(a.kickoff || 0));
+    return list.slice(0, 10);
+  }, [payload, homeMatches, awayMatches, current?.home, current?.away, current?.id]);
 
   const h2hOutcome = (m) => {
-    const isHome = String(m.home?.id) === homeId;
+    const isHome = isSameTeam(m.home, current?.home);
     const own = isHome ? m.homeScore : m.awayScore;
     const opp = isHome ? m.awayScore : m.homeScore;
     return own > opp ? "W" : own < opp ? "L" : "D";
   };
 
-  const summary = rows.reduce(
-    (acc, m) => {
+  const summary = useMemo(() => {
+    let homeGoals = 0;
+    let awayGoals = 0;
+    const acc = { W: 0, D: 0, L: 0 };
+    h2hRows.forEach((m) => {
       const res = h2hOutcome(m);
       if (res) acc[res] += 1;
-      return acc;
-    },
-    { W: 0, D: 0, L: 0 },
-  );
+      const isHome = isSameTeam(m.home, current?.home);
+      homeGoals += (isHome ? m.homeScore : m.awayScore) ?? 0;
+      awayGoals += (isHome ? m.awayScore : m.homeScore) ?? 0;
+    });
+    return { ...acc, homeGoals, awayGoals };
+  }, [h2hRows, current?.home]);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.h2hHeader}>
-        <View>
-          <Text style={[styles.cardTitleNoMargin, { color: colors.text }]}>{tx(my, "Head to head", "ထိပ်တိုက်တွေ့ဆုံမှု")}</Text>
-          <Text style={[styles.smallMuted, { color: colors.muted }]}>
-            {tx(my, `Last ${rows.length} completed meetings`, `ပြီးဆုံးခဲ့သော နောက်ဆုံး ${rows.length} ပွဲ`)}
-          </Text>
-        </View>
-        <Text style={[styles.h2hFocus, { color: colors.red }]} numberOfLines={1}>
-          {current?.home?.name || "HOME"}
-        </Text>
-      </View>
-
-      <View style={styles.h2hSummary}>
-        {[
-          ["W", summary.W, colors.green],
-          ["D", summary.D, colors.muted],
-          ["L", summary.L, colors.red],
-        ].map(([label, val, col]) => (
-          <View key={label} style={[styles.h2hStat, { backgroundColor: colors.panel, borderColor: colors.border2 }]}>
-            <Text style={[styles.h2hStatValue, { color: col }]}>{val}</Text>
-            <Text style={[styles.h2hStatLabel, { color: colors.muted }]}>{label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {rows.map((m, i) => {
-        const result = h2hOutcome(m);
-        const tone = result === "W" ? colors.green : result === "L" ? colors.red : colors.muted;
-        return (
-          <View key={m.id} style={[styles.h2hRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border2 }]}>
-            <View style={[styles.h2hResult, { borderColor: tone, backgroundColor: colors.panel }]}>
-              <Text style={[styles.h2hResultText, { color: tone }]}>{result || "–"}</Text>
-            </View>
-            <View style={styles.h2hMeta}>
-              <Text style={[styles.h2hDate, { color: colors.muted }]}>
-                {m.kickoff ? new Date(m.kickoff).toLocaleDateString() : ""}
-              </Text>
-              <Text numberOfLines={1} style={[styles.h2hCompetition, { color: colors.muted2 }]}>
-                {m.competition}
-              </Text>
-            </View>
-            <View style={styles.h2hTeams}>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.h2hTeam,
-                  { color: String(m.home?.id) === homeId ? colors.text : colors.text2, fontWeight: String(m.home?.id) === homeId ? "900" : "600" },
-                ]}
-              >
-                {m.home?.name}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.h2hTeam,
-                  { color: String(m.away?.id) === homeId ? colors.text : colors.text2, fontWeight: String(m.away?.id) === homeId ? "900" : "600" },
-                ]}
-              >
-                {m.away?.name}
-              </Text>
-            </View>
-            <Text style={[styles.h2hScore, { color: colors.text }]}>
-              {m.homeScore ?? "-"}{"\n"}{m.awayScore ?? "-"}
+    <>
+      {/* 1. HEAD TO HEAD HISTORY CARD */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.h2hHeader}>
+          <View>
+            <Text style={[styles.cardTitleNoMargin, { color: colors.text }]}>
+              {tx(my, "Head to Head History", "ထိပ်တိုက်တွေ့ဆုံမှု မှတ်တမ်း")}
+            </Text>
+            <Text style={[styles.smallMuted, { color: colors.muted }]}>
+              {h2hRows.length
+                ? tx(my, `Last ${h2hRows.length} completed head-to-head meetings`, `ပြီးဆုံးခဲ့သော ထိပ်တိုက်တွေ့ဆုံမှု ${h2hRows.length} ပွဲ`)
+                : tx(my, "No direct head-to-head match records available", "ထိပ်တိုက်တွေ့ဆုံမှု မှတ်တမ်း မရှိသေးပါ")}
             </Text>
           </View>
-        );
-      })}
-    </View>
+          <Text style={[styles.h2hFocus, { color: colors.red }]} numberOfLines={1}>
+            {current?.home?.name || "HOME"}
+          </Text>
+        </View>
+
+        {h2hRows.length ? (
+          <>
+            <View style={styles.h2hSummary}>
+              {[
+                [`${current?.home?.short || "HOME"} WINS`, summary.W, colors.green],
+                ["DRAWS", summary.D, colors.muted],
+                [`${current?.away?.short || "AWAY"} WINS`, summary.L, colors.red],
+              ].map(([label, val, col]) => (
+                <View key={label} style={[styles.h2hStat, { backgroundColor: colors.panel, borderColor: colors.border2 }]}>
+                  <Text style={[styles.h2hStatValue, { color: col }]}>{val}</Text>
+                  <Text numberOfLines={1} style={[styles.h2hStatLabel, { color: colors.muted }]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {h2hRows.map((m, i) => {
+              const result = h2hOutcome(m);
+              const tone = result === "W" ? colors.green : result === "L" ? colors.red : colors.muted;
+              return (
+                <View key={m.id || i} style={[styles.h2hRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border2 }]}>
+                  <View style={[styles.h2hResult, { borderColor: tone, backgroundColor: colors.panel }]}>
+                    <Text style={[styles.h2hResultText, { color: tone }]}>{result || "–"}</Text>
+                  </View>
+                  <View style={styles.h2hMeta}>
+                    <Text style={[styles.h2hDate, { color: colors.muted }]}>
+                      {m.kickoff ? new Date(m.kickoff).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}
+                    </Text>
+                    <Text numberOfLines={1} style={[styles.h2hCompetition, { color: colors.muted2 }]}>
+                      {m.competition}
+                    </Text>
+                  </View>
+                  <View style={styles.h2hTeams}>
+                    <View style={styles.h2hTeamLine}>
+                      <Logo uri={m.home?.logo} size={16} colors={colors} />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.h2hTeam,
+                          { color: String(m.home?.id) === homeId ? colors.text : colors.text2, fontWeight: String(m.home?.id) === homeId ? "900" : "600" },
+                        ]}
+                      >
+                        {m.home?.name}
+                      </Text>
+                    </View>
+                    <View style={styles.h2hTeamLine}>
+                      <Logo uri={m.away?.logo} size={16} colors={colors} />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.h2hTeam,
+                          { color: String(m.away?.id) === homeId ? colors.text : colors.text2, fontWeight: String(m.away?.id) === homeId ? "900" : "600" },
+                        ]}
+                      >
+                        {m.away?.name}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.h2hScore, { color: colors.text }]}>
+                    {m.homeScore ?? "-"}{"\n"}{m.awayScore ?? "-"}
+                  </Text>
+                </View>
+              );
+            })}
+          </>
+        ) : (
+          <Text style={[styles.empty, { color: colors.muted, marginVertical: 14 }]}>
+            {tx(my, "Head-to-head meeting history is unavailable.", "ထိပ်တိုက်တွေ့ဆုံမှု မှတ်တမ်း မရပါ။")}
+          </Text>
+        )}
+      </View>
+
+      {/* 2. FORM COMPARISON MATRIX */}
+      <FormComparisonMatrix
+        current={current}
+        homeMatches={homeMatches}
+        awayMatches={awayMatches}
+        my={my}
+        colors={colors}
+      />
+
+      {/* 3. HOME TEAM PREVIOUS 5 MATCHES PLAYED */}
+      <TeamPreviousMatchesCard
+        title={current?.home?.name ? `${current.home.name}` : tx(my, "Home Team", "အိမ်ရှင်အသင်း")}
+        team={current?.home}
+        matches={homeMatches}
+        my={my}
+        colors={colors}
+      />
+
+      {/* 4. AWAY TEAM PREVIOUS 5 MATCHES PLAYED */}
+      <TeamPreviousMatchesCard
+        title={current?.away?.name ? `${current.away.name}` : tx(my, "Away Team", "ဧည့်သည်အသင်း")}
+        team={current?.away}
+        matches={awayMatches}
+        my={my}
+        colors={colors}
+      />
+    </>
   );
 }
 
@@ -1179,11 +1492,29 @@ export default function NativeMatchScreenV5({ match, goBack, language = "my" }) 
         current?.home?.id ? fetchTeamMatches(current.home.id).catch(() => null) : null,
         current?.away?.id ? fetchTeamMatches(current.away.id).catch(() => null) : null,
       ]);
+
+      const cachedHome = current?.home ? findTeamMatchesFromFastCache(current.home) : [];
+      const cachedAway = current?.away ? findTeamMatchesFromFastCache(current.away) : [];
+
+      const mergeMatches = (remoteList, localList) => {
+        const seen = new Set();
+        const res = [];
+        for (const m of [...(remoteList || []), ...(localList || [])]) {
+          if (!m?.id || seen.has(String(m.id))) continue;
+          seen.add(String(m.id));
+          res.push(m);
+        }
+        return res;
+      };
+
+      const homeMatches = mergeMatches(normalizeTeamMatches(h), cachedHome);
+      const awayMatches = mergeMatches(normalizeTeamMatches(a), cachedAway);
+
       setState({
         loading: false,
         data: bundle,
-        homeMatches: normalizeTeamMatches(h),
-        awayMatches: normalizeTeamMatches(a),
+        homeMatches,
+        awayMatches,
         error: "",
       });
     } catch (e) {
@@ -1304,8 +1635,20 @@ export default function NativeMatchScreenV5({ match, goBack, language = "my" }) 
           <>
             <Predictor match={current} my={my} colors={colors} />
             <Events payload={state.data?.events} my={my} colors={colors} />
-            <RecentForm title={tx(my, "Home team form", "အိမ်ရှင် နောက်ဆုံးပွဲများ")} team={current.home} matches={state.homeMatches} colors={colors} />
-            <RecentForm title={tx(my, "Away team form", "ဧည့်သည် နောက်ဆုံးပွဲများ")} team={current.away} matches={state.awayMatches} colors={colors} />
+            <TeamPreviousMatchesCard
+              title={current?.home?.name ? `${current.home.name} (Home Form)` : tx(my, "Home team form", "အိမ်ရှင် နောက်ဆုံးပွဲများ")}
+              team={current.home}
+              matches={state.homeMatches}
+              my={my}
+              colors={colors}
+            />
+            <TeamPreviousMatchesCard
+              title={current?.away?.name ? `${current.away.name} (Away Form)` : tx(my, "Away team form", "ဧည့်သည် နောက်ဆုံးပွဲများ")}
+              team={current.away}
+              matches={state.awayMatches}
+              my={my}
+              colors={colors}
+            />
             <NextMatches my={my} current={current} homeMatches={state.homeMatches} awayMatches={state.awayMatches} colors={colors} />
             <PollCard match={current} my={my} colors={colors} />
             <MatchInfo match={current} my={my} colors={colors} />
@@ -1323,7 +1666,14 @@ export default function NativeMatchScreenV5({ match, goBack, language = "my" }) 
         ) : null}
 
         {tab === "H2H" ? (
-          <H2HPanel payload={state.data?.h2h} my={my} current={current} colors={colors} />
+          <H2HPanel
+            payload={state.data?.h2h}
+            homeMatches={state.homeMatches}
+            awayMatches={state.awayMatches}
+            my={my}
+            current={current}
+            colors={colors}
+          />
         ) : null}
 
         {tab === "TABLE" ? (
@@ -1442,9 +1792,52 @@ const styles = StyleSheet.create({
   h2hMeta: { width: 70 },
   h2hDate: { fontSize: 8.8 },
   h2hCompetition: { fontSize: 7.8, marginTop: 2 },
-  h2hTeams: { flex: 1, minWidth: 0 },
+  h2hTeams: { flex: 1, minWidth: 0, gap: 3 },
+  h2hTeamLine: { flexDirection: "row", alignItems: "center", gap: 5 },
   h2hTeam: { fontSize: 10.5, lineHeight: 17 },
   h2hScore: { width: 26, fontSize: 11.5, fontWeight: "900", fontVariant: ["tabular-nums"], lineHeight: 17, textAlign: "center" },
+
+  // Form Cards & Previous Matches styles
+  formCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 },
+  formCardTeamWrap: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  formCardTeamName: { fontSize: 13, fontWeight: "900" },
+  formCardSub: { fontSize: 8.8, marginTop: 2 },
+  formPillsRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  formPill: { width: 22, height: 22, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  formPillText: { fontSize: 9.5, fontWeight: "900", color: "#FFFFFF" },
+  formSummaryBanner: { flexDirection: "row", alignItems: "center", borderRadius: 10, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
+  formSummaryItem: { flex: 1, alignItems: "center" },
+  formSummaryVal: { fontSize: 12.5, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  formSummarySubVal: { fontSize: 9.5, fontWeight: "600", color: "#9CA3AF" },
+  formSummaryLbl: { fontSize: 8, fontWeight: "800", letterSpacing: 0.5, marginTop: 2 },
+  formSummaryDivider: { width: 1, height: 24 },
+  prevMatchesList: { marginTop: 2 },
+  prevMatchRow: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7 },
+  prevMatchResultBadge: { width: 24, height: 24, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  prevMatchResultText: { fontSize: 9.5, fontWeight: "900", color: "#FFFFFF" },
+  prevMatchMeta: { width: 72 },
+  prevMatchDate: { fontSize: 8.8, fontWeight: "700" },
+  prevMatchComp: { fontSize: 7.8, marginTop: 1.5 },
+  prevMatchOpponent: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  homeAwayTag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  homeAwayTagText: { fontSize: 8, fontWeight: "900" },
+  prevMatchOppName: { flex: 1, fontSize: 10.5, fontWeight: "700" },
+  prevMatchScorePill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+  prevMatchScoreText: { fontSize: 10.5, fontWeight: "900", fontVariant: ["tabular-nums"] },
+
+  // Matrix styles
+  matrixTeamsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, marginBottom: 10 },
+  matrixTeamCol: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7 },
+  matrixTeamName: { flex: 1, fontSize: 11.5, fontWeight: "800" },
+  matrixVs: { fontSize: 9.5, fontWeight: "900", paddingHorizontal: 8 },
+  matrixRows: { marginTop: 4 },
+  matrixRow: { minHeight: 34, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 6, borderBottomWidth: 1 },
+  matrixPills: { flex: 1, flexDirection: "row", alignItems: "center", gap: 3 },
+  matrixMiniPill: { width: 16, height: 16, borderRadius: 4, alignItems: "center", justifyContent: "center" },
+  matrixMiniPillText: { fontSize: 8, fontWeight: "900", color: "#FFFFFF" },
+  matrixMetricLbl: { width: 130, fontSize: 8.5, fontWeight: "800", letterSpacing: 0.5, textAlign: "center" },
+  matrixValLeft: { flex: 1, fontSize: 11, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  matrixValRight: { flex: 1, fontSize: 11, fontWeight: "900", fontVariant: ["tabular-nums"], textAlign: "right" },
   tableHead: { minHeight: 36, flexDirection: "row", alignItems: "center", borderBottomWidth: 1 },
   tableCell: { width: 36, fontSize: 8.5, fontWeight: "900", textAlign: "center" },
   tablePos: { width: 28 },

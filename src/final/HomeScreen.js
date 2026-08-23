@@ -20,6 +20,7 @@ import {
   fetchFastFootballMatches,
   peekFastFootballMatches,
   prefetchFastFootballMatches,
+  prefetchRecentPastMatches,
 } from "../services/fastFootballApi";
 import { regionalNationalTeamPriority } from "../services/regionalFootball";
 import {
@@ -507,8 +508,6 @@ export default function HomeScreen({
           error: "",
           matches: result?.matches || [],
         });
-        // Pre-warm prediction & adjacent dates cache silently
-        prefetchFastFootballMatches([bangkokDate(1), bangkokDate(2), bangkokDate(-1)]);
       } catch (err) {
         setState((prev) => ({
           ...prev,
