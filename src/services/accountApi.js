@@ -95,15 +95,33 @@ export function extractUser(payload) {
     if (payload.data.user) raw = payload.data.user;
     else if (payload.data.profile) raw = payload.data.profile;
     else raw = payload.data;
-  } else if (payload.email || payload.name || payload.id || payload.userId) {
+  } else if (payload.email || payload.name || payload.displayName || payload.id || payload.userId) {
     raw = payload;
   }
   if (!raw) return null;
-  const avatar = normalizeAvatarUrl(raw?.avatar || raw?.avatarUrl || raw?.image);
+  const avatar = normalizeAvatarUrl(
+    raw?.avatar ||
+      raw?.avatarUrl ||
+      raw?.image ||
+      raw?.photoURL ||
+      raw?.profilePhoto ||
+      raw?.picture ||
+      raw?.photo ||
+      payload?.avatar ||
+      payload?.avatarUrl ||
+      payload?.image ||
+      payload?.photoURL
+  );
   return {
     ...raw,
+    id: raw.id || raw.userId || raw._id,
+    name: raw.name || raw.displayName || raw.username || (raw.email ? raw.email.split("@")[0] : "MST User"),
+    displayName: raw.displayName || raw.name || raw.username || (raw.email ? raw.email.split("@")[0] : "MST User"),
+    email: raw.email || "",
     avatar,
     avatarUrl: avatar,
+    points: raw.points ?? raw.predictionPoints ?? raw.score ?? 0,
+    role: raw.role || "user",
   };
 }
 

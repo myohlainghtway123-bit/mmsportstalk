@@ -17,6 +17,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../theme/ThemeContext";
 import {
   deleteAvatar,
+  extractUser,
   getAuthStatus,
   getProfile,
   logout,
@@ -28,15 +29,13 @@ import {
 } from "../services/accountApi";
 
 function profileFrom(payload, user) {
-  const source = payload?.data?.profile || payload?.profile || payload?.data || payload || user || {};
-  const raw = source?.user || source;
-  const avatar = normalizeAvatarUrl(raw?.avatar || raw?.avatarUrl || raw?.image || user?.avatar || user?.avatarUrl);
+  const parsed = extractUser(payload) || extractUser(user) || {};
   return {
-    name: raw?.displayName || raw?.name || raw?.username || user?.displayName || user?.name || "MST User",
-    email: raw?.email || user?.email || "",
-    avatar,
-    points: raw?.points ?? raw?.predictionPoints ?? source?.points ?? null,
-    joined: raw?.createdAt || raw?.created_at || source?.createdAt || null,
+    name: parsed.name || parsed.displayName || "MST User",
+    email: parsed.email || "",
+    avatar: parsed.avatar || parsed.avatarUrl || null,
+    points: parsed.points ?? null,
+    joined: parsed.createdAt || parsed.created_at || null,
   };
 }
 

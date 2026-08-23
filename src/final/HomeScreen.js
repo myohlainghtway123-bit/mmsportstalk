@@ -22,16 +22,56 @@ import {
   prefetchFastFootballMatches,
 } from "../services/fastFootballApi";
 import { regionalNationalTeamPriority } from "../services/regionalFootball";
-import { getAuthStatus, getFavorites, getProfile, normalizeAvatarUrl, normalizeFavoritePayload } from "../services/accountApi";
+import {
+  extractUser,
+  getAuthStatus,
+  getFavorites,
+  getProfile,
+  normalizeAvatarUrl,
+  normalizeFavoritePayload,
+} from "../services/accountApi";
 import { loadOnboardingPreferences } from "../services/onboardingStore";
 
 const DATE_OFFSETS = Array.from({ length: 15 }, (_, i) => i - 7);
 
+// -------------------------------------------------------------
+// WORLD LEAGUE & EUROPEAN COMPETITIONS PRIORITY RANKING (1st, 1st SHOW)
+// -------------------------------------------------------------
 const MAJOR_COMPETITIONS = [
-  [/(world cup|euro championship|uefa euro|copa america|champions league|club world cup|afc asian cup|africa cup of nations)/i, 170],
-  [/(premier league|la ?liga|serie a|bundesliga|ligue 1)/i, 140],
-  [/(europa league|uefa europa)/i, 110],
-  [/(conference league|fa cup|copa del rey|dfb pokal|coppa italia|coupe de france|carabao cup|efl cup)/i, 80],
+  // 1. Top Tier European & Global Championships (1000 - 900)
+  [/\b(champions\s*league|ucl)\b/i, 1000],
+  [/\b(fifa\s*world\s*cup|world\s*cup)\b/i, 980],
+  [/\b(uefa\s*euro|euro\s*championship)\b/i, 960],
+  [/\b(europa\s*league|uel)\b/i, 950],
+  [/\b(copa\s*america)\b/i, 920],
+  [/\b(conference\s*league|uecl|uefa\s*super\s*cup|club\s*world\s*cup)\b/i, 900],
+  [/\b(afc\s*asian\s*cup|africa\s*cup\s*of\s*nations|afcon)\b/i, 880],
+
+  // 2. The Big 5 European Men's Leagues (850 - 770)
+  [/\b(premier\s*league|epl|english\s*premier\s*league)\b/i, 850],
+  [/\b(la\s*liga|laliga|primera\s*division)\b/i, 830],
+  [/\b(serie\s*a|calcio)\b/i, 810],
+  [/\b(bundesliga|1\.\s*bundesliga)\b/i, 790],
+  [/\b(ligue\s*1|french\s*ligue\s*1)\b/i, 770],
+
+  // 3. Top Domestic Cups of the Big 5 Leagues (750 - 700)
+  [/\b(fa\s*cup)\b/i, 750],
+  [/\b(copa\s*del\s*rey)\b/i, 740],
+  [/\b(coppa\s*italia)\b/i, 730],
+  [/\b(dfb\s*pokal)\b/i, 720],
+  [/\b(coupe\s*de\s*france)\b/i, 710],
+  [/\b(carabao\s*cup|efl\s*cup)\b/i, 700],
+
+  // 4. Major Secondary European & Top World Leagues (680 - 580)
+  [/\b(primeira\s*liga|liga\s*portugal)\b/i, 680],
+  [/\b(eredivisie)\b/i, 670],
+  [/\b(uefa\s*nations\s*league|nations\s*league)\b/i, 660],
+  [/\b(saudi\s*pro\s*league|roshn\s*saudi)\b/i, 650],
+  [/\b(super\s*lig|s\u00fcper\s*lig)\b/i, 640],
+  [/\b(brasileir\u00e3o|serie\s*a\s*brazil|brasileirao)\b/i, 630],
+  [/\b(primera\s*division\s*argentina|liga\s*profesional)\b/i, 620],
+  [/\b(major\s*league\s*soccer|mls)\b/i, 600],
+  [/\b(championship|efl\s*championship)\b/i, 580],
 ];
 
 const BIG_TEAMS = [
@@ -63,9 +103,9 @@ function competitionWeight(title) {
   for (const [regex, weight] of MAJOR_COMPETITIONS) {
     if (regex.test(title)) return weight;
   }
-  if (ASEAN_TOURNAMENT_REGEX.test(title)) return 120;
-  if (ASEAN_LEAGUE_REGEX.test(title)) return 70;
-  return 15;
+  if (ASEAN_TOURNAMENT_REGEX.test(title)) return 400;
+  if (ASEAN_LEAGUE_REGEX.test(title)) return 300;
+  return 20;
 }
 
 function isYouthMatch(match) {
@@ -410,10 +450,11 @@ export default function HomeScreen({
 
       if (auth.authenticated) {
         profile = await getProfile().catch(() => null);
-        if (profile) {
+        const parsed = extractUser(profile) || extractUser(auth.user) || extractUser(auth.payload);
+        if (parsed) {
           setCurrentUser({
-            name: profile.name || profile.displayName || profile.email || "MST Fan",
-            avatar: normalizeAvatarUrl(profile.avatarUrl || profile.avatar || profile.photoURL),
+            name: parsed.name || parsed.displayName || parsed.email || "MST Fan",
+            avatar: parsed.avatar || parsed.avatarUrl || null,
           });
         }
         const favData = await getFavorites().catch(() => null);
@@ -466,6 +507,8 @@ export default function HomeScreen({
           error: "",
           matches: result?.matches || [],
         });
+        // Pre-warm prediction & adjacent dates cache silently
+        prefetchFastFootballMatches([bangkokDate(1), bangkokDate(2), bangkokDate(-1)]);
       } catch (err) {
         setState((prev) => ({
           ...prev,
