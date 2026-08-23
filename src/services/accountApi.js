@@ -1,4 +1,5 @@
 import { syncStoredOnboardingFavorites } from "./onboardingStore";
+import { favoriteMetadata } from "./favoriteCatalog";
 const API_BASE = "https://myanmarsportstalk.com/api";
 
 export class MstApiError extends Error {
@@ -95,13 +96,6 @@ export const getFavorites = (options) => api("/account/favorites", options);
 export const getAccountPredictions = (options) => api("/account/predictions", options);
 export const getLeaderboard = (options) => api("/predictions/leaderboard", options);
 
-function entityTypeAliases(kind) {
-  const value = String(kind || "team").toLowerCase();
-  if (value.startsWith("comp") || value.startsWith("league")) return ["competition", "league"];
-  if (value.startsWith("player")) return ["player"];
-  return ["team"];
-}
-
 async function tryMutation(attempts) {
   let lastError = null;
   for (const attempt of attempts) {
@@ -115,42 +109,54 @@ async function tryMutation(attempts) {
   throw lastError || new MstApiError("MST API did not accept the request.");
 }
 
-export async function setFavorite({ kind, id, active }) {
-  const aliases = entityTypeAliases(kind);
-  const entityId = String(id);
-  const attempts = [];
-  for (const type of aliases) {
-    attempts.push({ path: "/account/favorites", options: { method: "POST", body: { type, id: entityId, action: active ? "add" : "remove" } } });
-    attempts.push({ path: "/account/favorites", options: { method: "POST", body: { kind: type, entityId, favorite: Boolean(active) } } });
-    attempts.push({ path: "/account/favorites", options: { method: "PUT", body: { type, id: entityId, active: Boolean(active) } } });
-    const idField = type === "team" ? "teamId" : type === "player" ? "playerId" : "competitionId";
-    attempts.push({ path: "/account/favorites", options: active ? { method: "POST", body: { [idField]: entityId } } : { method: "DELETE", body: { [idField]: entityId } } });
-    attempts.push({ path: "/account/favorites", options: active ? { method: "POST", body: { type, id: entityId } } : { method: "DELETE", body: { type, id: entityId } } });
+function canonicalFavoriteKind(kind) {
+  const value = String(kind || "").toLowerCase();
+  if (value.startsWith("comp") || value.startsWith("league")) return "competition";
+  if (value.startsWith("player")) return "player";
+  if (value.startsWith("team")) return "team";
+  return null;
+}
+
+export async function setFavorite({ kind, id, name, imageUrl, logo, photo, country, competitionId, competitionName, active }) {
+  const type = canonicalFavoriteKind(kind);
+  const entityId = String(id ?? "").trim();
+  if (!type || !/^\d{1,12}$/.test(entityId)) throw new MstApiError("Choose a valid favorite.");
+
+  if (!active) {
+    return api("/account/favorites", { method: "DELETE", body: { kind: type, id: entityId } });
   }
-  return tryMutation(attempts);
+
+  const curated = favoriteMetadata(type, entityId);
+  const finalName = String(name || curated?.name || "").trim();
+  if (!finalName) throw new MstApiError("Favorite name is unavailable.");
+  const finalImage = imageUrl || logo || photo || curated?.imageUrl || curated?.logo || curated?.photo || null;
+
+  return api("/account/favorites", {
+    method: "POST",
+    body: {
+      kind: type,
+      id: entityId,
+      name: finalName,
+      imageUrl: finalImage,
+      country: country || curated?.country || null,
+      competitionId: competitionId || null,
+      competitionName: competitionName || null,
+    },
+  });
 }
 
 function scoreNumber(value) {
   const n = Number(value);
-  return Number.isInteger(n) && n >= 0 && n <= 99 ? n : null;
+  return Number.isInteger(n) && n >= 0 && n <= 20 ? n : null;
 }
 
 export async function savePredictionScore({ matchId, homeScore, awayScore }) {
-  const id = String(matchId);
+  const id = String(matchId || "").trim();
   const home = scoreNumber(homeScore);
   const away = scoreNumber(awayScore);
-  if (home === null || away === null) throw new MstApiError("Enter a valid score for both teams.");
-
-  const attempts = [
-    { path: "/account/predictions", options: { method: "POST", body: { matchId: id, homeScore: home, awayScore: away } } },
-    { path: "/account/predictions", options: { method: "POST", body: { fixtureId: id, homeScore: home, awayScore: away } } },
-    { path: "/account/predictions", options: { method: "POST", body: { matchId: id, predictedHomeScore: home, predictedAwayScore: away } } },
-    { path: "/account/predictions", options: { method: "POST", body: { fixtureId: id, predictedHomeScore: home, predictedAwayScore: away } } },
-    { path: "/account/predictions", options: { method: "POST", body: { matchId: id, home_score: home, away_score: away } } },
-    { path: "/account/predictions", options: { method: "POST", body: { fixture_id: id, home_score: home, away_score: away } } },
-    { path: "/account/predictions", options: { method: "PUT", body: { matchId: id, homeScore: home, awayScore: away } } },
-  ];
-  return tryMutation(attempts);
+  if (!/^\d{1,12}$/.test(id)) throw new MstApiError("Choose a valid match.");
+  if (home === null || away === null) throw new MstApiError("Enter a valid predicted score from 0 to 20.");
+  return api("/account/predictions", { method: "POST", body: { matchId: id, homeScore: home, awayScore: away } });
 }
 
 // Kept only for backwards compatibility with older screens. New prediction UI uses savePredictionScore.
@@ -204,10 +210,34 @@ function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function storedPredictionMatch(row) {
+  const id = firstDefined(row?.matchId, row?.fixtureId, row?.match_id, row?.fixture_id);
+  const homeName = firstDefined(row?.homeTeamName, row?.home_team_name);
+  const awayName = firstDefined(row?.awayTeamName, row?.away_team_name);
+  if (!id || !homeName || !awayName) return null;
+  return {
+    id,
+    competition: firstDefined(row?.competitionName, row?.competition_name, "Football"),
+    competitionId: firstDefined(row?.competitionId, row?.competition_id, null),
+    kickoff: firstDefined(row?.kickoff, null),
+    home: {
+      id: firstDefined(row?.homeTeamId, row?.home_team_id, null),
+      name: homeName,
+      logo: firstDefined(row?.homeTeamLogo, row?.home_team_logo, null),
+    },
+    away: {
+      id: firstDefined(row?.awayTeamId, row?.away_team_id, null),
+      name: awayName,
+      logo: firstDefined(row?.awayTeamLogo, row?.away_team_logo, null),
+    },
+  };
+}
+
 export function normalizePredictionPayload(payload) {
   const rows = largestArray(payload);
   return rows.map((row, index) => {
-    const match = row?.match ?? row?.fixture ?? row?.game ?? null;
+    const embeddedMatch = row?.match ?? row?.fixture ?? row?.game ?? null;
+    const match = embeddedMatch || storedPredictionMatch(row);
     const predictedHome = firstDefined(row?.homeScore, row?.predictedHomeScore, row?.predicted_home_score, row?.home_score, row?.prediction?.home, row?.prediction?.homeScore);
     const predictedAway = firstDefined(row?.awayScore, row?.predictedAwayScore, row?.predicted_away_score, row?.away_score, row?.prediction?.away, row?.prediction?.awayScore);
     const finalHome = firstDefined(row?.finalHomeScore, row?.resultHomeScore, row?.actualHomeScore, row?.final_home_score, row?.result?.home, match?.homeScore, match?.goals?.home);
@@ -220,9 +250,9 @@ export function normalizePredictionPayload(payload) {
       finalHomeScore: scoreNumber(finalHome),
       finalAwayScore: scoreNumber(finalAway),
       points: Number(firstDefined(row?.points, row?.awardedPoints, row?.score, 0)) || 0,
-      exact: Boolean(firstDefined(row?.exact, row?.isExact, row?.exactScore, row?.exact_score, false)),
-      correct: Boolean(firstDefined(row?.correct, row?.correctOutcome, row?.correct_result, false)),
-      status: String(firstDefined(row?.status, row?.resultStatus, row?.state, "")),
+      exact: Boolean(firstDefined(row?.exactHit, row?.exact, row?.isExact, row?.exactScore, row?.exact_score, false)),
+      correct: Boolean(firstDefined(row?.outcomeHit, row?.correct, row?.correctOutcome, row?.correct_result, false)),
+      status: String(firstDefined(row?.status, row?.resultStatus, row?.state, row?.settledAt ? "settled" : "pending", "")),
       match,
       raw: row,
     };
@@ -236,9 +266,9 @@ export function normalizeLeaderboard(payload) {
     id: row?.userId ?? row?.id ?? `leader-${index}`,
     name: row?.displayName ?? row?.name ?? row?.username ?? row?.email ?? "MST User",
     points: Number(row?.points ?? row?.totalPoints ?? row?.score ?? 0),
-    exact: Number(row?.exact ?? row?.exactScores ?? row?.exactScoreCount ?? row?.exact_count ?? 0),
-    correct: Number(row?.correct ?? row?.correctPredictions ?? row?.correctResults ?? row?.wins ?? 0),
-    played: Number(row?.played ?? row?.predictions ?? row?.predictionCount ?? row?.totalPredictions ?? 0),
+    exact: Number(row?.exactHits ?? row?.exact ?? row?.exactScores ?? row?.exactScoreCount ?? row?.exact_count ?? 0),
+    correct: Number(row?.correctOutcomes ?? row?.correct ?? row?.correctPredictions ?? row?.correctResults ?? row?.wins ?? 0),
+    played: Number(row?.settledPredictions ?? row?.played ?? row?.predictions ?? row?.predictionCount ?? row?.totalPredictions ?? 0),
     avatar: row?.avatar ?? row?.avatarUrl ?? row?.image ?? null,
     raw: row,
   }));

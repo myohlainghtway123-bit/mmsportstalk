@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { BackHandler, Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "./final/HomeScreen";
@@ -7,25 +7,25 @@ const SITE = "https://myanmarsportstalk.com";
 const YOUTUBE = "https://youtube.com/@myanmarsportstalk";
 const FACEBOOK = "https://www.facebook.com/profile.php?id=61585572826885";
 const TIKTOK = "https://www.tiktok.com/@myanmar.sports.talk";
-
 const C = { bg:"#080A0C", bg2:"#0B0E10", card:"#111416", border:"#24292D", border2:"#1D2226", red:"#F3262D", gold:"#F4C84D", text:"#FFFFFF", text2:"#D0D2D4", muted:"#92979B" };
+
 const NAV = [
   ["home", "Matches", "ပွဲများ", "football-outline", "football"],
   ["content-news", "News", "သတင်း", "newspaper-outline", "newspaper"],
   ["favorites", "Favorites", "အကြိုက်ဆုံး", "star-outline", "star"],
   ["tips", "Tips", "Tips", "diamond-outline", "diamond"],
   ["prediction", "Predict", "ခန့်မှန်း", "trophy-outline", "trophy"],
-  ["more", "More", "နောက်ထပ်", "ellipsis-horizontal", "ellipsis-horizontal"],
+  ["more", "More", "နောက်ထပ်", "ellipsis-horizontal", "ellipsis-horizontal"]
 ];
 
 function LazyContent(props) { const Screen = require("./phase3/ContentScreens").default; return <Screen {...props}/>; }
 function LazyScores(props) { const Screen = require("./final/QuickScoresScreen").default; return <Screen {...props}/>; }
-function LazyFavorites(props) { const Screen = require("./phase2/Phase2Screens").FavoritesScreen; return <Screen {...props}/>; }
+function LazyFavorites(props) { const Screen = require("./final/FavoritesScreenV2").default; return <Screen {...props}/>; }
 function LazyTips(props) { const Screen = require("./final/TipsScreen").default; return <Screen {...props}/>; }
 function LazyPrediction(props) { const Screen = require("./final/PredictionScreenV2").default; return <Screen {...props}/>; }
-function LazyAccount(props) { const Screen = require("./phase2/Phase2Screens").AccountScreen; return <Screen {...props}/>; }
-function LazyNotifications(props) { const Screen = require("./phase4/Phase4Screens").NotificationsScreen; return <Screen {...props}/>; }
-function LazySettings(props) { const Screen = require("./phase4/Phase4Screens").SettingsScreen; return <Screen {...props}/>; }
+function LazyAccount(props) { const Screen = require("./final/AccountScreenV2").default; return <Screen {...props}/>; }
+function LazyNotifications(props) { const Screen = require("./final/NotificationsScreenV2").default; return <Screen {...props}/>; }
+function LazySettings(props) { const Screen = require("./final/SettingsScreenV2").default; return <Screen {...props}/>; }
 function LazyAbout(props) { const Screen = require("./phase4/Phase4Screens").AboutScreen; return <Screen {...props}/>; }
 function LazySearch(props) { const Screen = require("./final/SearchScreen").default; return <Screen {...props}/>; }
 function LazyMatch(props) { const Screen = require("./final/NativeMatchScreenV5").default; return <Screen {...props}/>; }
@@ -37,27 +37,27 @@ function BottomNav({ active, onChange, language }) {
     const selected = active === id;
     return <Pressable key={id} hitSlop={5} style={s.navItem} onPress={() => onChange(id)} android_ripple={{color:"rgba(255,255,255,.035)",borderless:true}}>
       <Ionicons name={selected ? activeIcon : icon} size={21} color={selected ? (id === "tips" ? C.gold : C.red) : C.muted}/>
-      <Text numberOfLines={1} style={[s.navText, selected && s.navTextActive,selected&&id==="tips"&&{color:C.gold}]}>{language === "my" ? my : en}</Text>
+      <Text numberOfLines={1} style={[s.navText, selected && s.navTextActive, selected && id === "tips" && {color:C.gold}]}>{language === "my" ? my : en}</Text>
     </Pressable>;
   })}</View>;
 }
 
-function MoreScreen({ navigate, openAccount, openNotifications, openFavorites, openTips, openPrediction, openSettings, openAbout, language, setLanguage }) {
+function MoreScreen({ navigate, openAccount, openNotifications, language, setLanguage }) {
   const my = language === "my";
   const rows = [
     ["person-circle-outline", my ? "ကျွန်ုပ်၏အကောင့်" : "My Account", my ? "MST အကောင့်နှင့် ပရိုဖိုင်" : "Profile, login and MST account", openAccount],
-    ["star-outline", my ? "အကြိုက်ဆုံး" : "Favorites", my ? "အသင်း၊ ပြိုင်ပွဲနှင့် ကစားသမားများ" : "Teams, competitions and players", openFavorites || (() => navigate("favorites"))],
-    ["diamond-outline", "MST Tips", my ? "Tipsters၊ Credits နှင့် premium tips" : "Tipsters, Credits and premium analysis", openTips || (() => navigate("tips"))],
-    ["trophy-outline", my ? "ခန့်မှန်းချက်များ" : "Predictions", my ? "အခမဲ့ရလဒ်ခန့်မှန်း၊ အမှတ်နှင့် အဆင့်" : "Free score predictions, points and ranking", openPrediction || (() => navigate("prediction"))],
+    ["star-outline", my ? "အကြိုက်ဆုံး" : "Favorites", my ? "အသင်း၊ ပြိုင်ပွဲနှင့် ကစားသမားများ" : "Teams, competitions and players", () => navigate("favorites")],
+    ["diamond-outline", "MST Tips", my ? "Tipsters၊ Credits နှင့် premium tips" : "Tipsters, Credits and premium analysis", () => navigate("tips")],
+    ["trophy-outline", my ? "ခန့်မှန်းချက်များ" : "Predictions", my ? "အခမဲ့ရလဒ်ခန့်မှန်း၊ အမှတ်နှင့် အဆင့်" : "Free score predictions, points and ranking", () => navigate("prediction")],
     ["notifications-outline", my ? "အသိပေးချက်များ" : "Notifications", my ? "သတင်း၊ တိုက်ရိုက်ရလဒ်နှင့် ပွဲအသိပေးချက်" : "News, live scores and match alerts", openNotifications],
-    ["settings-outline", my ? "ဆက်တင်များ" : "Settings", my ? "App နှင့် အကောင့်ဆက်တင်" : "App and account settings", openSettings || (() => navigate("settings"))],
-    ["information-circle-outline", my ? "MST Score အကြောင်း" : "About MST Score", my ? "Myanmar Sports Talk ဘောလုံး app" : "Myanmar Sports Talk football app", openAbout || (() => navigate("about"))],
+    ["settings-outline", my ? "ဆက်တင်များ" : "Settings", my ? "App နှင့် အကောင့်ဆက်တင်" : "App and account settings", () => navigate("settings")],
+    ["information-circle-outline", my ? "MST Score အကြောင်း" : "About MST Score", my ? "Myanmar Sports Talk ဘောလုံး app" : "Myanmar Sports Talk football app", () => navigate("about")]
   ];
   const socials = [
     ["logo-youtube", "YouTube", my ? "နောက်ဆုံး MST ဗီဒီယိုများ" : "Latest MST videos", YOUTUBE, C.red],
     ["logo-facebook", "Facebook", my ? "Myanmar Sports Talk စာမျက်နှာ" : "Myanmar Sports Talk page", FACEBOOK, "#4C8BF5"],
     ["logo-tiktok", "TikTok", "@myanmar.sports.talk", TIKTOK, C.text],
-    ["globe-outline", my ? "ဝဘ်ဆိုက်" : "Website", "myanmarsportstalk.com", SITE, C.text2],
+    ["globe-outline", my ? "ဝဘ်ဆိုက်" : "Website", "myanmarsportstalk.com", SITE, C.text2]
   ];
   return <View style={s.screen}>
     <View style={s.header}><View><Text style={s.title}>{my ? "နောက်ထပ်" : "More"}</Text><Text style={s.subtitle}>MST Score</Text></View><Pressable hitSlop={8} onPress={openAccount}><Ionicons name="person-circle-outline" size={31} color={C.text}/></Pressable></View>
@@ -73,97 +73,123 @@ function MoreScreen({ navigate, openAccount, openNotifications, openFavorites, o
 }
 
 export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChange } = {}) {
-  const [mode,setMode] = useState("home");
-  const [selected,setSelected] = useState(null);
-  const [stack,setStack] = useState([]);
-  const [language,setLanguageState] = useState(initialLanguage === "en" ? "en" : "my");
+  const [mode, setMode] = useState("home");
+  const [selected, setSelected] = useState(null);
+  const [returnMode, setReturnMode] = useState("home");
+  const [language, setLanguageState] = useState(initialLanguage === "en" ? "en" : "my");
+  const historyRef = useRef([]);
 
-  const setLanguage = useCallback((value) => {
+  const setLanguage = (value) => {
     const next = value === "en" ? "en" : "my";
     setLanguageState(next);
     onLanguageChange?.(next);
-  }, [onLanguageChange]);
+  };
 
-  const navigateTo = useCallback((nextMode, nextSelected = null) => {
-    setStack((prev) => [...prev, { mode, selected }]);
-    setSelected(nextSelected);
-    setMode(nextMode);
-  }, [mode, selected]);
+  const rememberOrigin = () => mode || "home";
 
-  const goBack = useCallback(() => {
-    if (stack.length > 0) {
-      const prev = stack[stack.length - 1];
-      setStack((p) => p.slice(0, -1));
-      setSelected(prev.selected || null);
-      setMode(prev.mode || "home");
-      return true;
-    }
-    if (mode !== "home") {
-      setSelected(null);
-      setMode("home");
-      return true;
-    }
-    return false;
-  }, [stack, mode]);
-
-  useEffect(() => {
-    const onHardwareBack = () => {
-      return goBack();
-    };
-    const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
-    return () => sub.remove();
-  }, [goBack]);
-
-  const goHome = useCallback(() => {
-    setStack([]);
+  const goRoot = (next = "home") => {
+    historyRef.current = [];
     setSelected(null);
-    setMode("home");
-  }, []);
+    setReturnMode("home");
+    setMode(next || "home");
+  };
 
-  const openMatch = useCallback((match) => { if (!match) return; navigateTo("match", match); }, [navigateTo]);
-  const openEntity = useCallback((type, entity) => { if (!entity?.id) return; navigateTo("entity", { type, entity }); }, [navigateTo]);
-  const openArticle = useCallback((article) => { if (!article) return; navigateTo("article", article); }, [navigateTo]);
-  const openAccount = useCallback(() => { navigateTo("account"); }, [navigateTo]);
-  const openNotifications = useCallback(() => { navigateTo("notifications"); }, [navigateTo]);
-  const openSettings = useCallback(() => { navigateTo("settings"); }, [navigateTo]);
-  const openAbout = useCallback(() => { navigateTo("about"); }, [navigateTo]);
-  const openSearch = useCallback(() => { navigateTo("search"); }, [navigateTo]);
-  const openFavorites = useCallback(() => { navigateTo("favorites"); }, [navigateTo]);
-  const openTips = useCallback(() => { navigateTo("tips"); }, [navigateTo]);
-  const openPrediction = useCallback(() => { navigateTo("prediction"); }, [navigateTo]);
+  const pushMode = (next, origin) => {
+    const from = origin || rememberOrigin();
+    historyRef.current.push(from);
+    setReturnMode(from);
+    setMode(next);
+  };
 
-  const switchTab = useCallback((tab) => {
-    setStack([]);
-    setSelected(null);
-    setMode(tab);
-  }, []);
+  const goHome = () => goRoot("home");
+
+  const openMatch = (match, origin) => {
+    if (!match) return;
+    const from = origin || rememberOrigin();
+    historyRef.current.push(from);
+    setReturnMode(from);
+    setSelected(match);
+    setMode("match");
+  };
+
+  const openEntity = (type, entity, origin) => {
+    if (!entity?.id) return;
+    const from = origin || rememberOrigin();
+    historyRef.current.push(from);
+    setReturnMode(from);
+    setSelected({ type, entity });
+    setMode("entity");
+  };
+
+  const openArticle = (article) => {
+    if (!article) return;
+    const current = rememberOrigin();
+    const from = current.startsWith("content-") ? current : "content-news";
+    historyRef.current.push(from);
+    setReturnMode(from);
+    setSelected(article);
+    setMode("article");
+  };
+
+  const openAccount = (origin) => pushMode("account", origin);
+  const openNotifications = (origin) => pushMode("notifications", origin);
+  const openSettings = (origin) => pushMode("settings", origin);
+  const openSearch = (origin) => pushMode("search", origin);
+
+  const goReturn = () => {
+    const next = historyRef.current.length ? historyRef.current.pop() : (returnMode || "home");
+    const parent = historyRef.current.length ? historyRef.current[historyRef.current.length - 1] : "home";
+    setReturnMode(parent);
+    setMode(next || "home");
+  };
+
+  const navigateMore = (target) => {
+    if (target === "settings" || target === "about") pushMode(target, "more");
+    else goRoot(target);
+  };
 
   const isContent = mode.startsWith("content-");
   const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
-  const isSubpage = ["account","notifications","settings","about","match","entity","article","search"].includes(mode);
+  const isSubpage = ["account", "notifications", "settings", "about", "match", "entity", "article", "search"].includes(mode);
   const navActive = isContent ? "content-news" : mode;
   const androidInset = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0;
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (isSubpage) {
+        goReturn();
+        return true;
+      }
+      if (mode !== "home") {
+        goHome();
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [mode, isSubpage, returnMode]);
 
   return <View style={s.root}>
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
     <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
-      {mode === "home" ? <HomeScreen language={language} openMatch={openMatch} openNotifications={openNotifications} openSearch={openSearch}/> : null}
-      {isContent ? <LazyContent language={language} initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={openNotifications} onSearch={openSearch}/> : null}
-      {mode === "scores" ? <LazyScores language={language} openMatch={openMatch}/> : null}
-      {mode === "favorites" ? <LazyFavorites language={language} openLeague={(x) => openEntity("competition",x)} openTeam={(x) => openEntity("team",x)} openPlayer={(x) => openEntity("player",x)} openAccount={openAccount}/> : null}
-      {mode === "tips" ? <LazyTips language={language} openMatch={openMatch} openAccount={openAccount}/> : null}
-      {mode === "prediction" ? <LazyPrediction language={language} openMatch={openMatch} openAccount={openAccount}/> : null}
-      {mode === "more" ? <MoreScreen navigate={switchTab} openAccount={openAccount} openNotifications={openNotifications} openFavorites={openFavorites} openTips={openTips} openPrediction={openPrediction} openSettings={openSettings} openAbout={openAbout} language={language} setLanguage={setLanguage}/> : null}
-      {mode === "account" ? <LazyAccount language={language} goBack={goBack}/> : null}
-      {mode === "notifications" ? <LazyNotifications language={language} goBack={goBack} openAccount={openAccount} openMatch={openMatch} openArticle={openArticle} openPrediction={openPrediction} openTips={openTips}/> : null}
-      {mode === "settings" ? <LazySettings language={language} setLanguage={setLanguage} goBack={goBack} openNotifications={openNotifications} openAccount={openAccount} openFavorites={openFavorites}/> : null}
-      {mode === "about" ? <LazyAbout language={language} goBack={goBack}/> : null}
-      {mode === "search" ? <LazySearch language={language} goBack={goBack} openMatch={openMatch} openEntity={openEntity}/> : null}
-      {mode === "match" ? <LazyMatch language={language} match={selected} goBack={goBack}/> : null}
-      {mode === "entity" ? <LazyEntity language={language} type={selected?.type} entity={selected?.entity} goBack={goBack}/> : null}
-      {mode === "article" ? <LazyArticle language={language} article={selected} goBack={goBack}/> : null}
+      {mode === "home" ? <HomeScreen language={language} openMatch={(x) => openMatch(x, "home")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")}/> : null}
+      {isContent ? <LazyContent language={language} initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
+      {mode === "scores" ? <LazyScores language={language} openMatch={(x) => openMatch(x, "scores")}/> : null}
+      {mode === "favorites" ? <LazyFavorites language={language} openLeague={(x) => openEntity("competition", x, "favorites")} openTeam={(x) => openEntity("team", x, "favorites")} openPlayer={(x) => openEntity("player", x, "favorites")} openAccount={() => openAccount("favorites")}/> : null}
+      {mode === "tips" ? <LazyTips language={language} openMatch={(x) => openMatch(x, "tips")} openAccount={() => openAccount("tips")}/> : null}
+      {mode === "prediction" ? <LazyPrediction language={language} openMatch={(x) => openMatch(x, "prediction")} openAccount={() => openAccount("prediction")}/> : null}
+      {mode === "more" ? <MoreScreen navigate={navigateMore} openAccount={() => openAccount("more")} openNotifications={() => openNotifications("more")} language={language} setLanguage={setLanguage}/> : null}
+      {mode === "account" ? <LazyAccount language={language} goBack={goReturn} openFavorites={() => goRoot("favorites")} openPredictions={() => goRoot("prediction")} openNotifications={() => openNotifications("account")} openSettings={() => openSettings("account")}/> : null}
+      {mode === "notifications" ? <LazyNotifications language={language} goBack={goReturn} openAccount={() => openAccount("notifications")} openMatch={(x) => openMatch(x, "notifications")}/> : null}
+      {mode === "settings" ? <LazySettings language={language} goBack={goReturn} openNotifications={() => openNotifications("settings")} openAccount={() => openAccount("settings")}/> : null}
+      {mode === "about" ? <LazyAbout language={language} goBack={goReturn}/> : null}
+      {mode === "search" ? <LazySearch language={language} goBack={goReturn} openMatch={(x) => openMatch(x, "search")} openEntity={(type, x) => openEntity(type, x, "search")}/> : null}
+      {mode === "match" ? <LazyMatch language={language} match={selected} goBack={goReturn}/> : null}
+      {mode === "entity" ? <LazyEntity language={language} type={selected?.type} entity={selected?.entity} goBack={goReturn} openAccount={() => openAccount("entity")}/> : null}
+      {mode === "article" ? <LazyArticle language={language} article={selected} goBack={goReturn}/> : null}
     </View>
-    {!isSubpage ? <BottomNav active={navActive} language={language} onChange={(tab) => tab === "home" ? goHome() : switchTab(tab)}/> : null}
+    {!isSubpage ? <BottomNav active={navActive} language={language} onChange={(tab) => goRoot(tab === "home" ? "home" : tab)}/> : null}
   </View>;
 }
 

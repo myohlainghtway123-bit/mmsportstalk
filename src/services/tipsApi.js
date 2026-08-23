@@ -24,12 +24,17 @@ async function api(path, { method = "GET", body, signal } = {}) {
   return payload?.data ?? payload;
 }
 
-export const getTips = ({ limit = 50, matchId, tipsterId } = {}) => {
+export const getTips = async ({ limit = 50, matchId, tipsterId } = {}) => {
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));
   if (matchId) qs.set("matchId", String(matchId));
   if (tipsterId) qs.set("tipsterId", String(tipsterId));
-  return api(`/tips?${qs.toString()}`);
+  const data = await api(`/tips?${qs.toString()}`);
+  if (!Array.isArray(data)) return data;
+  // Once kickoff closes purchases, hide unpaid locked content until the match is
+  // settled. Existing buyers still receive locked=false and keep access; after
+  // settlement the verified record becomes public and returns to the feed.
+  return data.filter((tip) => !(tip?.purchaseClosed && tip?.locked));
 };
 export const unlockTip = (tipId) => api("/tips/unlock", { method:"POST", body:{ tipId:String(tipId) } });
 export const getTipsMe = () => api("/tips/me");
@@ -46,14 +51,15 @@ export const getTipsterPartner = () => api("/tipsters/partner");
 export const applyTipsterPartner = (input) => api("/tipsters/partner", { method:"POST", body:input });
 export const claimPartnerReferral = (code) => api("/partners/referral", { method:"POST", body:{ code:String(code||"").trim().toUpperCase() } });
 
+// Keep these fallbacks in lock-step with the server authority in lib/account/tips.ts.
 export const TIPSTER_LEVEL_FALLBACK = {
   1:{ name:"Rookie", dailyTips:1, maxPrice:5 },
   2:{ name:"Rising", dailyTips:2, maxPrice:10 },
-  3:{ name:"Skilled", dailyTips:3, maxPrice:20 },
-  4:{ name:"Pro", dailyTips:4, maxPrice:30 },
-  5:{ name:"Elite", dailyTips:5, maxPrice:40 },
+  3:{ name:"Pro", dailyTips:3, maxPrice:15 },
+  4:{ name:"Elite", dailyTips:4, maxPrice:20 },
+  5:{ name:"Master", dailyTips:5, maxPrice:25 },
 };
-export const TIP_PRICES = [5,10,20,30,40];
+export const TIP_PRICES = [5,10,15,20,25];
 export const CREDIT_REFERENCE = { credits:100, thb:250 };
-export const QUALIFICATION_RULES = { totalTips:10, minWins:7, maxTipsPerDay:2, cooldownDays:30 };
+export const QUALIFICATION_RULES = { totalTips:10, minWins:7, maxTipsPerDay:2, cooldownDays:7 };
 export const PARTNER_DEFAULTS = { commissionPercent:10, durationMonths:6 };
