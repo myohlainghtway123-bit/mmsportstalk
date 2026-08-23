@@ -1,4 +1,5 @@
 import { syncStoredOnboardingFavorites } from "./onboardingStore";
+import { favoriteMetadata } from "./favoriteCatalog";
 const API_BASE = "https://myanmarsportstalk.com/api";
 
 export class MstApiError extends Error {
@@ -95,13 +96,6 @@ export const getFavorites = (options) => api("/account/favorites", options);
 export const getAccountPredictions = (options) => api("/account/predictions", options);
 export const getLeaderboard = (options) => api("/predictions/leaderboard", options);
 
-function entityTypeAliases(kind) {
-  const value = String(kind || "team").toLowerCase();
-  if (value.startsWith("comp") || value.startsWith("league")) return ["competition", "league"];
-  if (value.startsWith("player")) return ["player"];
-  return ["team"];
-}
-
 async function tryMutation(attempts) {
   let lastError = null;
   for (const attempt of attempts) {
@@ -115,19 +109,40 @@ async function tryMutation(attempts) {
   throw lastError || new MstApiError("MST API did not accept the request.");
 }
 
-export async function setFavorite({ kind, id, active }) {
-  const aliases = entityTypeAliases(kind);
-  const entityId = String(id);
-  const attempts = [];
-  for (const type of aliases) {
-    attempts.push({ path: "/account/favorites", options: { method: "POST", body: { type, id: entityId, action: active ? "add" : "remove" } } });
-    attempts.push({ path: "/account/favorites", options: { method: "POST", body: { kind: type, entityId, favorite: Boolean(active) } } });
-    attempts.push({ path: "/account/favorites", options: { method: "PUT", body: { type, id: entityId, active: Boolean(active) } } });
-    const idField = type === "team" ? "teamId" : type === "player" ? "playerId" : "competitionId";
-    attempts.push({ path: "/account/favorites", options: active ? { method: "POST", body: { [idField]: entityId } } : { method: "DELETE", body: { [idField]: entityId } } });
-    attempts.push({ path: "/account/favorites", options: active ? { method: "POST", body: { type, id: entityId } } : { method: "DELETE", body: { type, id: entityId } } });
+function canonicalFavoriteKind(kind) {
+  const value = String(kind || "").toLowerCase();
+  if (value.startsWith("comp") || value.startsWith("league")) return "competition";
+  if (value.startsWith("player")) return "player";
+  if (value.startsWith("team")) return "team";
+  return null;
+}
+
+export async function setFavorite({ kind, id, name, imageUrl, logo, photo, country, competitionId, competitionName, active }) {
+  const type = canonicalFavoriteKind(kind);
+  const entityId = String(id ?? "").trim();
+  if (!type || !/^\d{1,12}$/.test(entityId)) throw new MstApiError("Choose a valid favorite.");
+
+  if (!active) {
+    return api("/account/favorites", { method: "DELETE", body: { kind: type, id: entityId } });
   }
-  return tryMutation(attempts);
+
+  const curated = favoriteMetadata(type, entityId);
+  const finalName = String(name || curated?.name || "").trim();
+  if (!finalName) throw new MstApiError("Favorite name is unavailable.");
+  const finalImage = imageUrl || logo || photo || curated?.imageUrl || curated?.logo || curated?.photo || null;
+
+  return api("/account/favorites", {
+    method: "POST",
+    body: {
+      kind: type,
+      id: entityId,
+      name: finalName,
+      imageUrl: finalImage,
+      country: country || curated?.country || null,
+      competitionId: competitionId || null,
+      competitionName: competitionName || null,
+    },
+  });
 }
 
 function scoreNumber(value) {
