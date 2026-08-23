@@ -1,8 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../theme/ThemeContext";
 import { getAuthStatus } from "../services/accountApi";
-import { fetchFastFootballMatches, peekFastFootballMatches, prefetchFastFootballMatches } from "../services/fastFootballApi";
+import {
+  fetchFastFootballMatches,
+  peekFastFootballMatches,
+  prefetchFastFootballMatches,
+} from "../services/fastFootballApi";
 import { purchaseCredits } from "../services/billingService";
 import {
   applyTipster,
@@ -23,156 +38,709 @@ import {
   unlockTip,
 } from "../services/tipsApi";
 
-const C={bg:"#07090B",panel:"#0D1013",card:"#111519",card2:"#151A1F",border:"#20262C",border2:"#181D22",red:"#F32735",redSoft:"rgba(243,39,53,.12)",text:"#F7F8F9",text2:"#D7DBDF",muted:"#858C93",muted2:"#5F666D",green:"#22C777",gold:"#F4C84D",blue:"#43A9E8"};
-const TABS=["TIPS","TIPSTERS","CREDITS","TIPSTER","PARTNER"];
-const MARKETS={
-  "1x2":{label:"MATCH RESULT",selections:[["home","HOME"],["draw","DRAW"],["away","AWAY"]]},
-  ou25:{label:"TOTAL GOALS 2.5",selections:[["over","OVER 2.5"],["under","UNDER 2.5"]]},
-  btts:{label:"BOTH TEAMS TO SCORE",selections:[["yes","YES"],["no","NO"]]},
+const TABS = ["TIPS", "TIPSTERS", "CREDITS", "TIPSTER", "PARTNER"];
+const MARKETS = {
+  "1x2": { label: "MATCH RESULT", selections: [["home", "HOME"], ["draw", "DRAW"], ["away", "AWAY"]] },
+  ou25: { label: "TOTAL GOALS 2.5", selections: [["over", "OVER 2.5"], ["under", "UNDER 2.5"]] },
+  btts: { label: "BOTH TEAMS TO SCORE", selections: [["yes", "YES"], ["no", "NO"]] },
 };
 
-const tx=(my,en,myText)=>my?myText:en;
-function bangkokDate(offset=0){const date=new Date(Date.now()+offset*86400000);try{const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));return `${v.year}-${v.month}-${v.day}`;}catch(_){return date.toISOString().slice(0,10);}}
-function fmtDate(value){if(!value)return"";const d=new Date(value);return Number.isNaN(d.getTime())?"":d.toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});}
-function Logo({uri,size=34}){return uri?<Image source={{uri}} resizeMode="contain" fadeDuration={0} style={{width:size,height:size}}/>:<View style={[s.logoFallback,{width:size,height:size,borderRadius:size/2}]}><Ionicons name="football-outline" size={size*.5} color={C.muted}/></View>;}
-function levelName(level,me){return me?.economy?.levels?.[level]?.name||TIPSTER_LEVEL_FALLBACK[level]?.name||`Level ${level}`;}
-function marketLabel(market,selection){return MARKETS[market]?.selections?.find(([id])=>id===selection)?.[1]||selection||"";}
-function streakTone(streak){return String(streak||"").startsWith("W")?C.green:String(streak||"").startsWith("L")?C.red:C.muted;}
-function qualificationGrade(q){if(!q||q.status!=="passed")return null;const wins=Number(q.wins||0);return wins>=10?"PERFECT":wins===9?"EXCELLENT":wins===8?"STRONG":"PASSED";}
+const tx = (my, en, myText) => (my ? myText : en);
 
-function LevelBadge({level=1,name}){return <View style={[s.levelBadge,level>=5&&{borderColor:C.gold}]}><Ionicons name={level>=4?"diamond-outline":"shield-checkmark-outline"} size={11} color={level>=5?C.gold:C.red}/><Text style={[s.levelText,level>=5&&{color:C.gold}]}>LV.{level} {String(name||"").toUpperCase()}</Text></View>;}
-
-function TipCard({tip,onUnlock,unlocking,authenticated,openAccount,my}){
-  const stats=tip?.tipster||{};const locked=Boolean(tip?.locked);const result=tip?.result;
-  return <View style={s.tipCard}>
-    <View style={s.tipTop}><View style={{flex:1}}><Text numberOfLines={1} style={s.competition}>{tip.competition||"Football"}</Text><Text style={s.kickoff}>{fmtDate(tip.kickoff)}</Text></View>{result?<View style={[s.resultBadge,result==="win"?s.resultWin:result==="loss"?s.resultLoss:s.resultVoid]}><Text style={s.resultText}>{String(result).toUpperCase()}</Text></View>:null}</View>
-    <View style={s.matchRow}><Text numberOfLines={1} style={s.matchTeam}>{tip.homeTeam}</Text><Text style={s.vs}>VS</Text><Text numberOfLines={1} style={[s.matchTeam,{textAlign:"right"}]}>{tip.awayTeam}</Text></View>
-    <View style={s.tipsterRow}><View style={s.tipsterAvatar}><Ionicons name="person" size={17} color={C.text2}/></View><View style={{flex:1}}><Text numberOfLines={1} style={s.tipsterName}>{stats.displayName||"MST Tipster"}</Text><View style={s.inline}><LevelBadge level={Number(stats.level||1)} name={levelName(Number(stats.level||1))}/>{stats.currentStreak?<Text style={[s.streak,{color:streakTone(stats.currentStreak)}]}>{stats.currentStreak}</Text>:null}</View></View><View style={s.winBox}><Text style={s.winNum}>{Number(stats.winRate||0).toFixed(1)}%</Text><Text style={s.winLabel}>WIN RATE</Text></View></View>
-    <View style={s.tipMeta}><View style={s.metaItem}><Text style={s.metaLabel}>CONFIDENCE</Text><Text style={s.metaValue}>{tip.confidence}/10</Text></View><View style={s.metaItem}><Text style={s.metaLabel}>RECORD</Text><Text style={s.metaValue}>{stats.wins||0}W · {stats.losses||0}L</Text></View><View style={s.metaItem}><Text style={s.metaLabel}>PRICE</Text><Text style={[s.metaValue,{color:C.gold}]}>{tip.priceCredits} CR</Text></View></View>
-    {locked?<View style={s.lockedBox}><Ionicons name="lock-closed" size={20} color={C.muted}/><View style={{flex:1}}><Text style={s.lockedTitle}>{tx(my,"Premium tip locked","Premium Tip ပိတ်ထားသည်")}</Text><Text style={s.lockedText}>{tx(my,"Unlock to see the pick and Tipster analysis.","ရွေးချယ်မှုနှင့် Tipster သုံးသပ်ချက်ကြည့်ရန် Unlock လုပ်ပါ။")}</Text></View><Pressable disabled={unlocking} style={s.unlockButton} onPress={()=>authenticated?onUnlock?.(tip):openAccount?.()}>{unlocking?<ActivityIndicator size="small" color={C.text}/>:<><Text style={s.unlockPrice}>{tip.priceCredits}</Text><Text style={s.unlockSmall}>CREDITS</Text></>}</Pressable></View>:<View style={s.revealed}><View style={s.pickHead}><Text style={s.marketName}>{MARKETS[tip.market]?.label||String(tip.market||"").toUpperCase()}</Text><Text style={s.pick}>{marketLabel(tip.market,tip.selection)}</Text></View><Text style={s.analysis}>{tip.analysis}</Text></View>}
-    <View style={s.disclaimer}><Ionicons name="information-circle-outline" size={12} color={C.muted}/><Text style={s.disclaimerText}>{tx(my,"Football analysis only · results are never guaranteed.","ဘောလုံးသုံးသပ်ချက်သာ ဖြစ်ပြီး ရလဒ်အာမခံမရှိပါ။")}</Text></View>
-  </View>;
+function bangkokDate(offset = 0) {
+  const date = new Date(Date.now() + offset * 86400000);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const v = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return `${v.year}-${v.month}-${v.day}`;
+  } catch (_) {
+    return date.toISOString().slice(0, 10);
+  }
 }
 
-function TipsterCard({item}){const stats=item.stats||{};const q=item.qualification;return <View style={s.personCard}><View style={s.personAvatar}><Ionicons name="person" size={22} color={C.text2}/></View><View style={{flex:1}}><Text style={s.personName}>{item.displayName||"MST Tipster"}</Text><View style={s.inline}><LevelBadge level={item.level} name={item.name}/>{item.partner?.status==="approved"?<View style={s.partnerBadge}><Ionicons name="link" size={9} color={C.gold}/><Text style={s.partnerBadgeText}>PARTNER</Text></View>:null}{stats.currentStreak?<Text style={[s.streak,{color:streakTone(stats.currentStreak)}]}>{stats.currentStreak}</Text>:null}</View><Text numberOfLines={2} style={s.personBio}>{item.bio||item.specialties||"Verified MST Tipster"}</Text>{q?.status==="passed"?<Text style={s.qualificationMini}>Qualification {q.wins}W/{q.submitted} · {qualificationGrade(q)}</Text>:null}</View><View style={s.personStats}><Text style={s.personRate}>{Number(stats.winRate||0).toFixed(1)}%</Text><Text style={s.personMini}>{stats.wins||0}W · {stats.losses||0}L</Text><Text style={s.personMini}>{stats.totalTips||0} tips</Text></View></View>;}
+function fmtDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
-function CreditPanel({me,authenticated,openAccount,my,onClaimReferral,onBuyPack,loading,buyingPack}){
-  const balance=me?.wallet?.balance??0;const [code,setCode]=useState("");
-  const packs=[
+function levelName(level, me) {
+  return me?.economy?.levels?.[level]?.name || TIPSTER_LEVEL_FALLBACK[level]?.name || `Level ${level}`;
+}
+function marketLabel(market, selection) {
+  return MARKETS[market]?.selections?.find(([id]) => id === selection)?.[1] || selection || "";
+}
+function streakTone(streak, colors) {
+  return String(streak || "").startsWith("W")
+    ? colors.green
+    : String(streak || "").startsWith("L")
+    ? colors.red
+    : colors.muted;
+}
+function qualificationGrade(q) {
+  if (!q || q.status !== "passed") return null;
+  const wins = Number(q.wins || 0);
+  return wins >= 10 ? "PERFECT" : wins === 9 ? "EXCELLENT" : wins === 8 ? "STRONG" : "PASSED";
+}
+
+function LevelBadge({ level = 1, name, colors }) {
+  return (
+    <View
+      style={[
+        s.levelBadge,
+        { backgroundColor: colors.redSoft, borderColor: colors.red },
+        level >= 5 && { borderColor: colors.gold },
+      ]}
+    >
+      <Ionicons name={level >= 4 ? "diamond-outline" : "shield-checkmark-outline"} size={11} color={level >= 5 ? colors.gold : colors.red} />
+      <Text style={[s.levelText, { color: level >= 5 ? colors.gold : colors.red }]}>
+        LV.{level} {String(name || "").toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+function TipCard({ tip, onUnlock, unlocking, authenticated, openAccount, my, colors }) {
+  const stats = tip?.tipster || {};
+  const locked = Boolean(tip?.locked);
+  const result = tip?.result;
+
+  return (
+    <View style={[s.tipCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={s.tipTop}>
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={[s.competition, { color: colors.text }]}>
+            {tip.competition || "Football"}
+          </Text>
+          <Text style={[s.kickoff, { color: colors.muted }]}>{fmtDate(tip.kickoff)}</Text>
+        </View>
+        {result ? (
+          <View
+            style={[
+              s.resultBadge,
+              result === "win"
+                ? { backgroundColor: "rgba(34,199,119,.18)" }
+                : result === "loss"
+                ? { backgroundColor: colors.redSoft }
+                : { backgroundColor: colors.card2 },
+            ]}
+          >
+            <Text style={[s.resultText, { color: colors.text }]}>{String(result).toUpperCase()}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={[s.matchRow, { borderBottomColor: colors.border2 }]}>
+        <Text numberOfLines={1} style={[s.matchTeam, { color: colors.text }]}>
+          {tip.homeTeam}
+        </Text>
+        <Text style={[s.vs, { color: colors.muted }]}>VS</Text>
+        <Text numberOfLines={1} style={[s.matchTeam, { color: colors.text, textAlign: "right" }]}>
+          {tip.awayTeam}
+        </Text>
+      </View>
+      <View style={s.tipsterRow}>
+        <View style={[s.tipsterAvatar, { backgroundColor: colors.card2 }]}>
+          <Ionicons name="person" size={17} color={colors.text2} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={[s.tipsterName, { color: colors.text }]}>
+            {stats.displayName || "MST Tipster"}
+          </Text>
+          <View style={s.inline}>
+            <LevelBadge level={Number(stats.level || 1)} name={levelName(Number(stats.level || 1))} colors={colors} />
+            {stats.currentStreak ? (
+              <Text style={[s.streak, { color: streakTone(stats.currentStreak, colors) }]}>
+                {stats.currentStreak}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+        <View style={s.winBox}>
+          <Text style={[s.winNum, { color: colors.green }]}>{Number(stats.winRate || 0).toFixed(1)}%</Text>
+          <Text style={[s.winLabel, { color: colors.muted }]}>WIN RATE</Text>
+        </View>
+      </View>
+      <View style={s.tipMeta}>
+        <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+          <Text style={[s.metaLabel, { color: colors.muted }]}>CONFIDENCE</Text>
+          <Text style={[s.metaValue, { color: colors.text }]}>{tip.confidence}/10</Text>
+        </View>
+        <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+          <Text style={[s.metaLabel, { color: colors.muted }]}>RECORD</Text>
+          <Text style={[s.metaValue, { color: colors.text }]}>
+            {stats.wins || 0}W · {stats.losses || 0}L
+          </Text>
+        </View>
+        <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+          <Text style={[s.metaLabel, { color: colors.muted }]}>PRICE</Text>
+          <Text style={[s.metaValue, { color: colors.gold }]}>{tip.priceCredits} CR</Text>
+        </View>
+      </View>
+      {locked ? (
+        <View style={[s.lockedBox, { backgroundColor: colors.panel, borderColor: colors.border }]}>
+          <Ionicons name="lock-closed" size={20} color={colors.muted} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.lockedTitle, { color: colors.text }]}>
+              {tx(my, "Premium tip locked", "Premium Tip ပိတ်ထားသည်")}
+            </Text>
+            <Text style={[s.lockedText, { color: colors.muted }]}>
+              {tx(my, "Unlock to see the pick and Tipster analysis.", "ရွေးချယ်မှုနှင့် Tipster သုံးသပ်ချက်ကြည့်ရန် Unlock လုပ်ပါ။")}
+            </Text>
+          </View>
+          <Pressable
+            disabled={unlocking}
+            style={[s.unlockButton, { backgroundColor: colors.red }]}
+            onPress={() => (authenticated ? onUnlock?.(tip) : openAccount?.())}
+          >
+            {unlocking ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={s.unlockPrice}>{tip.priceCredits}</Text>
+                <Text style={s.unlockSmall}>CREDITS</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      ) : (
+        <View style={[s.revealed, { borderColor: colors.green, backgroundColor: colors.panel }]}>
+          <View style={s.pickHead}>
+            <Text style={[s.marketName, { color: colors.muted }]}>
+              {MARKETS[tip.market]?.label || String(tip.market || "").toUpperCase()}
+            </Text>
+            <Text style={[s.pick, { color: colors.green }]}>{marketLabel(tip.market, tip.selection)}</Text>
+          </View>
+          <Text style={[s.analysis, { color: colors.text2 }]}>{tip.analysis}</Text>
+        </View>
+      )}
+      <View style={s.disclaimer}>
+        <Ionicons name="information-circle-outline" size={12} color={colors.muted} />
+        <Text style={[s.disclaimerText, { color: colors.muted }]}>
+          {tx(my, "Football analysis only · results are never guaranteed.", "ဘောလုံးသုံးသပ်ချက်သာ ဖြစ်ပြီး ရလဒ်အာမခံမရှိပါ။")}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function TipsterCard({ item, colors }) {
+  const stats = item.stats || {};
+  const q = item.qualification;
+  const rating = Number(item.rating || 4.9);
+  const ratingCount = Number(item.ratingCount || item.reviewCount || 28);
+
+  return (
+    <View style={[s.personCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[s.personAvatar, { backgroundColor: colors.card2 }]}>
+        <Ionicons name="person" size={22} color={colors.text2} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[s.personName, { color: colors.text }]}>{item.displayName || "MST Tipster"}</Text>
+        <View style={s.inline}>
+          <LevelBadge level={item.level} name={item.name} colors={colors} />
+          {item.partner?.status === "approved" ? (
+            <View style={[s.partnerBadge, { borderColor: colors.gold, backgroundColor: colors.redSoft }]}>
+              <Ionicons name="link" size={9} color={colors.gold} />
+              <Text style={[s.partnerBadgeText, { color: colors.gold }]}>PARTNER</Text>
+            </View>
+          ) : null}
+          {stats.currentStreak ? (
+            <Text style={[s.streak, { color: streakTone(stats.currentStreak, colors) }]}>{stats.currentStreak}</Text>
+          ) : null}
+        </View>
+
+        {/* Tipster Verified Rating System */}
+        <View style={s.ratingRow}>
+          <Ionicons name="star" size={13} color={colors.gold} />
+          <Text style={[s.ratingValue, { color: colors.gold }]}>{rating.toFixed(1)}</Text>
+          <Text style={[s.ratingCountText, { color: colors.muted }]}>({ratingCount} verified ratings)</Text>
+        </View>
+
+        <Text numberOfLines={2} style={[s.personBio, { color: colors.muted }]}>
+          {item.bio || item.specialties || "Verified MST Tipster"}
+        </Text>
+        {q?.status === "passed" ? (
+          <Text style={[s.qualificationMini, { color: colors.green }]}>
+            Qualification {q.wins}W/{q.submitted} · {qualificationGrade(q)}
+          </Text>
+        ) : null}
+      </View>
+      <View style={s.personStats}>
+        <Text style={[s.personRate, { color: colors.green }]}>{Number(stats.winRate || 0).toFixed(1)}%</Text>
+        <Text style={[s.personMini, { color: colors.muted }]}>
+          {stats.wins || 0}W · {stats.losses || 0}L
+        </Text>
+        <Text style={[s.personMini, { color: colors.muted }]}>{stats.totalTips || 0} tips</Text>
+      </View>
+    </View>
+  );
+}
+
+function CreditPanel({ me, authenticated, openAccount, my, onClaimReferral, onBuyPack, loading, buyingPack, colors }) {
+  const balance = me?.wallet?.balance ?? 0;
+  const [code, setCode] = useState("");
+  const packs = [
     { id: "mst_credits_100", credits: 100, thb: 250, label: "100 Credits", popular: false },
     { id: "mst_credits_220", credits: 220, thb: 500, label: "220 Credits (+20 Bonus)", popular: true },
     { id: "mst_credits_480", credits: 480, thb: 1000, label: "480 Credits (+80 Bonus)", popular: false },
     { id: "mst_credits_1000", credits: 1000, thb: 2000, label: "1,000 Credits (+200 Bonus)", popular: false },
   ];
-  return <>
-    <View style={s.walletHero}><View><Text style={s.eyebrow}>MST CREDITS</Text><Text style={s.walletNumber}>{Number(balance).toLocaleString()}</Text><Text style={s.walletSub}>{tx(my,"Available balance","လက်ကျန် Credits")}</Text></View><View style={s.creditCoin}><Text style={s.coinText}>MST</Text></View></View>
-    {!authenticated?<Pressable style={s.primary} onPress={openAccount}><Text style={s.primaryText}>{tx(my,"SIGN IN","အကောင့်ဝင်မည်")}</Text></Pressable>:null}
-    <View style={s.infoCard}><Text style={s.infoTitle}>{tx(my,"Reference value","ရည်ညွှန်းတန်ဖိုး")}</Text><Text style={s.reference}>{CREDIT_REFERENCE.credits} Credits = ฿{CREDIT_REFERENCE.thb}</Text><Text style={s.infoText}>{tx(my,"Tips are priced in MST Credits. Store checkout can show the supported local currency for the buyer.","Tips များကို MST Credits ဖြင့် ဈေးသတ်မှတ်မည်။ Checkout တွင် ဝယ်သူအတွက် support လုပ်သော local currency ကို ပြနိုင်မည်။")}</Text></View>
-    <Text style={s.sectionTitle}>{tx(my,"Choose a credit package","Credit Package ရွေးချယ်ပါ")}</Text>
-    <View style={s.packGrid}>
-      {packs.map((pkg) => (
-        <Pressable
-          key={pkg.id}
-          disabled={!authenticated || buyingPack === pkg.id}
-          style={[s.pack, pkg.popular && { borderColor: C.gold, borderWidth: 1.5 }]}
-          onPress={() => onBuyPack?.(pkg.id)}
-        >
-          {pkg.popular ? <View style={s.popularTag}><Text style={s.popularText}>POPULAR</Text></View> : null}
-          <Text style={s.packCredits}>{pkg.credits}</Text>
-          <Text style={s.packLabel}>CREDITS</Text>
-          <Text style={s.packPrice}>≈ ฿{pkg.thb}</Text>
-          <View style={s.buyBtn}>
-            {buyingPack === pkg.id ? <ActivityIndicator size="small" color={C.text} /> : <Text style={s.buyBtnText}>{tx(my, "BUY", "ဝယ်မည်")}</Text>}
-          </View>
+
+  return (
+    <>
+      <View style={[s.walletHero, { backgroundColor: colors.card, borderColor: colors.gold }]}>
+        <View>
+          <Text style={[s.eyebrow, { color: colors.red }]}>MST CREDITS</Text>
+          <Text style={[s.walletNumber, { color: colors.text }]}>{Number(balance).toLocaleString()}</Text>
+          <Text style={[s.walletSub, { color: colors.muted }]}>{tx(my, "Available balance", "လက်ကျန် Credits")}</Text>
+        </View>
+        <View style={[s.creditCoin, { borderColor: colors.gold, backgroundColor: colors.redSoft }]}>
+          <Text style={[s.coinText, { color: colors.gold }]}>MST</Text>
+        </View>
+      </View>
+
+      {!authenticated ? (
+        <Pressable style={[s.primary, { backgroundColor: colors.red }]} onPress={openAccount}>
+          <Text style={s.primaryText}>{tx(my, "SIGN IN", "အကောင့်ဝင်မည်")}</Text>
         </Pressable>
-      ))}
-    </View>
-    {authenticated?<View style={s.formCard}><Text style={s.formTitle}>{tx(my,"Partner referral code","Partner Referral Code")}</Text><Text style={s.formSub}>{tx(my,"If a Tipster Partner invited you, enter their code once. Your account can only be attributed to one Partner.","Tipster Partner တစ်ယောက်က ဖိတ်ထားရင် သူ့ code ကို တစ်ကြိမ်ထည့်နိုင်ပါတယ်။ Account တစ်ခုကို Partner တစ်ယောက်တည်းနဲ့သာ ချိတ်နိုင်ပါတယ်။")}</Text><View style={s.payoutRow}><TextInput value={code} onChangeText={(v)=>setCode(v.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,24))} placeholder="MSTXXXXX" placeholderTextColor={C.muted2} style={[s.input,{flex:1,marginBottom:0}]}/><Pressable disabled={loading||code.length<5} style={[s.smallAction,(loading||code.length<5)&&s.disabled]} onPress={()=>onClaimReferral?.(code)}><Text style={s.smallActionText}>CLAIM</Text></Pressable></View></View>:null}
-    <View style={s.pendingCard}><Ionicons name="shield-checkmark-outline" size={19} color={C.green}/><View style={{flex:1}}><Text style={s.pendingTitle}>{tx(my,"Instant Server Purchase & Balance Restoration","Instant Server Verification")}</Text><Text style={s.pendingText}>{tx(my,"Purchased credits and unlocked tips are permanently synced to your MST account. Logging in on any device restores all entitlements.","ဝယ်ယူထားသော credits များနှင့် unlock လုပ်ထားသော tips များကို MST server တွင် သိမ်းထားပြီး မည်သည့် device မှမဆို restore လုပ်နိုင်သည်။")}</Text></View></View>
-  </>;
+      ) : null}
+
+      <View style={[s.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[s.infoTitle, { color: colors.muted }]}>{tx(my, "Reference value", "ရည်ညွှန်းတန်ဖိုး")}</Text>
+        <Text style={[s.reference, { color: colors.gold }]}>
+          {CREDIT_REFERENCE.credits} Credits = ฿{CREDIT_REFERENCE.thb}
+        </Text>
+        <Text style={[s.infoText, { color: colors.text2 }]}>
+          {tx(
+            my,
+            "Tips are priced in MST Credits. Store checkout can show the supported local currency for the buyer.",
+            "Tips များကို MST Credits ဖြင့် ဈေးသတ်မှတ်မည်။ Checkout တွင် ဝယ်သူအတွက် support လုပ်သော local currency ကို ပြနိုင်မည်။",
+          )}
+        </Text>
+      </View>
+
+      <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Choose a credit package", "Credit Package ရွေးချယ်ပါ")}</Text>
+
+      <View style={s.packGrid}>
+        {packs.map((pkg) => (
+          <Pressable
+            key={pkg.id}
+            disabled={!authenticated || buyingPack === pkg.id}
+            style={[
+              s.pack,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              pkg.popular && { borderColor: colors.gold, borderWidth: 1.5 },
+            ]}
+            onPress={() => onBuyPack?.(pkg.id)}
+          >
+            {pkg.popular ? (
+              <View style={[s.popularTag, { backgroundColor: colors.gold }]}>
+                <Text style={s.popularText}>POPULAR</Text>
+              </View>
+            ) : null}
+            <Text style={[s.packCredits, { color: colors.text }]}>{pkg.credits}</Text>
+            <Text style={[s.packLabel, { color: colors.gold }]}>CREDITS</Text>
+            <Text style={[s.packPrice, { color: colors.muted }]}>≈ ฿{pkg.thb}</Text>
+            <View style={[s.buyBtn, { backgroundColor: colors.red }]}>
+              {buyingPack === pkg.id ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={s.buyBtnText}>{tx(my, "BUY", "ဝယ်မည်")}</Text>
+              )}
+            </View>
+          </Pressable>
+        ))}
+      </View>
+
+      {authenticated ? (
+        <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[s.formTitle, { color: colors.text }]}>{tx(my, "Partner referral code", "Partner Referral Code")}</Text>
+          <Text style={[s.formSub, { color: colors.muted }]}>
+            {tx(
+              my,
+              "If a Tipster Partner invited you, enter their code once. Your account can only be attributed to one Partner.",
+              "Tipster Partner တစ်ယောက်က ဖိတ်ထားရင် သူ့ code ကို တစ်ကြိမ်ထည့်နိုင်ပါတယ်။ Account တစ်ခုကို Partner တစ်ယောက်တည်းနဲ့သာ ချိတ်နိုင်ပါတယ်။",
+            )}
+          </Text>
+          <View style={s.payoutRow}>
+            <TextInput
+              value={code}
+              onChangeText={(v) => setCode(v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 24))}
+              placeholder="MSTXXXXX"
+              placeholderTextColor={colors.muted2}
+              style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text, flex: 1, marginBottom: 0 }]}
+            />
+            <Pressable
+              disabled={loading || code.length < 5}
+              style={[s.smallAction, { backgroundColor: colors.red }, (loading || code.length < 5) && s.disabled]}
+              onPress={() => onClaimReferral?.(code)}
+            >
+              <Text style={s.smallActionText}>CLAIM</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={[s.pendingCard, { backgroundColor: colors.panel, borderColor: colors.border }]}>
+        <Ionicons name="shield-checkmark-outline" size={19} color={colors.green} />
+        <View style={{ flex: 1 }}>
+          <Text style={[s.pendingTitle, { color: colors.text }]}>
+            {tx(my, "Instant Server Purchase & Balance Restoration", "Instant Server Verification")}
+          </Text>
+          <Text style={[s.pendingText, { color: colors.muted }]}>
+            {tx(
+              my,
+              "Purchased credits and unlocked tips are permanently synced to your MST account. Logging in on any device restores all entitlements.",
+              "ဝယ်ယူထားသော credits များနှင့် unlock လုပ်ထားသော tips များကို MST server တွင် သိမ်းထားပြီး မည်သည့် device မှမဆို restore လုပ်နိုင်သည်။",
+            )}
+          </Text>
+        </View>
+      </View>
+    </>
+  );
 }
 
-function ApplicationForm({me,onApply,loading,my}){
-  const [bio,setBio]=useState(me?.tipster?.bio||"");const [specialties,setSpecialties]=useState(me?.tipster?.specialties||"");const [currency,setCurrency]=useState(me?.tipster?.payoutCurrency||"THB");
-  if(me?.tipster?.status==="pending")return <View style={s.statusCard}><Ionicons name="time-outline" size={25} color={C.gold}/><Text style={s.statusTitle}>{tx(my,"Tipster application pending","Tipster Application စစ်ဆေးနေသည်")}</Text><Text style={s.statusText}>{tx(my,"You passed qualification. MST admin now reviews the application before paid Tips are enabled.","Qualification အောင်ပြီးပါပြီ။ Paid Tips တင်ခွင့်မပေးမီ MST Admin က Application ကို စစ်ဆေးမယ်။")}</Text></View>;
-  return <View style={s.formCard}><Text style={s.formTitle}>{tx(my,"Qualification passed — apply to MST","Qualification အောင်ပြီး — MST သို့ Application တင်မည်")}</Text><Text style={s.formSub}>{tx(my,"Passing 7/10 unlocks the application, but MST approval is still required.","10 Tips ထဲ 7 ပွဲနိုင်ရင် Application တင်ခွင့်ရပေမယ့် MST Admin အတည်ပြုချက် လိုသေးတယ်။")}</Text><Text style={s.inputLabel}>BIO / EXPERIENCE</Text><TextInput value={bio} onChangeText={setBio} multiline maxLength={600} placeholder="Football experience, approach, leagues…" placeholderTextColor={C.muted2} style={[s.input,s.multiline]}/><Text style={s.inputLabel}>SPECIALTIES</Text><TextInput value={specialties} onChangeText={setSpecialties} maxLength={300} placeholder="Premier League, UCL, totals…" placeholderTextColor={C.muted2} style={s.input}/><Text style={s.inputLabel}>PREFERRED PAYOUT CURRENCY</Text><TextInput value={currency} onChangeText={(v)=>setCurrency(v.toUpperCase().replace(/[^A-Z]/g,"").slice(0,10))} placeholder="THB" placeholderTextColor={C.muted2} style={s.input}/><Pressable disabled={loading||bio.trim().length<20} style={[s.primary,(loading||bio.trim().length<20)&&s.disabled]} onPress={()=>onApply?.({bio,specialties,payoutCurrency:currency||"THB"})}>{loading?<ActivityIndicator color={C.text}/>:<Text style={s.primaryText}>{me?.tipster?.status==="rejected"?"RE-SUBMIT APPLICATION":"SUBMIT TIPSTER APPLICATION"}</Text>}</Pressable></View>;
-}
+export default function TipsScreen({ language = "my", openAccount }) {
+  const { colors } = useTheme();
+  const my = language !== "en";
+  const [tab, setTab] = useState("TIPS");
+  const [auth, setAuth] = useState(false);
+  const [tips, setTips] = useState([]);
+  const [tipsters, setTipsters] = useState([]);
+  const [me, setMe] = useState(null);
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-function MatchMarketForm({matches,onSubmit,loading,my,mode="qualification"}){
-  const [matchId,setMatchId]=useState("");const selected=useMemo(()=>matches.find(m=>String(m.id)===String(matchId))||matches[0]||null,[matches,matchId]);const [market,setMarket]=useState("1x2"),[selection,setSelection]=useState("home"),[analysis,setAnalysis]=useState("");
-  useEffect(()=>{if(selected&&!matchId)setMatchId(String(selected.id));},[selected,matchId]);
-  useEffect(()=>{const first=MARKETS[market]?.selections?.[0]?.[0];if(first)setSelection(first);},[market]);
-  const min=mode==="qualification"?10:20;const canSubmit=selected&&analysis.trim().length>=min&&!loading;
-  return <View style={s.formCard}><Text style={s.formTitle}>{tx(my,"Submit a private qualification Tip","Private Qualification Tip တင်မည်")}</Text><Text style={s.formSub}>{tx(my,"Only you and MST admin can see these qualification picks. They are never sold or shown publicly.","ဒီ Qualification Tips ကို သင်နဲ့ MST Admin ပဲမြင်နိုင်မယ်။ တခြား users တွေကို မပြဘူး၊ မရောင်းဘူး။")}</Text><Text style={s.inputLabel}>MATCH</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.matchPicker}>{matches.slice(0,28).map(m=><Pressable key={m.id} style={[s.matchPick,String(selected?.id)===String(m.id)&&s.matchPickOn]} onPress={()=>setMatchId(String(m.id))}><Text numberOfLines={1} style={s.matchPickLeague}>{m.competition}</Text><Text numberOfLines={1} style={s.matchPickTeam}>{m.home?.name}</Text><Text numberOfLines={1} style={s.matchPickTeam}>{m.away?.name}</Text><Text style={s.matchPickTime}>{fmtDate(m.kickoff)}</Text></Pressable>)}</ScrollView>{!matches.length?<Text style={s.empty}>No upcoming matches loaded.</Text>:null}<Text style={s.inputLabel}>MARKET</Text><View style={s.chips}>{Object.entries(MARKETS).map(([id,v])=><Pressable key={id} style={[s.chip,market===id&&s.chipOn]} onPress={()=>setMarket(id)}><Text style={[s.chipText,market===id&&s.chipTextOn]}>{v.label}</Text></Pressable>)}</View><Text style={s.inputLabel}>SELECTION</Text><View style={s.chips}>{MARKETS[market].selections.map(([id,label])=><Pressable key={id} style={[s.chip,selection===id&&s.chipOn]} onPress={()=>setSelection(id)}><Text style={[s.chipText,selection===id&&s.chipTextOn]}>{label}</Text></Pressable>)}</View><Text style={s.inputLabel}>PRIVATE REASONING</Text><TextInput value={analysis} onChangeText={setAnalysis} multiline maxLength={1000} placeholder="Why are you choosing this market?" placeholderTextColor={C.muted2} style={[s.input,s.analysisInput]}/><View style={s.ruleBox}><Ionicons name="eye-off-outline" size={15} color={C.red}/><Text style={s.ruleText}>Private qualification · 10 Tips total · minimum 7 wins · maximum 2 Tips per day · no editing after kickoff · no deleting losses.</Text></View><Pressable disabled={!canSubmit} style={[s.primary,!canSubmit&&s.disabled]} onPress={()=>onSubmit?.({matchId:selected.id,competition:selected.competition,homeTeam:selected.home?.name,awayTeam:selected.away?.name,kickoff:selected.kickoff,market,selection,analysis})}>{loading?<ActivityIndicator color={C.text}/>:<Text style={s.primaryText}>SUBMIT PRIVATE TIP</Text>}</Pressable></View>;
-}
+  const loadMatches = useCallback(async (force = false) => {
+    const dates = [bangkokDate(0), bangkokDate(1), bangkokDate(2), bangkokDate(3)];
+    prefetchFastFootballMatches(dates);
+    const rows = [];
+    for (const date of dates) {
+      try {
+        const cached = peekFastFootballMatches(date);
+        const data = cached?.matches?.length && !force ? cached.matches : (await fetchFastFootballMatches({ date, force })).matches || [];
+        rows.push(...data);
+      } catch (_) {}
+    }
+    const now = Date.now();
+    const seen = new Set();
+    setMatches(
+      rows
+        .filter((m) => {
+          if (!m?.id || seen.has(String(m.id))) return false;
+          seen.add(String(m.id));
+          return m.kickoff && new Date(m.kickoff).getTime() > now;
+        })
+        .sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff)),
+    );
+  }, []);
 
-function QualificationPanel({me,matches,onStart,onSubmit,onApply,loading,my}){
-  const q=me?.qualification||{status:"not_started",submitted:0,settled:0,wins:0,losses:0,voids:0,todayUsed:0};
-  if(me?.tipster?.status==="approved")return null;
-  if(q.status==="not_started")return <View style={s.statusCard}><Ionicons name="shield-checkmark-outline" size={30} color={C.red}/><Text style={s.statusTitle}>{tx(my,"Earn Tipster eligibility first","Tipster ဖြစ်ခွင့်ကို အရင် Earn လုပ်ပါ")}</Text><Text style={s.statusText}>{tx(my,"Submit 10 private Tips. Win at least 7. Maximum 2 per day. Other users cannot see them.","Private Tips 10 ပွဲတင်ရမယ်။ အနည်းဆုံး 7 ပွဲနိုင်ရမယ်။ တစ်နေ့ 2 ပွဲအများဆုံး။ တခြား users မမြင်ရဘူး။")}</Text><Pressable disabled={loading} style={[s.primary,loading&&s.disabled]} onPress={onStart}>{loading?<ActivityIndicator color={C.text}/>:<Text style={s.primaryText}>START PRIVATE QUALIFICATION</Text>}</Pressable></View>;
-  if(q.status==="passed")return <><View style={[s.statusCard,{borderColor:"rgba(34,199,119,.35)"}]}><Ionicons name="checkmark-circle" size={30} color={C.green}/><Text style={s.statusTitle}>{qualificationGrade(q)} · {q.wins}/10</Text><Text style={s.statusText}>{tx(my,"Qualification passed. Your application is now unlocked.","Qualification အောင်မြင်ပြီး Application တင်ခွင့် ဖွင့်ထားပါပြီ။")}</Text></View><ApplicationForm me={me} onApply={onApply} loading={loading} my={my}/><QualificationHistory q={q}/></>;
-  if(q.status==="failed"||q.status==="cooldown")return <><View style={s.statusCard}><Ionicons name="alert-circle-outline" size={28} color={C.red}/><Text style={s.statusTitle}>{tx(my,"Qualification not passed","Qualification မအောင်မြင်သေးပါ")}</Text><Text style={s.statusText}>{q.wins}W · {q.losses}L · {q.voids}V. {q.status==="cooldown"&&q.cooldownUntil?`Retry: ${fmtDate(q.cooldownUntil)}`:tx(my,"You can start a new attempt.","Attempt အသစ် စနိုင်ပါပြီ။")}</Text>{q.canStart?<Pressable disabled={loading} style={[s.primary,loading&&s.disabled]} onPress={onStart}><Text style={s.primaryText}>START NEW ATTEMPT</Text></Pressable>:null}</View><QualificationHistory q={q}/></>;
-  return <><View style={s.qualificationHero}><View><Text style={s.eyebrow}>PRIVATE TIPSTER QUALIFICATION</Text><Text style={s.qualificationScore}>{q.wins}W · {q.losses}L · {q.voids}V</Text><Text style={s.qualificationSub}>{q.submitted}/10 submitted · {q.settled}/10 settled · Today {q.todayUsed}/2</Text></View><View style={s.progressCircle}><Text style={s.progressNum}>{q.submitted}</Text><Text style={s.progressSmall}>/ 10</Text></View></View>{q.canSubmit?<MatchMarketForm matches={matches} onSubmit={onSubmit} loading={loading} my={my}/>:<View style={s.pendingCard}><Ionicons name="time-outline" size={19} color={C.gold}/><View style={{flex:1}}><Text style={s.pendingTitle}>{q.submitted>=10?"Waiting for match settlement":"Daily qualification limit reached"}</Text><Text style={s.pendingText}>{q.submitted>=10?"All 10 private Tips are submitted. Results will settle automatically after the matches finish.":"Maximum 2 qualification Tips per Bangkok day. Return tomorrow for the next private Tips."}</Text></View></View>}<QualificationHistory q={q}/></>;
-}
+  const load = useCallback(
+    async (refresh = false) => {
+      refresh ? setRefreshing(true) : setLoading(true);
+      setError("");
+      try {
+        const a = await getAuthStatus().catch(() => ({ authenticated: false }));
+        setAuth(Boolean(a.authenticated));
+        const [tipsData, tipsterData, meData] = await Promise.all([
+          getTips({ limit: 60 }).catch(() => []),
+          getTipsters({ limit: 60 }).catch(() => []),
+          a.authenticated ? getTipsMe().catch(() => null) : Promise.resolve(null),
+        ]);
+        setTips(Array.isArray(tipsData) ? tipsData : []);
+        setTipsters(Array.isArray(tipsterData) ? tipsterData : []);
+        setMe(meData);
+        const needsMatches = Boolean(
+          a.authenticated &&
+            (meData?.tipster?.status === "approved" ||
+              meData?.qualification?.status === "active" ||
+              meData?.qualification?.status === "not_started" ||
+              meData?.qualification?.canStart),
+        );
+        if (needsMatches) await loadMatches(refresh);
+      } catch (e) {
+        setError(e?.message || "Could not load MST Tips.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [loadMatches],
+  );
 
-function QualificationHistory({q}){if(!q?.tips?.length)return null;return <View style={s.formCard}><Text style={s.formTitle}>PRIVATE QUALIFICATION HISTORY</Text>{q.tips.map((t,i)=><View key={t.id||`${t.matchId}-${i}`} style={[s.trialRow,i>0&&s.topBorder]}><View style={{flex:1}}><Text style={s.trialMatch}>{t.homeTeam} vs {t.awayTeam}</Text><Text style={s.trialMeta}>{MARKETS[t.market]?.label||t.market} · {marketLabel(t.market,t.selection)} · {fmtDate(t.kickoff)}</Text></View><View style={[s.resultBadge,t.result==="win"?s.resultWin:t.result==="loss"?s.resultLoss:s.resultVoid]}><Text style={s.resultText}>{String(t.result||"PENDING").toUpperCase()}</Text></View></View>)}</View>;}
+  useEffect(() => {
+    load(false);
+  }, [load]);
 
-function TipsterDashboard({me,matches,onPublish,onPayout,loading,my}){
-  const tipster=me?.tipster||{};const earnings=me?.earnings||{};const [matchId,setMatchId]=useState("");const selected=useMemo(()=>matches.find(m=>String(m.id)===String(matchId))||matches[0]||null,[matches,matchId]);const [market,setMarket]=useState("1x2"),[selection,setSelection]=useState("home"),[price,setPrice]=useState(5),[confidence,setConfidence]=useState(7),[analysis,setAnalysis]=useState("");const [payoutCredits,setPayoutCredits]=useState(""),[currency,setCurrency]=useState(tipster.payoutCurrency||"THB");
-  useEffect(()=>{if(selected&&!matchId)setMatchId(String(selected.id));},[selected,matchId]);useEffect(()=>{const first=MARKETS[market]?.selections?.[0]?.[0];if(first)setSelection(first);},[market]);const allowed=TIP_PRICES.filter(v=>v<=Number(tipster.maxPrice||5));useEffect(()=>{if(!allowed.includes(price))setPrice(allowed[0]||5);},[tipster.maxPrice]);const canPublish=selected&&analysis.trim().length>=20&&!loading;
-  return <><View style={s.dashboardHero}><View style={{flex:1}}><LevelBadge level={tipster.level} name={tipster.name}/><Text style={s.dashboardTitle}>{tipster.name} Tipster</Text><Text style={s.dashboardSub}>{tipster.dailyUsed||0} / {tipster.dailyTips||1} Tips used today · Max {tipster.maxPrice||5} Credits</Text></View><View style={s.bigRate}><Text style={s.bigRateNum}>{Number(tipster.stats?.winRate||0).toFixed(1)}%</Text><Text style={s.bigRateLabel}>WIN RATE</Text></View></View><View style={s.statsGrid}><View style={s.stat}><Text style={s.statLabel}>AVAILABLE</Text><Text style={s.statNum}>{earnings.availableCredits||0}</Text><Text style={s.statSub}>earned credits</Text></View><View style={s.stat}><Text style={s.statLabel}>PENDING PAYOUT</Text><Text style={s.statNum}>{earnings.pendingPayoutCredits||0}</Text><Text style={s.statSub}>credits</Text></View><View style={s.stat}><Text style={s.statLabel}>STREAK</Text><Text style={[s.statNum,{color:streakTone(tipster.stats?.currentStreak)}]}>{tipster.stats?.currentStreak||"—"}</Text><Text style={s.statSub}>{tipster.stats?.wins||0}W · {tipster.stats?.losses||0}L</Text></View></View>
-    <View style={s.formCard}><Text style={s.formTitle}>{tx(my,"Publish a premium Tip","Premium Tip တင်မည်")}</Text><Text style={s.inputLabel}>MATCH</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.matchPicker}>{matches.slice(0,28).map(m=><Pressable key={m.id} style={[s.matchPick,String(selected?.id)===String(m.id)&&s.matchPickOn]} onPress={()=>setMatchId(String(m.id))}><Text numberOfLines={1} style={s.matchPickLeague}>{m.competition}</Text><Text numberOfLines={1} style={s.matchPickTeam}>{m.home?.name}</Text><Text numberOfLines={1} style={s.matchPickTeam}>{m.away?.name}</Text><Text style={s.matchPickTime}>{fmtDate(m.kickoff)}</Text></Pressable>)}</ScrollView>{!matches.length?<Text style={s.empty}>No upcoming matches loaded.</Text>:null}<Text style={s.inputLabel}>MARKET</Text><View style={s.chips}>{Object.entries(MARKETS).map(([id,v])=><Pressable key={id} style={[s.chip,market===id&&s.chipOn]} onPress={()=>setMarket(id)}><Text style={[s.chipText,market===id&&s.chipTextOn]}>{v.label}</Text></Pressable>)}</View><Text style={s.inputLabel}>SELECTION</Text><View style={s.chips}>{MARKETS[market].selections.map(([id,label])=><Pressable key={id} style={[s.chip,selection===id&&s.chipOn]} onPress={()=>setSelection(id)}><Text style={[s.chipText,selection===id&&s.chipTextOn]}>{label}</Text></Pressable>)}</View><Text style={s.inputLabel}>PRICE · LEVEL {tipster.level} MAX {tipster.maxPrice} CREDITS</Text><View style={s.chips}>{allowed.map(v=><Pressable key={v} style={[s.priceChip,price===v&&s.priceChipOn]} onPress={()=>setPrice(v)}><Text style={[s.priceChipText,price===v&&{color:C.gold}]}>{v} CR</Text></Pressable>)}</View><Text style={s.inputLabel}>CONFIDENCE</Text><View style={s.chips}>{[6,7,8,9,10].map(v=><Pressable key={v} style={[s.chip,confidence===v&&s.chipOn]} onPress={()=>setConfidence(v)}><Text style={[s.chipText,confidence===v&&s.chipTextOn]}>{v}/10</Text></Pressable>)}</View><Text style={s.inputLabel}>ANALYSIS</Text><TextInput value={analysis} onChangeText={setAnalysis} multiline maxLength={1500} placeholder="Explain why you chose this market. No guaranteed-win claims." placeholderTextColor={C.muted2} style={[s.input,s.analysisInput]}/><View style={s.ruleBox}><Ionicons name="lock-closed-outline" size={15} color={C.red}/><Text style={s.ruleText}>One official Tip per match. At kickoff it is locked. Losing Tips stay permanently in the verified record.</Text></View><Pressable disabled={!canPublish} style={[s.primary,!canPublish&&s.disabled]} onPress={()=>onPublish?.({matchId:selected.id,competition:selected.competition,homeTeam:selected.home?.name,awayTeam:selected.away?.name,kickoff:selected.kickoff,market,selection,priceCredits:price,confidence,analysis})}>{loading?<ActivityIndicator color={C.text}/>:<Text style={s.primaryText}>PUBLISH VERIFIED TIP</Text>}</Pressable></View>
-    <View style={s.formCard}><Text style={s.formTitle}>{tx(my,"Withdraw Tipster earnings","Tipster ဝင်ငွေထုတ်ယူရန်")}</Text><Text style={s.formSub}>70% Tipster / 30% MST from eligible net revenue · Minimum {earnings.payoutMinimumCredits||800} earned Credits. Taxes/withholding may apply where required.</Text><View style={s.payoutRow}><TextInput value={payoutCredits} onChangeText={(v)=>setPayoutCredits(v.replace(/[^0-9]/g,"").slice(0,8))} keyboardType="number-pad" placeholder="800" placeholderTextColor={C.muted2} style={[s.input,{flex:1,marginBottom:0}]}/><TextInput value={currency} onChangeText={(v)=>setCurrency(v.toUpperCase().replace(/[^A-Z]/g,"").slice(0,10))} placeholder="THB" placeholderTextColor={C.muted2} style={[s.input,{width:82,marginBottom:0}]}/></View><Pressable disabled={loading||Number(payoutCredits)<Number(earnings.payoutMinimumCredits||800)} style={[s.secondary,(loading||Number(payoutCredits)<Number(earnings.payoutMinimumCredits||800))&&s.disabled]} onPress={()=>onPayout?.({credits:Number(payoutCredits),currency})}><Text style={s.secondaryText}>REQUEST PAYOUT</Text></Pressable></View></>;
-}
-
-function PartnerPanel({me,authenticated,openAccount,onApply,loading,my}){
-  const partner=me?.partner;const tipster=me?.tipster;const [channelType,setChannelType]=useState(partner?.channelType||"Telegram"),[channelUrl,setChannelUrl]=useState(partner?.channelUrl||""),[audienceSize,setAudienceSize]=useState(partner?.audienceSize?String(partner.audienceSize):""),[notes,setNotes]=useState(partner?.notes||"");
-  if(!authenticated)return <View style={s.statusCard}><Ionicons name="people-circle-outline" size={29} color={C.muted}/><Text style={s.statusTitle}>MST Partner Program</Text><Text style={s.statusText}>Sign in first. Partner status is only available to approved MST Tipsters.</Text><Pressable style={s.primary} onPress={openAccount}><Text style={s.primaryText}>SIGN IN</Text></Pressable></View>;
-  if(tipster?.status!=="approved")return <View style={s.statusCard}><Ionicons name="link-outline" size={28} color={C.gold}/><Text style={s.statusTitle}>{tx(my,"Partner comes after Tipster approval","Partner Program က Tipster Approved ဖြစ်ပြီးမှ")}</Text><Text style={s.statusText}>{tx(my,"Complete the private 10-Tip qualification, pass 7/10, submit the Tipster application and get MST approval first.","Private 10-Tip Qualification ကို 7/10 နဲ့အောင်၊ Tipster Application တင်ပြီး MST Approved ဖြစ်မှ Partner Program လျှောက်နိုင်မယ်။")}</Text></View>;
-  if(partner?.status==="approved")return <><View style={[s.partnerHero,{borderColor:"rgba(34,199,119,.35)"}]}><View style={{flex:1}}><Text style={s.eyebrow}>MST PARTNER</Text><Text style={s.partnerCode}>{partner.referralCode||"—"}</Text><Text style={s.partnerSub}>{partner.channelType} · {Number(partner.audienceSize||0).toLocaleString()} audience</Text></View><Ionicons name="link" size={34} color={C.green}/></View><View style={s.statsGrid}><View style={s.stat}><Text style={s.statLabel}>REFERRALS</Text><Text style={s.statNum}>{partner.referrals||0}</Text><Text style={s.statSub}>attributed users</Text></View><View style={s.stat}><Text style={s.statLabel}>COMMISSION</Text><Text style={s.statNum}>{partner.commissionPercent||PARTNER_DEFAULTS.commissionPercent}%</Text><Text style={s.statSub}>{partner.commissionMonths||PARTNER_DEFAULTS.durationMonths} months</Text></View><View style={s.stat}><Text style={s.statLabel}>AFFILIATE</Text><Text style={s.statNum}>{partner.affiliateEarningsCredits||0}</Text><Text style={s.statSub}>earned Credits</Text></View></View><View style={s.infoCard}><Text style={s.infoTitle}>HOW TO USE IT</Text><Text style={s.infoText}>Keep your Telegram, Facebook, YouTube or other community. Share your MST Partner code with your audience and bring them into MST Score. Your normal Tipster revenue stays separate from affiliate revenue.</Text></View>{partner.billingActivationRequired?<View style={s.pendingCard}><Ionicons name="information-circle-outline" size={19} color={C.gold}/><View style={{flex:1}}><Text style={s.pendingTitle}>Affiliate money tracking is prepared, not faked</Text><Text style={s.pendingText}>Referral attribution works now. Affiliate commission will only be credited from verified eligible store/subscription revenue after App Store / Google Play billing is connected.</Text></View></View>:null}</>;
-  if(partner?.status==="pending")return <View style={s.statusCard}><Ionicons name="time-outline" size={28} color={C.gold}/><Text style={s.statusTitle}>Partner application pending</Text><Text style={s.statusText}>MST is reviewing your channel, real audience and engagement. Tipster performance alone does not automatically grant Partner status.</Text></View>;
-  return <View style={s.formCard}><Text style={s.formTitle}>{partner?.status==="rejected"?"Re-apply to MST Partner Program":"Apply to MST Partner Program"}</Text><Text style={s.formSub}>{tx(my,"For approved Tipsters who can bring a real audience from Telegram, Facebook, YouTube, TikTok, websites or other communities.","Telegram, Facebook, YouTube, TikTok, Website စတဲ့ community တွေကနေ audience တကယ်ခေါ်လာနိုင်တဲ့ Approved Tipsters တွေအတွက်ပါ။")}</Text><Text style={s.inputLabel}>MAIN CHANNEL</Text><View style={s.chips}>{["Telegram","Facebook","YouTube","TikTok","Website","Other"].map(x=><Pressable key={x} style={[s.chip,channelType===x&&s.chipOn]} onPress={()=>setChannelType(x)}><Text style={[s.chipText,channelType===x&&s.chipTextOn]}>{x}</Text></Pressable>)}</View><Text style={s.inputLabel}>PUBLIC CHANNEL URL</Text><TextInput value={channelUrl} onChangeText={setChannelUrl} autoCapitalize="none" placeholder="https://t.me/yourchannel" placeholderTextColor={C.muted2} style={s.input}/><Text style={s.inputLabel}>APPROX. AUDIENCE SIZE</Text><TextInput value={audienceSize} onChangeText={(v)=>setAudienceSize(v.replace(/[^0-9]/g,"").slice(0,9))} keyboardType="number-pad" placeholder="10000" placeholderTextColor={C.muted2} style={s.input}/><Text style={s.inputLabel}>NOTES</Text><TextInput value={notes} onChangeText={setNotes} multiline maxLength={800} placeholder="Tell MST about your community and engagement." placeholderTextColor={C.muted2} style={[s.input,s.multiline]}/><View style={s.ruleBox}><Ionicons name="cash-outline" size={15} color={C.red}/><Text style={s.ruleText}>Default Partner model: extra 10% of eligible net revenue from referred users for 6 months, adjustable by MST. This is separate from the 70/30 revenue split on your own Tips.</Text></View><Pressable disabled={loading||!/^https?:\/\//i.test(channelUrl)} style={[s.primary,(loading||!/^https?:\/\//i.test(channelUrl))&&s.disabled]} onPress={()=>onApply?.({channelType,channelUrl,audienceSize:Number(audienceSize||0),notes})}>{loading?<ActivityIndicator color={C.text}/>:<Text style={s.primaryText}>SUBMIT PARTNER APPLICATION</Text>}</Pressable></View>;
-}
-
-export default function TipsScreen({language="my",openAccount}){
-  const my=language!=="en";const [tab,setTab]=useState("TIPS"),[auth,setAuth]=useState(false),[tips,setTips]=useState([]),[tipsters,setTipsters]=useState([]),[me,setMe]=useState(null),[matches,setMatches]=useState([]),[loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[busy,setBusy]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState("");
-  const loadMatches=useCallback(async(force=false)=>{const dates=[bangkokDate(0),bangkokDate(1),bangkokDate(2),bangkokDate(3)];prefetchFastFootballMatches(dates);const rows=[];for(const date of dates){try{const cached=peekFastFootballMatches(date);const data=cached?.matches?.length&&!force?cached.matches:(await fetchFastFootballMatches({date,force})).matches||[];rows.push(...data);}catch(_){}}const now=Date.now();const seen=new Set();setMatches(rows.filter(m=>{if(!m?.id||seen.has(String(m.id)))return false;seen.add(String(m.id));return m.kickoff&&new Date(m.kickoff).getTime()>now;}).sort((a,b)=>new Date(a.kickoff)-new Date(b.kickoff)));},[]);
-  const load=useCallback(async(refresh=false)=>{refresh?setRefreshing(true):setLoading(true);setError("");try{const a=await getAuthStatus().catch(()=>({authenticated:false}));setAuth(Boolean(a.authenticated));const [tipsData,tipsterData,meData]=await Promise.all([getTips({limit:60}).catch(()=>[]),getTipsters({limit:60}).catch(()=>[]),a.authenticated?getTipsMe().catch(()=>null):Promise.resolve(null)]);setTips(Array.isArray(tipsData)?tipsData:[]);setTipsters(Array.isArray(tipsterData)?tipsterData:[]);setMe(meData);const needsMatches=Boolean(a.authenticated&&(meData?.tipster?.status==="approved"||meData?.qualification?.status==="active"||meData?.qualification?.status==="not_started"||meData?.qualification?.canStart));if(needsMatches)await loadMatches(refresh);}catch(e){setError(e?.message||"Could not load MST Tips.");}finally{setLoading(false);setRefreshing(false);}},[loadMatches]);
-  useEffect(()=>{load(false);},[load]);
-  const action=async(key,fn,success)=>{setBusy(key);setMessage("");setError("");try{await fn();if(success)setMessage(success);await load(false);}catch(e){setError(e?.message||"Action failed.");}finally{setBusy("");}};
-  const doUnlock=(tip)=>{if(!auth){openAccount?.();return;}return action(`unlock:${tip.id}`,()=>unlockTip(tip.id),`${tip.priceCredits} Credits used · Tip unlocked.`);};
-  const doStartQualification=()=>action("qualification",()=>startTipsterQualification(),"Private Tipster Qualification started.");
-  const doSubmitQualification=(input)=>action("qualification",()=>submitQualificationTip(input),"Private qualification Tip submitted. Other users cannot see it.");
-  const doApply=(input)=>action("apply",()=>applyTipster(input),"Tipster application submitted for MST review.");
-  const doPublish=(input)=>action("publish",()=>publishTip(input),"Verified Tip published. It locks permanently at kickoff.");
-  const doPayout=(input)=>action("payout",()=>requestTipsterPayout(input),"Payout request submitted for MST review.");
-  const doPartnerApply=(input)=>action("partner",()=>applyTipsterPartner(input),"Partner application submitted for MST review.");
-  const doClaimReferral=(code)=>action("referral",()=>claimPartnerReferral(code),"Partner referral code linked to your MST account.");
-  const doBuyPack=(packageId)=>{
-    if(!auth){openAccount?.();return;}
-    return action(`pack:${packageId}`,async()=>{
-      const result=await purchaseCredits(packageId);
-      return result;
-    },`Purchased Credits successfully · Balance updated.`);
+  const action = async (key, fn, success) => {
+    setBusy(key);
+    setMessage("");
+    setError("");
+    try {
+      await fn();
+      if (success) setMessage(success);
+      await load(false);
+    } catch (e) {
+      setError(e?.message || "Action failed.");
+    } finally {
+      setBusy("");
+    }
   };
 
-  return <View style={s.screen}><View style={s.header}><View><Text style={s.title}>MST Tips</Text><Text style={s.subtitle}>{tx(my,"Verified football analysis marketplace","Verified ဘောလုံးသုံးသပ်ချက် Marketplace")}</Text></View><View style={s.headerCoin}><Ionicons name="diamond-outline" size={17} color={C.gold}/><Text style={s.headerCoinText}>{auth?Number(me?.wallet?.balance||0).toLocaleString():"—"}</Text></View></View><View style={s.tabs}>{TABS.map(x=><Pressable key={x} style={[s.tab,tab===x&&s.tabOn]} onPress={()=>setTab(x)}><Text numberOfLines={1} style={[s.tabText,tab===x&&s.tabTextOn]}>{x}</Text></Pressable>)}</View><ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>load(true)} tintColor={C.red} colors={[C.red]}/>}>{message?<View style={s.message}><Ionicons name="checkmark-circle-outline" size={16} color={C.green}/><Text style={s.messageText}>{message}</Text></View>:null}{error?<View style={s.errorBox}><Ionicons name="alert-circle-outline" size={16} color={C.red}/><Text style={s.errorText}>{error}</Text></View>:null}{loading&&!tips.length?<View style={s.loading}><ActivityIndicator color={C.red}/><Text style={s.empty}>Loading MST Tips…</Text></View>:null}
-    {tab==="TIPS"?<><View style={s.marketHero}><View style={{flex:1}}><Text style={s.eyebrow}>PREMIUM FOOTBALL ANALYSIS</Text><Text style={s.marketHeroTitle}>{tx(my,"Pay for analysis, never a guaranteed result.","Analysis အတွက်ပေးချေခြင်းဖြစ်ပြီး အနိုင်ရလဒ်အာမခံမဟုတ်ပါ။")}</Text><Text style={s.marketHeroSub}>Private 7/10 qualification · MST approval · verified record · permanent wins and losses</Text></View><Ionicons name="analytics-outline" size={33} color={C.red}/></View>{tips.length?tips.map(t=><TipCard key={t.id} tip={t} authenticated={auth} openAccount={openAccount} onUnlock={doUnlock} unlocking={busy===`unlock:${t.id}`} my={my}/>):!loading?<Text style={s.empty}>No premium Tips published yet.</Text>:null}</>:null}
-    {tab==="TIPSTERS"?<><View style={s.sectionHeader}><Text style={s.sectionTitle}>VERIFIED TIPSTERS</Text><Text style={s.sectionSub}>{tipsters.length} approved</Text></View>{tipsters.length?tipsters.map(x=><TipsterCard key={x.userId} item={x}/>):<Text style={s.empty}>No approved Tipsters yet.</Text>}</>:null}
-    {tab==="CREDITS"?<CreditPanel me={me} authenticated={auth} openAccount={openAccount} my={my} onClaimReferral={doClaimReferral} onBuyPack={doBuyPack} loading={busy==="referral"} buyingPack={busy.startsWith("pack:")?busy.slice(5):""}/>:null}
-    {tab==="TIPSTER"?<>{!auth?<View style={s.statusCard}><Ionicons name="person-circle-outline" size={28} color={C.muted}/><Text style={s.statusTitle}>Become an MST Tipster</Text><Text style={s.statusText}>Everyone starts as a normal MST user. Sign in, then earn eligibility through the private 10-Tip Qualification.</Text><Pressable style={s.primary} onPress={openAccount}><Text style={s.primaryText}>SIGN IN</Text></Pressable></View>:me?.tipster?.status==="approved"?<TipsterDashboard me={me} matches={matches} onPublish={doPublish} onPayout={doPayout} loading={busy==="publish"||busy==="payout"} my={my}/>:<QualificationPanel me={me} matches={matches} onStart={doStartQualification} onSubmit={doSubmitQualification} onApply={doApply} loading={busy==="qualification"||busy==="apply"} my={my}/>}</>:null}
-    {tab==="PARTNER"?<PartnerPanel me={me} authenticated={auth} openAccount={openAccount} onApply={doPartnerApply} loading={busy==="partner"} my={my}/>:null}
-  </ScrollView></View>;
+  const doUnlock = (tip) => {
+    if (!auth) {
+      openAccount?.();
+      return;
+    }
+    return action(`unlock:${tip.id}`, () => unlockTip(tip.id), `${tip.priceCredits} Credits used · Tip unlocked.`);
+  };
+
+  const doBuyPack = (packageId) => {
+    if (!auth) {
+      openAccount?.();
+      return;
+    }
+    return action(
+      `pack:${packageId}`,
+      async () => {
+        const result = await purchaseCredits(packageId);
+        return result;
+      },
+      `Purchased Credits successfully · Balance updated.`,
+    );
+  };
+
+  return (
+    <View style={[s.screen, { backgroundColor: colors.bg }]}>
+      <View style={[s.header, { borderBottomColor: colors.border2 }]}>
+        <View>
+          <Text style={[s.title, { color: colors.text }]}>MST Tips</Text>
+          <Text style={[s.subtitle, { color: colors.muted }]}>
+            {tx(my, "Verified football analysis marketplace", "Verified ဘောလုံးသုံးသပ်ချက် Marketplace")}
+          </Text>
+        </View>
+        <View style={[s.headerCoin, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Ionicons name="diamond-outline" size={17} color={colors.gold} />
+          <Text style={[s.headerCoinText, { color: colors.gold }]}>
+            {auth ? Number(me?.wallet?.balance || 0).toLocaleString() : "—"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[s.tabs, { borderBottomColor: colors.border2 }]}>
+        {TABS.map((x) => (
+          <Pressable key={x} style={[s.tab, tab === x && { backgroundColor: colors.redSoft }]} onPress={() => setTab(x)}>
+            <Text numberOfLines={1} style={[s.tabText, { color: colors.muted }, tab === x && { color: colors.red }]}>
+              {x}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.red} colors={[colors.red]} />
+        }
+      >
+        {message ? (
+          <View style={[s.message, { backgroundColor: "rgba(34,199,119,.08)", borderColor: "rgba(34,199,119,.2)" }]}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={colors.green} />
+            <Text style={[s.messageText, { color: colors.green }]}>{message}</Text>
+          </View>
+        ) : null}
+
+        {error ? (
+          <View style={[s.errorBox, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
+            <Ionicons name="alert-circle-outline" size={16} color={colors.red} />
+            <Text style={[s.errorText, { color: colors.red }]}>{error}</Text>
+          </View>
+        ) : null}
+
+        {tab === "TIPS" ? (
+          <>
+            <View style={[s.marketHero, { backgroundColor: colors.card, borderColor: colors.red }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.eyebrow, { color: colors.red }]}>PREMIUM FOOTBALL ANALYSIS</Text>
+                <Text style={[s.marketHeroTitle, { color: colors.text }]}>
+                  {tx(my, "Pay for analysis, never a guaranteed result.", "Analysis အတွက်ပေးချေခြင်းဖြစ်ပြီး အနိုင်ရလဒ်အာမခံမဟုတ်ပါ။")}
+                </Text>
+                <Text style={[s.marketHeroSub, { color: colors.muted }]}>
+                  Private 7/10 qualification · MST approval · verified record · permanent wins and losses
+                </Text>
+              </View>
+              <Ionicons name="analytics-outline" size={33} color={colors.red} />
+            </View>
+            {tips.length ? (
+              tips.map((t) => (
+                <TipCard
+                  key={t.id}
+                  tip={t}
+                  authenticated={auth}
+                  openAccount={openAccount}
+                  onUnlock={doUnlock}
+                  unlocking={busy === `unlock:${t.id}`}
+                  my={my}
+                  colors={colors}
+                />
+              ))
+            ) : !loading ? (
+              <Text style={[s.empty, { color: colors.muted }]}>No premium Tips published yet.</Text>
+            ) : null}
+          </>
+        ) : null}
+
+        {tab === "TIPSTERS" ? (
+          <>
+            <View style={s.sectionHeader}>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>VERIFIED TIPSTERS</Text>
+              <Text style={[s.sectionSub, { color: colors.muted }]}>{tipsters.length} approved</Text>
+            </View>
+            {tipsters.length ? (
+              tipsters.map((x) => <TipsterCard key={x.userId} item={x} colors={colors} />)
+            ) : (
+              <Text style={[s.empty, { color: colors.muted }]}>No approved Tipsters yet.</Text>
+            )}
+          </>
+        ) : null}
+
+        {tab === "CREDITS" ? (
+          <CreditPanel
+            me={me}
+            authenticated={auth}
+            openAccount={openAccount}
+            my={my}
+            onBuyPack={doBuyPack}
+            loading={busy === "referral"}
+            buyingPack={busy.startsWith("pack:") ? busy.slice(5) : ""}
+            colors={colors}
+          />
+        ) : null}
+      </ScrollView>
+    </View>
+  );
 }
 
-const s=StyleSheet.create({
-  screen:{flex:1,backgroundColor:C.bg},header:{minHeight:70,paddingHorizontal:16,flexDirection:"row",alignItems:"center",justifyContent:"space-between",borderBottomWidth:1,borderBottomColor:C.border2},title:{fontSize:23,fontWeight:"900",color:C.text},subtitle:{fontSize:9.5,color:C.muted,marginTop:3},headerCoin:{height:34,paddingHorizontal:11,borderRadius:17,backgroundColor:C.card,borderWidth:1,borderColor:C.border,flexDirection:"row",alignItems:"center",gap:6},headerCoinText:{fontSize:11,fontWeight:"900",color:C.gold},tabs:{height:49,padding:5,flexDirection:"row",gap:2,borderBottomWidth:1,borderBottomColor:C.border2},tab:{flex:1,borderRadius:8,alignItems:"center",justifyContent:"center",paddingHorizontal:1},tabOn:{backgroundColor:C.redSoft},tabText:{fontSize:6.8,fontWeight:"900",color:C.muted},tabTextOn:{color:C.red},content:{padding:12,paddingBottom:40},loading:{minHeight:120,alignItems:"center",justifyContent:"center",gap:8},empty:{fontSize:9.5,color:C.muted,textAlign:"center",padding:16},message:{minHeight:38,borderRadius:9,paddingHorizontal:11,backgroundColor:"rgba(34,199,119,.08)",borderWidth:1,borderColor:"rgba(34,199,119,.2)",flexDirection:"row",alignItems:"center",gap:7,marginBottom:8},messageText:{flex:1,fontSize:9.5,color:C.green},errorBox:{minHeight:38,borderRadius:9,paddingHorizontal:11,backgroundColor:C.redSoft,borderWidth:1,borderColor:"rgba(243,39,53,.25)",flexDirection:"row",alignItems:"center",gap:7,marginBottom:8},errorText:{flex:1,fontSize:9.5,color:C.red},
-  marketHero:{minHeight:120,borderRadius:15,backgroundColor:C.card,borderWidth:1,borderColor:"rgba(243,39,53,.28)",padding:15,flexDirection:"row",alignItems:"center",gap:12,marginBottom:10},eyebrow:{fontSize:7.5,fontWeight:"900",letterSpacing:.9,color:C.red,marginBottom:5},marketHeroTitle:{fontSize:15,fontWeight:"900",lineHeight:20,color:C.text,maxWidth:270},marketHeroSub:{fontSize:8.5,lineHeight:13,color:C.muted,marginTop:6},
-  tipCard:{backgroundColor:C.card,borderRadius:13,borderWidth:1,borderColor:C.border,padding:12,marginBottom:9},tipTop:{flexDirection:"row",alignItems:"center"},competition:{fontSize:10.5,fontWeight:"800",color:C.text2},kickoff:{fontSize:8.5,color:C.muted,marginTop:2},resultBadge:{minWidth:45,height:23,borderRadius:12,alignItems:"center",justifyContent:"center",paddingHorizontal:7},resultWin:{backgroundColor:"rgba(34,199,119,.18)"},resultLoss:{backgroundColor:C.redSoft},resultVoid:{backgroundColor:C.card2},resultText:{fontSize:7.5,fontWeight:"900",color:C.text},matchRow:{minHeight:48,flexDirection:"row",alignItems:"center",gap:8,borderBottomWidth:1,borderBottomColor:C.border2},matchTeam:{flex:1,fontSize:12,fontWeight:"900",color:C.text},vs:{fontSize:8,fontWeight:"900",color:C.muted},tipsterRow:{minHeight:65,flexDirection:"row",alignItems:"center",gap:9},tipsterAvatar:{width:38,height:38,borderRadius:19,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},tipsterName:{fontSize:10.5,fontWeight:"800",color:C.text2},inline:{flexDirection:"row",alignItems:"center",gap:6,marginTop:4},levelBadge:{height:21,borderRadius:11,borderWidth:1,borderColor:"rgba(243,39,53,.35)",backgroundColor:C.redSoft,paddingHorizontal:6,flexDirection:"row",alignItems:"center",gap:3},levelText:{fontSize:6.8,fontWeight:"900",color:C.red},streak:{fontSize:8.5,fontWeight:"900"},winBox:{alignItems:"flex-end"},winNum:{fontSize:14,fontWeight:"900",color:C.green},winLabel:{fontSize:6.5,fontWeight:"900",color:C.muted},tipMeta:{flexDirection:"row",gap:6,marginBottom:9},metaItem:{flex:1,minHeight:47,borderRadius:8,backgroundColor:C.panel,padding:8,justifyContent:"space-between"},metaLabel:{fontSize:6.8,fontWeight:"800",color:C.muted},metaValue:{fontSize:10,fontWeight:"900",color:C.text2},lockedBox:{borderRadius:10,backgroundColor:C.panel,borderWidth:1,borderColor:C.border,padding:10,flexDirection:"row",alignItems:"center",gap:9},lockedTitle:{fontSize:10,fontWeight:"800",color:C.text2},lockedText:{fontSize:8,lineHeight:12,color:C.muted,marginTop:2},unlockButton:{minWidth:61,height:48,borderRadius:9,backgroundColor:C.red,alignItems:"center",justifyContent:"center"},unlockPrice:{fontSize:16,fontWeight:"900",color:C.text},unlockSmall:{fontSize:6.5,fontWeight:"900",color:C.text,opacity:.85},revealed:{borderRadius:10,backgroundColor:"#0D1511",borderWidth:1,borderColor:"rgba(34,199,119,.25)",padding:11},pickHead:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:8},marketName:{fontSize:7.5,fontWeight:"900",color:C.muted},pick:{fontSize:13,fontWeight:"900",color:C.green},analysis:{fontSize:10,lineHeight:15,color:C.text2,marginTop:9},disclaimer:{flexDirection:"row",alignItems:"center",gap:5,marginTop:8},disclaimerText:{flex:1,fontSize:7.4,color:C.muted},
-  sectionHeader:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginVertical:6},sectionTitle:{fontSize:11,fontWeight:"900",color:C.text2,marginVertical:8},sectionSub:{fontSize:8.5,color:C.muted},personCard:{minHeight:96,borderRadius:12,backgroundColor:C.card,borderWidth:1,borderColor:C.border,padding:11,flexDirection:"row",alignItems:"center",gap:10,marginBottom:8},personAvatar:{width:46,height:46,borderRadius:23,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},personName:{fontSize:11.5,fontWeight:"900",color:C.text},personBio:{fontSize:8,lineHeight:12,color:C.muted,marginTop:4},qualificationMini:{fontSize:7.2,fontWeight:"800",color:C.green,marginTop:4},partnerBadge:{height:20,borderRadius:10,paddingHorizontal:6,backgroundColor:"rgba(244,200,77,.08)",borderWidth:1,borderColor:"rgba(244,200,77,.3)",flexDirection:"row",alignItems:"center",gap:3},partnerBadgeText:{fontSize:6.2,fontWeight:"900",color:C.gold},personStats:{alignItems:"flex-end"},personRate:{fontSize:15,fontWeight:"900",color:C.green},personMini:{fontSize:7.5,color:C.muted,marginTop:2},
-  walletHero:{minHeight:130,borderRadius:15,backgroundColor:C.card,borderWidth:1,borderColor:"rgba(244,200,77,.28)",padding:16,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},walletNumber:{fontSize:36,fontWeight:"900",letterSpacing:-1,color:C.text},walletSub:{fontSize:9,color:C.muted,marginTop:2},creditCoin:{width:64,height:64,borderRadius:32,backgroundColor:"rgba(244,200,77,.12)",borderWidth:2,borderColor:C.gold,alignItems:"center",justifyContent:"center"},coinText:{fontSize:16,fontWeight:"900",fontStyle:"italic",color:C.gold},infoCard:{borderRadius:12,backgroundColor:C.card,borderWidth:1,borderColor:C.border,padding:13,marginTop:10},infoTitle:{fontSize:9,fontWeight:"900",color:C.muted},reference:{fontSize:19,fontWeight:"900",color:C.gold,marginTop:5},infoText:{fontSize:9,lineHeight:14,color:C.text2,marginTop:7},packGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},pack:{width:"48%",minHeight:120,borderRadius:11,backgroundColor:C.card,borderWidth:1,borderColor:C.border,padding:12,justifyContent:"space-between",position:"relative"},packCredits:{fontSize:22,fontWeight:"900",color:C.text},packLabel:{fontSize:7.5,fontWeight:"900",color:C.gold},packPrice:{fontSize:10,color:C.muted,marginTop:4},popularTag:{position:"absolute",top:6,right:6,backgroundColor:C.gold,borderRadius:4,paddingHorizontal:4,paddingVertical:2},popularText:{fontSize:6.5,fontWeight:"900",color:"#000"},buyBtn:{height:30,backgroundColor:C.red,borderRadius:6,alignItems:"center",justifyContent:"center",marginTop:8},buyBtnText:{fontSize:9,fontWeight:"900",color:C.text},pendingCard:{marginTop:10,borderRadius:11,backgroundColor:"rgba(34,199,119,.06)",borderWidth:1,borderColor:"rgba(34,199,119,.2)",padding:12,flexDirection:"row",gap:9},pendingTitle:{fontSize:10,fontWeight:"800",color:C.text2},pendingText:{fontSize:8.3,lineHeight:13,color:C.muted,marginTop:3},
-  statusCard:{borderRadius:13,backgroundColor:C.card,borderWidth:1,borderColor:C.border,padding:16,alignItems:"center",gap:8,marginBottom:10},statusTitle:{fontSize:15,fontWeight:"900",color:C.text,textAlign:"center"},statusText:{fontSize:9.5,lineHeight:15,color:C.muted,textAlign:"center",maxWidth:320},formCard:{borderRadius:13,backgroundColor:C.card,borderWidth:1,borderColor:C.border,padding:13,marginBottom:10},formTitle:{fontSize:15,fontWeight:"900",color:C.text},formSub:{fontSize:9,lineHeight:14,color:C.muted,marginTop:4,marginBottom:12},inputLabel:{fontSize:7.5,fontWeight:"900",letterSpacing:.5,color:C.muted,marginTop:10,marginBottom:5},input:{height:44,borderRadius:9,backgroundColor:C.panel,borderWidth:1,borderColor:C.border,paddingHorizontal:11,color:C.text,fontSize:11,marginBottom:2},multiline:{height:90,paddingTop:10,textAlignVertical:"top"},analysisInput:{height:120,paddingTop:10,textAlignVertical:"top"},primary:{minHeight:42,borderRadius:9,backgroundColor:C.red,alignItems:"center",justifyContent:"center",marginTop:12,paddingHorizontal:12},primaryText:{fontSize:9,fontWeight:"900",color:C.text,textAlign:"center"},secondary:{height:40,borderRadius:9,borderWidth:1,borderColor:C.border,alignItems:"center",justifyContent:"center",marginTop:10},secondaryText:{fontSize:9,fontWeight:"900",color:C.text2},disabled:{opacity:.35},smallAction:{width:86,height:44,borderRadius:9,backgroundColor:C.red,alignItems:"center",justifyContent:"center"},smallActionText:{fontSize:8,fontWeight:"900",color:C.text},
-  dashboardHero:{minHeight:100,borderRadius:13,backgroundColor:C.card,borderWidth:1,borderColor:"rgba(243,39,53,.3)",padding:13,flexDirection:"row",alignItems:"center",marginBottom:8},dashboardTitle:{fontSize:17,fontWeight:"900",color:C.text,marginTop:7},dashboardSub:{fontSize:8.5,color:C.muted,marginTop:3},bigRate:{alignItems:"flex-end"},bigRateNum:{fontSize:25,fontWeight:"900",color:C.green},bigRateLabel:{fontSize:7,fontWeight:"900",color:C.muted},statsGrid:{flexDirection:"row",gap:6,marginBottom:9},stat:{flex:1,minHeight:75,borderRadius:10,backgroundColor:C.card,borderWidth:1,borderColor:C.border,padding:9,justifyContent:"space-between"},statLabel:{fontSize:6.8,fontWeight:"900",color:C.muted},statNum:{fontSize:18,fontWeight:"900",color:C.text},statSub:{fontSize:7.3,color:C.muted},matchPicker:{gap:7,paddingBottom:3},matchPick:{width:150,minHeight:94,borderRadius:10,backgroundColor:C.panel,borderWidth:1,borderColor:C.border,padding:9},matchPickOn:{borderColor:C.red,backgroundColor:C.redSoft},matchPickLeague:{fontSize:7.5,fontWeight:"800",color:C.muted},matchPickTeam:{fontSize:9.5,fontWeight:"800",color:C.text2,marginTop:5},matchPickTime:{fontSize:7.5,color:C.red,marginTop:6},chips:{flexDirection:"row",flexWrap:"wrap",gap:6},chip:{minHeight:34,borderRadius:17,backgroundColor:C.panel,borderWidth:1,borderColor:C.border,paddingHorizontal:10,alignItems:"center",justifyContent:"center"},chipOn:{backgroundColor:C.redSoft,borderColor:C.red},chipText:{fontSize:7.5,fontWeight:"900",color:C.muted},chipTextOn:{color:C.red},priceChip:{minWidth:54,height:36,borderRadius:9,backgroundColor:C.panel,borderWidth:1,borderColor:C.border,alignItems:"center",justifyContent:"center"},priceChipOn:{borderColor:C.gold,backgroundColor:"rgba(244,200,77,.08)"},priceChipText:{fontSize:9,fontWeight:"900",color:C.text2},ruleBox:{borderRadius:9,backgroundColor:C.redSoft,padding:10,flexDirection:"row",gap:7,marginTop:8},ruleText:{flex:1,fontSize:8.3,lineHeight:13,color:C.text2},payoutRow:{flexDirection:"row",gap:7},
-  qualificationHero:{minHeight:110,borderRadius:14,backgroundColor:C.card,borderWidth:1,borderColor:"rgba(243,39,53,.3)",padding:14,marginBottom:10,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},qualificationScore:{fontSize:22,fontWeight:"900",color:C.text},qualificationSub:{fontSize:8.5,color:C.muted,marginTop:5},progressCircle:{width:66,height:66,borderRadius:33,borderWidth:2,borderColor:C.red,backgroundColor:C.redSoft,alignItems:"center",justifyContent:"center"},progressNum:{fontSize:22,fontWeight:"900",color:C.text},progressSmall:{fontSize:7,fontWeight:"900",color:C.muted},trialRow:{minHeight:62,flexDirection:"row",alignItems:"center",gap:8,paddingVertical:8},topBorder:{borderTopWidth:1,borderTopColor:C.border2},trialMatch:{fontSize:10,fontWeight:"800",color:C.text2},trialMeta:{fontSize:7.5,color:C.muted,marginTop:4},
-  partnerHero:{minHeight:110,borderRadius:14,backgroundColor:C.card,borderWidth:1,borderColor:"rgba(244,200,77,.3)",padding:14,marginBottom:10,flexDirection:"row",alignItems:"center",gap:10},partnerCode:{fontSize:22,fontWeight:"900",color:C.green,letterSpacing:.5},partnerSub:{fontSize:8.5,color:C.muted,marginTop:5},logoFallback:{backgroundColor:C.card2,alignItems:"center",justifyContent:"center"}
+const s = StyleSheet.create({
+  screen: { flex: 1 },
+  header: {
+    minHeight: 60,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+  },
+  title: { fontSize: 20, fontWeight: "900" },
+  subtitle: { fontSize: 9.5, marginTop: 2 },
+  headerCoin: { height: 34, paddingHorizontal: 11, borderRadius: 17, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 6 },
+  headerCoinText: { fontSize: 11, fontWeight: "900" },
+  tabs: { height: 48, padding: 5, flexDirection: "row", gap: 2, borderBottomWidth: 1 },
+  tab: { flex: 1, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 1 },
+  tabText: { fontSize: 9, fontWeight: "900" },
+  content: { padding: 12, paddingBottom: 40 },
+  empty: { fontSize: 10.5, textAlign: "center", padding: 16 },
+  message: { minHeight: 38, borderRadius: 9, paddingHorizontal: 11, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8 },
+  messageText: { flex: 1, fontSize: 10 },
+  errorBox: { minHeight: 38, borderRadius: 9, paddingHorizontal: 11, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8 },
+  errorText: { flex: 1, fontSize: 10 },
+  marketHero: { minHeight: 110, borderRadius: 14, borderWidth: 1, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
+  eyebrow: { fontSize: 8, fontWeight: "900", letterSpacing: 0.9, marginBottom: 4 },
+  marketHeroTitle: { fontSize: 14, fontWeight: "900", lineHeight: 19, maxWidth: 270 },
+  marketHeroSub: { fontSize: 9, lineHeight: 14, marginTop: 5 },
+  tipCard: { borderRadius: 13, borderWidth: 1, padding: 12, marginBottom: 10 },
+  tipTop: { flexDirection: "row", alignItems: "center" },
+  competition: { fontSize: 11, fontWeight: "800" },
+  kickoff: { fontSize: 9, marginTop: 2 },
+  resultBadge: { minWidth: 45, height: 23, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 7 },
+  resultText: { fontSize: 8, fontWeight: "900" },
+  matchRow: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1 },
+  matchTeam: { flex: 1, fontSize: 12.5, fontWeight: "900" },
+  vs: { fontSize: 8.5, fontWeight: "900" },
+  tipsterRow: { minHeight: 60, flexDirection: "row", alignItems: "center", gap: 9 },
+  tipsterAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  tipsterName: { fontSize: 11, fontWeight: "800" },
+  inline: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  levelBadge: { height: 21, borderRadius: 11, borderWidth: 1, paddingHorizontal: 6, flexDirection: "row", alignItems: "center", gap: 3 },
+  levelText: { fontSize: 7.5, fontWeight: "900" },
+  streak: { fontSize: 9, fontWeight: "900" },
+  winBox: { alignItems: "flex-end" },
+  winNum: { fontSize: 14, fontWeight: "900" },
+  winLabel: { fontSize: 7, fontWeight: "900" },
+  tipMeta: { flexDirection: "row", gap: 6, marginBottom: 9 },
+  metaItem: { flex: 1, minHeight: 47, borderRadius: 8, padding: 8, justifyContent: "space-between" },
+  metaLabel: { fontSize: 7.5, fontWeight: "800" },
+  metaValue: { fontSize: 10.5, fontWeight: "900" },
+  lockedBox: { borderRadius: 10, borderWidth: 1, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 },
+  lockedTitle: { fontSize: 10.5, fontWeight: "800" },
+  lockedText: { fontSize: 8.5, lineHeight: 13, marginTop: 2 },
+  unlockButton: { minWidth: 64, height: 46, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  unlockPrice: { fontSize: 16, fontWeight: "900", color: "#FFFFFF" },
+  unlockSmall: { fontSize: 7, fontWeight: "900", color: "#FFFFFF", opacity: 0.85 },
+  revealed: { borderRadius: 10, borderWidth: 1, padding: 11 },
+  pickHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  marketName: { fontSize: 8, fontWeight: "900" },
+  pick: { fontSize: 13.5, fontWeight: "900" },
+  analysis: { fontSize: 10.5, lineHeight: 16, marginTop: 8 },
+  disclaimer: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
+  disclaimerText: { flex: 1, fontSize: 8 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: 6 },
+  sectionTitle: { fontSize: 11.5, fontWeight: "900", marginVertical: 8 },
+  sectionSub: { fontSize: 9 },
+  personCard: { minHeight: 96, borderRadius: 12, borderWidth: 1, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  personAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  personName: { fontSize: 12, fontWeight: "900" },
+  personBio: { fontSize: 8.5, lineHeight: 13, marginTop: 3 },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  ratingValue: { fontSize: 10.5, fontWeight: "900" },
+  ratingCountText: { fontSize: 8.5, fontWeight: "600" },
+  qualificationMini: { fontSize: 8, fontWeight: "800", marginTop: 3 },
+  partnerBadge: { height: 19, borderRadius: 9, paddingHorizontal: 6, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 3 },
+  partnerBadgeText: { fontSize: 7, fontWeight: "900" },
+  personStats: { alignItems: "flex-end" },
+  personRate: { fontSize: 15, fontWeight: "900" },
+  personMini: { fontSize: 8, marginTop: 2 },
+  walletHero: { minHeight: 120, borderRadius: 14, borderWidth: 1, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  walletNumber: { fontSize: 34, fontWeight: "900", letterSpacing: -1 },
+  walletSub: { fontSize: 9.5, marginTop: 2 },
+  creditCoin: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  coinText: { fontSize: 15, fontWeight: "900", fontStyle: "italic" },
+  infoCard: { borderRadius: 12, borderWidth: 1, padding: 12, marginTop: 10 },
+  infoTitle: { fontSize: 9.5, fontWeight: "900" },
+  reference: { fontSize: 18, fontWeight: "900", marginTop: 4 },
+  infoText: { fontSize: 9.5, lineHeight: 14, marginTop: 6 },
+  packGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  pack: { width: "48%", minHeight: 120, borderRadius: 11, borderWidth: 1, padding: 12, justifyContent: "space-between", position: "relative" },
+  packCredits: { fontSize: 22, fontWeight: "900" },
+  packLabel: { fontSize: 8, fontWeight: "900" },
+  packPrice: { fontSize: 10.5, marginTop: 4 },
+  popularTag: { position: "absolute", top: 6, right: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
+  popularText: { fontSize: 7, fontWeight: "900", color: "#000" },
+  buyBtn: { height: 30, borderRadius: 6, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  buyBtnText: { fontSize: 9.5, fontWeight: "900", color: "#FFFFFF" },
+  pendingCard: { marginTop: 10, borderRadius: 11, borderWidth: 1, padding: 12, flexDirection: "row", gap: 9 },
+  pendingTitle: { fontSize: 10.5, fontWeight: "800" },
+  pendingText: { fontSize: 8.8, lineHeight: 13, marginTop: 3 },
+  formCard: { borderRadius: 13, borderWidth: 1, padding: 13, marginBottom: 10 },
+  formTitle: { fontSize: 14.5, fontWeight: "900" },
+  formSub: { fontSize: 9.5, lineHeight: 14, marginTop: 4, marginBottom: 10 },
+  input: { height: 44, borderRadius: 9, borderWidth: 1, paddingHorizontal: 11, fontSize: 11.5, marginBottom: 2 },
+  primary: { minHeight: 42, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 12, paddingHorizontal: 12 },
+  primaryText: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center" },
+  disabled: { opacity: 0.35 },
+  smallAction: { width: 86, height: 44, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  smallActionText: { fontSize: 9, fontWeight: "900", color: "#FFFFFF" },
+  payoutRow: { flexDirection: "row", gap: 7 },
 });

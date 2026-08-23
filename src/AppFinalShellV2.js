@@ -1,8 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
-import { BackHandler, Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "./final/HomeScreen";
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
+import {
+  handleRateLater,
+  handleRateNotNow,
+  handleRateNow,
+  recordAppLaunch,
+  shouldShowAppRatingPrompt,
+} from "./services/appRatingService";
 
 const SITE = "https://myanmarsportstalk.com";
 const YOUTUBE = "https://youtube.com/@myanmarsportstalk";
@@ -244,10 +251,36 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
     return () => subscription.remove();
   }, [mode, isSubpage, returnMode]);
 
+  const [showRatingPrompt, setShowRatingPrompt] = useState(false);
+
+  useEffect(() => {
+    recordAppLaunch().then(() => {
+      setTimeout(async () => {
+        const should = await shouldShowAppRatingPrompt();
+        if (should) setShowRatingPrompt(true);
+      }, 3500);
+    });
+  }, []);
+
+  const onRateNowPress = async () => {
+    setShowRatingPrompt(false);
+    await handleRateNow();
+  };
+
+  const onRateLaterPress = async () => {
+    setShowRatingPrompt(false);
+    await handleRateLater();
+  };
+
+  const onRateNotNowPress = async () => {
+    setShowRatingPrompt(false);
+    await handleRateNotNow();
+  };
+
   return <View style={[s.root, { backgroundColor: colors.bg }]}>
     <StatusBar barStyle={colors.barStyle} backgroundColor={colors.bg}/>
     <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
-      {mode === "home" ? <HomeScreen language={language} openMatch={(x) => openMatch(x, "home")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")}/> : null}
+      {mode === "home" ? <HomeScreen language={language} openMatch={(x) => openMatch(x, "home")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")} openPredictions={() => goRoot("prediction")} openAccount={() => openAccount("home")}/> : null}
       {isContent ? <LazyContent language={language} initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
       {mode === "scores" ? <LazyScores language={language} openMatch={(x) => openMatch(x, "scores")}/> : null}
       {mode === "favorites" ? <LazyFavorites language={language} openLeague={(x) => openEntity("competition", x, "favorites")} openTeam={(x) => openEntity("team", x, "favorites")} openPlayer={(x) => openEntity("player", x, "favorites")} openAccount={() => openAccount("favorites")}/> : null}
@@ -264,6 +297,42 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
       {mode === "article" ? <LazyArticle language={language} article={selected} goBack={goReturn}/> : null}
     </View>
     {!isSubpage ? <BottomNav active={navActive} language={language} colors={colors} onChange={(tab) => goRoot(tab === "home" ? "home" : tab)}/> : null}
+
+    {/* App Rating Prompt Modal (Triggers on 3rd+ Session) */}
+    <Modal visible={showRatingPrompt} transparent animationType="fade" onRequestClose={onRateLaterPress}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <View style={{ width: "100%", maxWidth: 340, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 20, padding: 20, alignItems: "center", gap: 12 }}>
+          <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: colors.redSoft, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="star" size={32} color={colors.gold} />
+          </View>
+          <Text style={{ fontSize: 17, fontWeight: "900", color: colors.text, textAlign: "center" }}>
+            {language === "my" ? "MST Score ကို နှစ်သက်ပါသလား?" : "Enjoying MST Score?"}
+          </Text>
+          <Text style={{ fontSize: 11.5, lineHeight: 17, color: colors.muted, textAlign: "center" }}>
+            {language === "my"
+              ? "သင့်အဆင့်သတ်မှတ်ချက်သည် MST Score ကို ပိုမိုကောင်းမွန်အောင် တိုးတက်စေရန် အထောက်အကူပြုပါသည်။"
+              : "Your review on Google Play helps us improve live scores and prediction features."}
+          </Text>
+          <View style={{ width: "100%", gap: 8, marginTop: 6 }}>
+            <Pressable style={{ height: 44, borderRadius: 12, backgroundColor: colors.red, alignItems: "center", justifyContent: "center" }} onPress={onRateNowPress}>
+              <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "900" }}>
+                {language === "my" ? "RATE ပေးမည် (RATE NOW)" : "RATE ON GOOGLE PLAY"}
+              </Text>
+            </Pressable>
+            <Pressable style={{ height: 38, borderRadius: 10, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }} onPress={onRateLaterPress}>
+              <Text style={{ color: colors.text2, fontSize: 11.5, fontWeight: "700" }}>
+                {language === "my" ? "နောက်မှ ပြန်သတိပေးပါ" : "Maybe Later"}
+              </Text>
+            </Pressable>
+            <Pressable style={{ height: 32, alignItems: "center", justifyContent: "center" }} onPress={onRateNotNowPress}>
+              <Text style={{ color: colors.muted, fontSize: 10.5, fontWeight: "600" }}>
+                {language === "my" ? "ယခု မပေးပါ" : "Not Now"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   </View>;
 }
 

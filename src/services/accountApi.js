@@ -77,17 +77,34 @@ async function api(path, { method = "GET", body, signal } = {}) {
   return payload;
 }
 
+export function normalizeAvatarUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  const clean = url.trim();
+  if (!clean) return null;
+  if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
+  if (clean.startsWith("/")) return `${MST_SITE_URL}${clean}`;
+  return `${MST_SITE_URL}/${clean}`;
+}
+
 export function extractUser(payload) {
   if (!payload || typeof payload !== "object") return null;
-  if (payload.user && typeof payload.user === "object") return payload.user;
-  if (payload.profile && typeof payload.profile === "object") return payload.profile;
-  if (payload.data && typeof payload.data === "object") {
-    if (payload.data.user) return payload.data.user;
-    if (payload.data.profile) return payload.data.profile;
-    return payload.data;
+  let raw = null;
+  if (payload.user && typeof payload.user === "object") raw = payload.user;
+  else if (payload.profile && typeof payload.profile === "object") raw = payload.profile;
+  else if (payload.data && typeof payload.data === "object") {
+    if (payload.data.user) raw = payload.data.user;
+    else if (payload.data.profile) raw = payload.data.profile;
+    else raw = payload.data;
+  } else if (payload.email || payload.name || payload.id || payload.userId) {
+    raw = payload;
   }
-  if (payload.email || payload.name || payload.id || payload.userId) return payload;
-  return null;
+  if (!raw) return null;
+  const avatar = normalizeAvatarUrl(raw?.avatar || raw?.avatarUrl || raw?.image);
+  return {
+    ...raw,
+    avatar,
+    avatarUrl: avatar,
+  };
 }
 
 export function isAuthenticatedPayload(payload) {
@@ -147,6 +164,81 @@ export const getLeaderboard = (timeframe = "all", options) => {
   const opts = typeof timeframe === "object" ? timeframe : options;
   return api(`/predictions/leaderboard?timeframe=${encodeURIComponent(tf)}`, opts);
 };
+
+export async function uploadAvatar(input) {
+  const token = await getSessionToken();
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(token ? {
+      Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
+    } : {}),
+  };
+
+  let body;
+  if (input?.base64) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({
+      base64: input.base64,
+      contentType: input.contentType || input.mimeType || "image/jpeg",
+    });
+  } else if (input?.uri) {
+    const formData = new FormData();
+    const uri = input.uri;
+    const name = uri.split("/").pop() || "avatar.jpg";
+    const match = /\.(\w+)$/.exec(name);
+    const type = input.contentType || (match ? `image/${match[1]}` : "image/jpeg");
+    formData.append("avatar", { uri, name, type });
+    body = formData;
+  } else {
+    throw new MstApiError("Invalid image selection.");
+  }
+
+  const response = await fetch(`${API_BASE}/account/avatar`, {
+    method: "POST",
+    headers,
+    body,
+  });
+  const payload = await decodeResponse(response);
+  if (!response.ok) {
+    throw new MstApiError(errorMessage(payload, `Avatar upload failed (${response.status})`), response.status, payload);
+  }
+  const rawUrl = payload?.data?.avatarUrl || payload?.avatarUrl;
+  return {
+    ok: true,
+    avatarUrl: normalizeAvatarUrl(rawUrl),
+    payload,
+  };
+}
+
+export async function deleteAvatar() {
+  const token = await getSessionToken();
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(token ? {
+      Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
+    } : {}),
+  };
+
+  const response = await fetch(`${API_BASE}/account/avatar`, {
+    method: "DELETE",
+    headers,
+  });
+  const payload = await decodeResponse(response);
+  if (!response.ok) {
+    throw new MstApiError(errorMessage(payload, `Could not remove avatar (${response.status})`), response.status, payload);
+  }
+  return {
+    ok: true,
+    avatarUrl: null,
+    payload,
+  };
+}
 
 async function tryMutation(attempts) {
   let lastError = null;

@@ -24,6 +24,8 @@ import {
   submitSupportReport,
 } from "../services/accountApi";
 import { useTheme } from "../theme/ThemeContext";
+import PolicyScreen from "./PolicyScreens";
+import { handleRateNow } from "../services/appRatingService";
 
 const SUPPORT_CATEGORIES = [
   ["score_incorrect", "Live score incorrect", "တိုက်ရိုက်ရလဒ်မှားယွင်းနေသည်"],
@@ -245,6 +247,7 @@ export default function SettingsScreenV2({
   const [auth, setAuth] = useState(null);
   const [cacheStatus, setCacheStatus] = useState("");
   const [supportVisible, setSupportVisible] = useState(false);
+  const [selectedPolicy, setSelectedPolicy] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const loadAuth = useCallback(async () => {
@@ -459,28 +462,56 @@ export default function SettingsScreenV2({
           />
         </View>
 
-        {/* LEGAL & PRIVACY */}
-        <SectionTitle title={my ? "ဥပဒေရေးရာနှင့် လုံခြုံရေး (LEGAL)" : "LEGAL & SECURITY"} colors={colors} />
+        {/* LEGAL & POLICIES (NATIVE IN-APP) */}
+        <SectionTitle title={my ? "မူဝါဒနှင့် စည်းမျဉ်းများ (POLICIES & RULES)" : "POLICIES & GUIDELINES"} colors={colors} />
         <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
           <Row
             icon="shield-checkmark-outline"
             title={my ? "ကိုယ်ရေးအချက်အလက် မူဝါဒ" : "Privacy Policy"}
-            subtitle="myanmarsportstalk.com/privacy"
-            onPress={() => Linking.openURL(`${MST_SITE_URL}/privacy`).catch(() => {})}
+            subtitle={my ? "ဒေတာလုံခြုံရေးနှင့် သိမ်းဆည်းမှု စည်းမျဉ်း" : "Data collection, privacy & deletion rights"}
+            onPress={() => setSelectedPolicy("privacy")}
             colors={colors}
           />
           <Row
             icon="document-text-outline"
             title={my ? "ဝန်ဆောင်မှု စည်းမျဉ်းများ" : "Terms of Service"}
-            subtitle="myanmarsportstalk.com/terms"
-            onPress={() => Linking.openURL(`${MST_SITE_URL}/terms`).catch(() => {})}
+            subtitle={my ? "MST Score အသုံးပြုမှု အခြေခံစည်းမျဉ်းများ" : "Official terms & user agreements"}
+            onPress={() => setSelectedPolicy("terms")}
+            colors={colors}
+          />
+          <Row
+            icon="chatbubbles-outline"
+            title={my ? "ကွန်မြူနတီနှင့် Live Chat စည်းမျဉ်း" : "Community & Chat Rules"}
+            subtitle={my ? "Live chat ဆွေးနွေးမှုနှင့် report စည်းကမ်းချက်" : "Chat guidelines & anti-abuse moderation"}
+            onPress={() => setSelectedPolicy("community")}
+            colors={colors}
+          />
+          <Row
+            icon="trophy-outline"
+            title={my ? "ခန့်မှန်းချက်နှင့် အမှတ်ပေးစည်းမျဉ်း" : "Prediction Competition Rules"}
+            subtitle={my ? "၃ မှတ် / ၁ မှတ် အမှတ်ပေးပုံစံနှင့် Kickoff lock" : "Scoring matrix & leaderboard settlement rules"}
+            onPress={() => setSelectedPolicy("predictions")}
+            colors={colors}
+          />
+          <Row
+            icon="diamond-outline"
+            title={my ? "Tipster 7/10 Qualification စည်းမျဉ်း" : "Tipster Qualification & Marketplace"}
+            subtitle={my ? "၁၀ ပွဲ ၇ ပွဲနိုင် gate နှင့် transparency မူဝါဒ" : "Private qualification gate & tipster standards"}
+            onPress={() => setSelectedPolicy("tipster")}
+            colors={colors}
+          />
+          <Row
+            icon="wallet-outline"
+            title={my ? "MST Credits & Wallet မူဝါဒ" : "Credits, Unlocks & Wallet Policy"}
+            subtitle={my ? "Credits အသုံးပြုပုံနှင့် ငွေပေးချေမှု လုံခြုံရေး" : "Instant tip unlocking & refund policies"}
+            onPress={() => setSelectedPolicy("credits")}
             colors={colors}
           />
           <Row
             icon="star-outline"
             title={my ? "MST Score ကို Rate ပေးရန်" : "Rate MST Score"}
-            subtitle={my ? "ကြယ် ၅ ပွင့် အဆင့်သတ်မှတ်ချက် ပေးရန်" : "Leave a review for Myanmar Sports Talk"}
-            onPress={() => Linking.openURL(`${MST_SITE_URL}`).catch(() => {})}
+            subtitle={my ? "ကြယ် ၅ ပွင့် အဆင့်သတ်မှတ်ချက် ပေးရန်" : "Leave a 5-star review on Google Play"}
+            onPress={() => handleRateNow()}
             colors={colors}
           />
           {auth?.authenticated ? (
@@ -525,6 +556,14 @@ export default function SettingsScreenV2({
         colors={colors}
         language={language}
       />
+
+      <Modal visible={Boolean(selectedPolicy)} animationType="slide" onRequestClose={() => setSelectedPolicy(null)}>
+        <PolicyScreen
+          policyId={selectedPolicy}
+          onBack={() => setSelectedPolicy(null)}
+          language={language}
+        />
+      </Modal>
     </View>
   );
 }
