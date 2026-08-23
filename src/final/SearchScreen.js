@@ -4,8 +4,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { extractArray, fetchCompetitionCatalog } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
 import { fetchFifaMenRanking, peekFifaMenRanking } from "../services/fifaRankingApi";
+import { searchFootballEntities as fetchSmartSearch } from "../services/smartSearchApi";
 
 const C = { bg:"#080A0C", card:"#111416", card2:"#15191C", border:"#24292D", border2:"#1D2226", red:"#F3262D", text:"#FFFFFF", text2:"#D0D2D4", muted:"#92979B" };
+const EMPTY_REMOTE = { teams:[], players:[], stale:false };
 
 const POPULAR_SEARCH_TEAMS = [
   { id: 33, name: "Manchester United", logo: "https://media.api-sports.io/football/teams/33.png", priority: 100 },
@@ -38,14 +40,30 @@ const POPULAR_SEARCH_PLAYERS = [
   { id: 282, name: "Bukayo Saka", team: "Arsenal", nationality: "England", priority: 90 },
 ];
 
+const REGIONAL_TEAM_PRIORITY = new Map([
+  ["myanmar",180],["thailand",110],["vietnam",110],["viet nam",110],["indonesia",110],["malaysia",110],
+  ["singapore",110],["philippines",110],["cambodia",110],["laos",110],["lao pdr",110],["brunei",110],
+  ["brunei darussalam",110],["timor-leste",110],["timor leste",110],
+]);
+
+function normalized(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g," ");
+}
+
+function regionalTeamPriority(team) {
+  if (!team?.national) return 0;
+  return REGIONAL_TEAM_PRIORITY.get(normalized(team.name)) || 0;
+}
+
 function scoreSearchRelevance(name, query, basePriority = 0) {
-  const n = String(name || "").toLowerCase();
-  const q = String(query || "").toLowerCase();
-  if (n === q) return 1000 + basePriority;
-  if (n.startsWith(q)) return 500 + basePriority;
+  const n = normalized(name);
+  const q = normalized(query);
+  if (!q) return 0;
+  if (n === q) return 10000 + basePriority;
+  if (n.startsWith(q)) return 5000 + basePriority;
   const words = n.split(/\s+/);
-  if (words.some((w) => w.startsWith(q))) return 300 + basePriority;
-  if (n.includes(q)) return 100 + basePriority;
+  if (words.some((w) => w.startsWith(q))) return 3000 + basePriority;
+  if (n.includes(q)) return 1000 + basePriority;
   return 0;
 }
 
@@ -98,6 +116,9 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
   const [ranking, setRanking] = useState(initialRanking);
   const [rankingLoading, setRankingLoading] = useState(!initialRanking);
   const [rankingError, setRankingError] = useState("");
+  const [remoteSearch, setRemoteSearch] = useState(EMPTY_REMOTE);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -118,15 +139,47 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
     return () => { alive = false; };
   }, [today]);
 
+  useEffect(() => {
+    const search = query.trim();
+    if (search.length < 4) {
+      setRemoteSearch(EMPTY_REMOTE);
+      setRemoteLoading(false);
+      setRemoteError("");
+      return undefined;
+    }
+
+    let alive = true;
+    let controller = null;
+    const timer = setTimeout(() => {
+      controller = new AbortController();
+      setRemoteLoading(true);
+      setRemoteError("");
+      fetchSmartSearch(search, { signal:controller.signal }).then((value) => {
+        if (!alive) return;
+        setRemoteSearch(value || EMPTY_REMOTE);
+      }).catch((error) => {
+        if (!alive || error?.name === "AbortError") return;
+        setRemoteSearch(EMPTY_REMOTE);
+        setRemoteError("Full football search is temporarily unavailable.");
+      }).finally(() => { if (alive) setRemoteLoading(false); });
+    }, 450);
+
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [query]);
+
   const q = query.trim().toLowerCase();
   const data = useMemo(() => {
     if (!q) return { matches:[], teams:[], players:[], competitions:[], rankings:[] };
 
     const foundMatches = matches
       .map((m) => {
-        const text = `${m.home?.name} ${m.away?.name} ${m.competition}`.toLowerCase();
+        const text = `${m.home?.name} ${m.away?.name} ${m.competition}`;
         const score = scoreSearchRelevance(text, q);
-        return { match: m, score };
+        return { match:m, score };
       })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -134,40 +187,47 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       .slice(0, 10);
 
     const teamMap = new Map();
-    POPULAR_SEARCH_TEAMS.forEach((t) => teamMap.set(String(t.id), t));
+    POPULAR_SEARCH_TEAMS.forEach((team) => teamMap.set(String(team.id), team));
     matches.forEach((m) => [m.home, m.away].forEach((team) => {
       if (team?.id && !teamMap.has(String(team.id))) teamMap.set(String(team.id), team);
     }));
+    (remoteSearch.teams || []).forEach((team) => {
+      if (!team?.id) return;
+      const key = String(team.id), previous = teamMap.get(key) || {};
+      teamMap.set(key, { ...previous, ...team, priority:previous.priority || 0 });
+    });
 
     const foundTeams = [...teamMap.values()]
       .map((team) => {
-        const basePriority = team.priority || 0;
-        const score = scoreSearchRelevance(team.name, q, basePriority);
-        return { team, score };
+        const basePriority = Math.max(team.priority || 0, regionalTeamPriority(team));
+        return { team, score:scoreSearchRelevance(team.name, q, basePriority) };
       })
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.score - a.score || String(a.team.name).localeCompare(String(b.team.name)))
       .map((x) => x.team)
-      .slice(0, 10);
+      .slice(0, 12);
 
-    const foundPlayers = POPULAR_SEARCH_PLAYERS
-      .map((player) => {
-        const score = scoreSearchRelevance(player.name, q, player.priority);
-        return { player, score };
-      })
+    const playerMap = new Map();
+    POPULAR_SEARCH_PLAYERS.forEach((player) => playerMap.set(String(player.id), player));
+    (remoteSearch.players || []).forEach((player) => {
+      if (!player?.id) return;
+      const key = String(player.id), previous = playerMap.get(key) || {};
+      playerMap.set(key, { ...previous, ...player, priority:previous.priority || 0 });
+    });
+    const foundPlayers = [...playerMap.values()]
+      .map((player) => ({ player, score:scoreSearchRelevance(player.name, q, player.priority || 0) }))
       .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.score - a.score || String(a.player.name).localeCompare(String(b.player.name)))
       .map((x) => x.player)
-      .slice(0, 8);
+      .slice(0, 12);
 
     const foundCompetitions = competitions
       .map((raw) => raw?.league || raw?.competition || raw)
       .filter((item) => item?.id)
       .map((item) => {
         const n = name(item);
-        const isMajor = /(premier league|champions league|laliga|serie a|bundesliga|world cup|euro)/i.test(n);
-        const score = scoreSearchRelevance(n, q, isMajor ? 50 : 0);
-        return { item, score };
+        const isMajor = /(premier league|champions league|laliga|la liga|serie a|bundesliga|ligue 1|europa league|conference league|world cup|euro)/i.test(n);
+        return { item, score:scoreSearchRelevance(n, q, isMajor ? 70 : 0) };
       })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -185,18 +245,19 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
       .map((x) => x.entry)
       .slice(0, 10);
 
-    return { matches: foundMatches, teams: foundTeams, players: foundPlayers, competitions: foundCompetitions, rankings: foundRankings };
-  }, [q, matches, competitions, ranking]);
+    return { matches:foundMatches, teams:foundTeams, players:foundPlayers, competitions:foundCompetitions, rankings:foundRankings };
+  }, [q, matches, competitions, ranking, remoteSearch]);
 
   const total = data.matches.length + data.teams.length + data.players.length + data.competitions.length + data.rankings.length;
   const asean = ranking?.asean || [];
   const myanmar = ranking?.myanmar || null;
   const otherAsean = asean.filter((entry) => entry.aseanKey !== "myanmar");
+  const searchingGlobal = q.length >= 4 && remoteLoading;
 
   return <View style={s.screen}>
     <View style={s.header}>
       <Pressable hitSlop={10} onPress={goBack}><Ionicons name="chevron-back" size={28} color={C.text}/></Pressable>
-      <View style={s.searchBox}><Ionicons name="search-outline" size={20} color={C.muted}/><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Search teams, players, countries…" placeholderTextColor={C.muted} style={s.input}/>{query ? <Pressable onPress={() => setQuery("")}><Ionicons name="close-circle" size={19} color={C.muted}/></Pressable> : null}</View>
+      <View style={s.searchBox}><Ionicons name="search-outline" size={20} color={C.muted}/><TextInput autoFocus value={query} onChangeText={setQuery} placeholder="Search teams, players, countries…" placeholderTextColor={C.muted} style={s.input}/>{searchingGlobal ? <ActivityIndicator size="small" color={C.red}/> : query ? <Pressable onPress={() => setQuery("")}><Ionicons name="close-circle" size={19} color={C.muted}/></Pressable> : null}</View>
     </View>
     <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       {loading && !matches.length && q ? <View style={s.state}><ActivityIndicator color={C.red}/><Text style={s.stateText}>Loading football search…</Text></View> : null}
@@ -210,10 +271,12 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
           {otherAsean.length ? <><Text style={s.section}>ASEAN NATIONAL TEAMS</Text><View style={s.card}>{otherAsean.map((entry,index) => <View key={`${entry.fifaCode || entry.name}-${entry.rank}`} style={index !== otherAsean.length-1 ? s.border : null}><ResultRow icon="flag-outline" image={entry.flagUrl} title={`${entry.name} · #${entry.rank}`} subtitle={rankingSubtitle(entry)}/></View>)}</View></> : null}
         </> : null}
       </> : null}
-      {!loading && q && !total ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>No results</Text><Text style={s.stateText}>Try another team, player, country or competition name.</Text></View> : null}
+      {q && q.length < 4 && !total ? <View style={s.searchHint}><Ionicons name="search-outline" size={18} color={C.muted}/><Text style={s.stateText}>Type at least 4 letters for full worldwide team and player search.</Text></View> : null}
+      {remoteError && q.length >= 4 ? <View style={s.searchHint}><Ionicons name="cloud-offline-outline" size={18} color={C.muted}/><Text style={s.stateText}>{remoteError}</Text></View> : null}
+      {!loading && !searchingGlobal && q && !total ? <View style={s.state}><Ionicons name="search-outline" size={30} color={C.muted}/><Text style={s.stateTitle}>No results</Text><Text style={s.stateText}>Try another team, player, country or competition name.</Text></View> : null}
       {data.matches.length ? <><Text style={s.section}>MATCHES</Text><View style={s.card}>{data.matches.map((m,index) => <View key={m.id} style={index !== data.matches.length-1 ? s.border : null}><ResultRow icon="football-outline" title={`${m.home?.name} vs ${m.away?.name}`} subtitle={m.competition} onPress={() => openMatch?.(m)}/></View>)}</View></> : null}
-      {data.teams.length ? <><Text style={s.section}>TEAMS</Text><View style={s.card}>{data.teams.map((team,index) => <View key={team.id} style={index !== data.teams.length-1 ? s.border : null}><ResultRow icon="shield-outline" image={team.logo} title={team.name} subtitle="Team" onPress={() => openEntity?.("team",team)}/></View>)}</View></> : null}
-      {data.players.length ? <><Text style={s.section}>PLAYERS</Text><View style={s.card}>{data.players.map((player,index) => <View key={player.id} style={index !== data.players.length-1 ? s.border : null}><ResultRow icon="person-outline" title={player.name} subtitle={[player.team, player.nationality].filter(Boolean).join(" · ") || "Player"} onPress={() => openEntity?.("player",player)}/></View>)}</View></> : null}
+      {data.teams.length ? <><Text style={s.section}>TEAMS</Text><View style={s.card}>{data.teams.map((team,index) => <View key={team.id} style={index !== data.teams.length-1 ? s.border : null}><ResultRow icon="shield-outline" image={team.logo} title={team.name} subtitle={team.national ? `${team.country || "National"} · National team` : team.country || "Team"} accent={regionalTeamPriority(team) === 180} onPress={() => openEntity?.("team",team)}/></View>)}</View></> : null}
+      {data.players.length ? <><Text style={s.section}>PLAYERS</Text><View style={s.card}>{data.players.map((player,index) => <View key={player.id} style={index !== data.players.length-1 ? s.border : null}><ResultRow icon="person-outline" image={player.photo} title={player.name} subtitle={[player.team, player.nationality].filter(Boolean).join(" · ") || "Player"} onPress={() => openEntity?.("player",player)}/></View>)}</View></> : null}
       {data.rankings.length ? <><Text style={s.section}>FIFA NATIONAL TEAMS</Text><View style={s.card}>{data.rankings.map((entry,index) => <View key={`${entry.fifaCode || entry.name}-${entry.rank}`} style={index !== data.rankings.length-1 ? s.border : null}><ResultRow icon="flag-outline" image={entry.flagUrl} title={`${entry.name} · #${entry.rank}`} subtitle={rankingSubtitle(entry)} accent={entry.aseanKey === "myanmar"}/></View>)}</View></> : null}
       {data.competitions.length ? <><Text style={s.section}>COMPETITIONS</Text><View style={s.card}>{data.competitions.map((item,index) => <View key={item.id} style={index !== data.competitions.length-1 ? s.border : null}><ResultRow icon="trophy-outline" image={logo(item)} title={name(item)} subtitle={item.country || "Competition"} onPress={() => openEntity?.("competition",{ id:item.id, name:name(item), logo:logo(item) })}/></View>)}</View></> : null}
     </ScrollView>
@@ -221,5 +284,5 @@ export default function SearchScreen({ goBack, openMatch, openEntity }) {
 }
 
 const s = StyleSheet.create({
-  screen:{flex:1,backgroundColor:C.bg},header:{minHeight:66,paddingHorizontal:14,flexDirection:"row",alignItems:"center",gap:10,borderBottomWidth:1,borderBottomColor:C.border2},searchBox:{flex:1,minHeight:44,borderWidth:1,borderColor:C.border,borderRadius:10,backgroundColor:C.card,flexDirection:"row",alignItems:"center",paddingHorizontal:11,gap:8},input:{flex:1,color:C.text,fontSize:13.5,paddingVertical:8},content:{padding:16,paddingBottom:40},section:{color:C.text2,fontSize:12,fontWeight:"900",marginTop:14,marginBottom:8},sectionLine:{marginTop:14,flexDirection:"row",alignItems:"flex-end",justifyContent:"space-between",gap:10},source:{color:C.muted,fontSize:9.5,fontWeight:"700",marginBottom:8},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},myanmarCard:{borderColor:"rgba(243,38,45,.55)"},border:{borderBottomWidth:1,borderBottomColor:C.border2},row:{minHeight:65,paddingHorizontal:12,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:10},rowAccent:{backgroundColor:"rgba(243,38,45,.06)"},icon:{width:40,height:40,borderRadius:9,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},image:{width:40,height:40},rowTitle:{color:C.text2,fontSize:13.5,fontWeight:"800"},rowTitleAccent:{color:C.text},rowSub:{color:C.muted,fontSize:10.5,marginTop:3},state:{minHeight:150,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,alignItems:"center",justifyContent:"center",gap:8,padding:20},regionIntro:{minHeight:72,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,flexDirection:"row",alignItems:"center",gap:12,padding:14},regionIcon:{width:42,height:42,borderRadius:12,backgroundColor:"rgba(243,38,45,.10)",alignItems:"center",justifyContent:"center"},rankingLoading:{minHeight:62,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:9},rankingError:{minHeight:64,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:8,padding:12,marginTop:12},stateTitle:{color:C.text,fontSize:15,fontWeight:"800"},stateText:{color:C.muted,fontSize:11.5,lineHeight:17},
+  screen:{flex:1,backgroundColor:C.bg},header:{minHeight:66,paddingHorizontal:14,flexDirection:"row",alignItems:"center",gap:10,borderBottomWidth:1,borderBottomColor:C.border2},searchBox:{flex:1,minHeight:44,borderWidth:1,borderColor:C.border,borderRadius:10,backgroundColor:C.card,flexDirection:"row",alignItems:"center",paddingHorizontal:11,gap:8},input:{flex:1,color:C.text,fontSize:13.5,paddingVertical:8},content:{padding:16,paddingBottom:40},section:{color:C.text2,fontSize:12,fontWeight:"900",marginTop:14,marginBottom:8},sectionLine:{marginTop:14,flexDirection:"row",alignItems:"flex-end",justifyContent:"space-between",gap:10},source:{color:C.muted,fontSize:9.5,fontWeight:"700",marginBottom:8},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},myanmarCard:{borderColor:"rgba(243,38,45,.55)"},border:{borderBottomWidth:1,borderBottomColor:C.border2},row:{minHeight:65,paddingHorizontal:12,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:10},rowAccent:{backgroundColor:"rgba(243,38,45,.06)"},icon:{width:40,height:40,borderRadius:9,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},image:{width:40,height:40},rowTitle:{color:C.text2,fontSize:13.5,fontWeight:"800"},rowTitleAccent:{color:C.text},rowSub:{color:C.muted,fontSize:10.5,marginTop:3},state:{minHeight:150,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,alignItems:"center",justifyContent:"center",gap:8,padding:20},regionIntro:{minHeight:72,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,flexDirection:"row",alignItems:"center",gap:12,padding:14},regionIcon:{width:42,height:42,borderRadius:12,backgroundColor:"rgba(243,38,45,.10)",alignItems:"center",justifyContent:"center"},rankingLoading:{minHeight:62,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:9},rankingError:{minHeight:64,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:8,padding:12,marginTop:12},searchHint:{minHeight:52,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,flexDirection:"row",alignItems:"center",gap:9,paddingHorizontal:12,marginBottom:8},stateTitle:{color:C.text,fontSize:15,fontWeight:"800"},stateText:{color:C.muted,fontSize:11.5,lineHeight:17},
 });
