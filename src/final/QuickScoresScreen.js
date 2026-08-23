@@ -42,25 +42,39 @@ function useMatches(date) {
     return { loading: !saved, refreshing: false, error: "", matches: saved?.matches || [] };
   });
 
-  const load = useCallback(async (refresh = false) => {
+  const load = useCallback(async (refresh = false, silent = false) => {
     const saved = peekFastFootballMatches(date);
-    setState((prev) => ({
-      ...prev,
-      loading: !refresh && !saved && !prev.matches.length,
-      refreshing: refresh,
-      error: "",
-      matches: saved?.matches || prev.matches,
-    }));
+    if (!silent) {
+      setState((prev) => ({
+        ...prev,
+        loading: !refresh && !saved && !prev.matches.length,
+        refreshing: refresh,
+        error: "",
+        matches: saved?.matches || prev.matches,
+      }));
+    }
     try {
       const result = await fetchFastFootballMatches({ date, force: refresh });
-      setState({ loading: false, refreshing: false, error: "", matches: result.matches || [] });
+      setState((prev) => ({
+        loading: false,
+        refreshing: false,
+        error: "",
+        matches: result.matches || prev.matches || [],
+      }));
     } catch (error) {
-      setState((prev) => ({ ...prev, loading: false, refreshing: false, error: error?.message || "Could not load matches." }));
+      if (!silent) {
+        setState((prev) => ({ ...prev, loading: false, refreshing: false, error: error?.message || "Could not load matches." }));
+      }
     }
   }, [date]);
 
   useEffect(() => { load(false); }, [load]);
-  return { ...state, reload: () => load(true), refresh: () => load(true) };
+  return {
+    ...state,
+    reload: () => load(true),
+    refresh: () => load(true),
+    silentRefresh: () => load(true, true),
+  };
 }
 
 function TeamLogo({ uri }) {
@@ -72,14 +86,18 @@ function TeamLogo({ uri }) {
 }
 
 function statusText(match) {
-  if (isLiveMatch(match)) return match.minute || "LIVE";
-  if (["FT", "AET", "PEN"].includes(String(match.statusCode || "").toUpperCase())) return match.statusCode;
+  const code = String(match.statusCode || match.status || "").toUpperCase();
+  if (["FT", "AET", "PEN"].includes(code)) return code;
+  if (code === "HT") return "HT";
+  if (isLiveMatch(match)) return match.minute || code || "LIVE";
+  if (["PST", "CANC", "ABD", "SUSP", "INT"].includes(code)) return code;
   return match.minute || "—";
 }
 
 const MatchCard = memo(function MatchCard({ match, onOpen }) {
   const live = isLiveMatch(match);
   const hasScore = match.homeScore !== null && match.homeScore !== undefined && match.awayScore !== null && match.awayScore !== undefined;
+  const progressed = live || ["FT", "AET", "PEN"].includes(String(match.statusCode || match.status || "").toUpperCase());
   return (
     <Pressable style={s.card} onPress={() => onOpen?.(match)} android_ripple={{ color: "rgba(255,255,255,0.04)" }}>
       <View style={s.cardTop}>
@@ -95,7 +113,7 @@ const MatchCard = memo(function MatchCard({ match, onOpen }) {
           <Text numberOfLines={2} style={s.teamName}>{match.home?.name || "Home"}</Text>
         </View>
         <View style={s.scoreCenter}>
-          <Text style={s.score}>{hasScore ? `${match.homeScore} - ${match.awayScore}` : "VS"}</Text>
+          <Text style={[s.score, live && s.scoreLive]}>{hasScore ? `${match.homeScore} - ${match.awayScore}` : progressed ? "— - —" : "VS"}</Text>
         </View>
         <View style={s.teamBox}>
           <TeamLogo uri={match.away?.logo} />
@@ -112,6 +130,12 @@ export default function QuickScoresScreen({ openMatch }) {
   const date = bangkokDate(offset);
   const api = useMatches(date);
 
+  useEffect(() => {
+    if (tab !== "TODAY") return undefined;
+    const timer = setInterval(api.silentRefresh, 15000);
+    return () => clearInterval(timer);
+  }, [tab, api.silentRefresh]);
+
   const matches = useMemo(() => [...api.matches].sort((a, b) => {
     const ai = POPULAR.findIndex((name) => String(a.competition || "").includes(name));
     const bi = POPULAR.findIndex((name) => String(b.competition || "").includes(name));
@@ -119,7 +143,9 @@ export default function QuickScoresScreen({ openMatch }) {
     const bp = bi === -1 ? 999 : bi;
     if (ap !== bp) return ap - bp;
     if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-    return 0;
+    const at = a.kickoff ? new Date(a.kickoff).getTime() : Number.MAX_SAFE_INTEGER;
+    const bt = b.kickoff ? new Date(b.kickoff).getTime() : Number.MAX_SAFE_INTEGER;
+    return (Number.isFinite(at) ? at : Number.MAX_SAFE_INTEGER) - (Number.isFinite(bt) ? bt : Number.MAX_SAFE_INTEGER);
   }), [api.matches]);
 
   const renderMatch = useCallback(({ item }) => <MatchCard match={item} onOpen={openMatch} />, [openMatch]);
@@ -202,7 +228,8 @@ const s = StyleSheet.create({
   logoFallback: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.card2, alignItems: "center", justifyContent: "center" },
   teamName: { color: C.text, fontSize: 12.5, textAlign: "center", lineHeight: 16 },
   scoreCenter: { width: "25%", alignItems: "center" },
-  score: { color: C.text, fontSize: 29, fontWeight: "900" },
+  score: { color: C.text, fontSize: 29, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  scoreLive: { color: C.red },
   state: { minHeight: 120, backgroundColor: C.card, borderWidth: 1, borderColor: C.border2, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 9, padding: 18, marginBottom: 10 },
   stateText: { fontSize: 11, color: C.muted, textAlign: "center" },
   retry: { backgroundColor: C.red, borderRadius: 7, paddingHorizontal: 16, paddingVertical: 8 },
