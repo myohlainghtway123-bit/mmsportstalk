@@ -1,6 +1,7 @@
 import { getAuthStatus, getFavorites, normalizeFavoritePayload, setFavorite } from "./accountApi";
 import { loadOnboardingPreferences, saveOnboardingPreferences } from "./onboardingStore";
 import { favoriteMetadata } from "./favoriteCatalog";
+import { registerDeviceForPush } from "./matchEngagementApi";
 
 function canonicalKind(type) {
   const value = String(type || "").toLowerCase();
@@ -50,6 +51,7 @@ export async function toggleEntityFavorite({ type, entity, active, name, imageUr
       competitionName: competitionName || null,
       active,
     });
+    if (kind === "player" && active) registerDeviceForPush().catch(() => null);
     return { authenticated: true, favorite: active, requiresAuth: false };
   }
 
