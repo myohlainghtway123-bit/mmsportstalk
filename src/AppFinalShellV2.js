@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { BackHandler, Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "./final/HomeScreen";
 
@@ -77,6 +77,7 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   const [selected,setSelected] = useState(null);
   const [returnMode,setReturnMode] = useState("home");
   const [language,setLanguageState] = useState(initialLanguage === "en" ? "en" : "my");
+  const historyRef = useRef([]);
   const setLanguage = (value) => {
     const next = value === "en" ? "en" : "my";
     setLanguageState(next);
@@ -84,20 +85,57 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   };
 
   const rememberOrigin = () => mode || "home";
-  const goHome = () => { setSelected(null); setReturnMode("home"); setMode("home"); };
-  const openMatch = (match,origin) => { if (!match) return; setReturnMode(origin || rememberOrigin()); setSelected(match); setMode("match"); };
-  const openEntity = (type,entity,origin) => { if (!entity?.id) return; setReturnMode(origin || rememberOrigin()); setSelected({type,entity}); setMode("entity"); };
-  const openArticle = (article) => { if (!article) return; const origin = rememberOrigin(); setReturnMode(origin.startsWith("content-") ? origin : "content-news"); setSelected(article); setMode("article"); };
-  const openAccount = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("account"); };
-  const openNotifications = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("notifications"); };
-  const openSearch = (origin) => { setReturnMode(origin || rememberOrigin()); setMode("search"); };
-  const goReturn = () => setMode(returnMode || "home");
+  const goRoot = (next = "home") => {
+    historyRef.current = [];
+    setSelected(null);
+    setReturnMode("home");
+    setMode(next || "home");
+  };
+  const pushMode = (next, origin) => {
+    const from = origin || rememberOrigin();
+    historyRef.current.push(from);
+    setReturnMode(from);
+    setMode(next);
+  };
+  const goHome = () => goRoot("home");
+  const openMatch = (match,origin) => { if (!match) return; const from=origin||rememberOrigin(); historyRef.current.push(from); setReturnMode(from); setSelected(match); setMode("match"); };
+  const openEntity = (type,entity,origin) => { if (!entity?.id) return; const from=origin||rememberOrigin(); historyRef.current.push(from); setReturnMode(from); setSelected({type,entity}); setMode("entity"); };
+  const openArticle = (article) => { if (!article) return; const current=rememberOrigin(); const from=current.startsWith("content-")?current:"content-news"; historyRef.current.push(from); setReturnMode(from); setSelected(article); setMode("article"); };
+  const openAccount = (origin) => pushMode("account", origin);
+  const openNotifications = (origin) => pushMode("notifications", origin);
+  const openSearch = (origin) => pushMode("search", origin);
+  const goReturn = () => {
+    const next = historyRef.current.length ? historyRef.current.pop() : (returnMode || "home");
+    const parent = historyRef.current.length ? historyRef.current[historyRef.current.length - 1] : "home";
+    setReturnMode(parent);
+    setMode(next || "home");
+  };
+  const navigateMore = (target) => {
+    if (target === "settings" || target === "about") pushMode(target, "more");
+    else goRoot(target);
+  };
 
   const isContent = mode.startsWith("content-");
   const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
   const isSubpage = ["account","notifications","settings","about","match","entity","article","search"].includes(mode);
   const navActive = isContent ? "content-news" : mode;
   const androidInset = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0;
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (isSubpage) {
+        goReturn();
+        return true;
+      }
+      if (mode !== "home") {
+        goHome();
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [mode, isSubpage, returnMode]);
 
   return <View style={s.root}>
     <StatusBar barStyle="light-content" backgroundColor={C.bg}/>
@@ -108,17 +146,17 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
       {mode === "favorites" ? <LazyFavorites language={language} openLeague={(x) => openEntity("competition",x,"favorites")} openTeam={(x) => openEntity("team",x,"favorites")} openPlayer={(x) => openEntity("player",x,"favorites")} openAccount={() => openAccount("favorites")}/> : null}
       {mode === "tips" ? <LazyTips language={language} openMatch={(x) => openMatch(x,"tips")} openAccount={() => openAccount("tips")}/> : null}
       {mode === "prediction" ? <LazyPrediction language={language} openMatch={(x) => openMatch(x,"prediction")} openAccount={() => openAccount("prediction")}/> : null}
-      {mode === "more" ? <MoreScreen navigate={setMode} openAccount={() => openAccount("more")} openNotifications={() => openNotifications("more")} language={language} setLanguage={setLanguage}/> : null}
+      {mode === "more" ? <MoreScreen navigate={navigateMore} openAccount={() => openAccount("more")} openNotifications={() => openNotifications("more")} language={language} setLanguage={setLanguage}/> : null}
       {mode === "account" ? <LazyAccount language={language} goBack={goReturn}/> : null}
       {mode === "notifications" ? <LazyNotifications language={language} goBack={goReturn} openAccount={() => openAccount("notifications")}/> : null}
-      {mode === "settings" ? <LazySettings language={language} goBack={() => setMode("more")} openNotifications={() => openNotifications("settings")} openAccount={() => openAccount("settings")}/> : null}
-      {mode === "about" ? <LazyAbout language={language} goBack={() => setMode("more")}/> : null}
+      {mode === "settings" ? <LazySettings language={language} goBack={goReturn} openNotifications={() => openNotifications("settings")} openAccount={() => openAccount("settings")}/> : null}
+      {mode === "about" ? <LazyAbout language={language} goBack={goReturn}/> : null}
       {mode === "search" ? <LazySearch language={language} goBack={goReturn} openMatch={(x) => openMatch(x,"search")} openEntity={(type,x) => openEntity(type,x,"search")}/> : null}
       {mode === "match" ? <LazyMatch language={language} match={selected} goBack={goReturn}/> : null}
       {mode === "entity" ? <LazyEntity language={language} type={selected?.type} entity={selected?.entity} goBack={goReturn}/> : null}
       {mode === "article" ? <LazyArticle language={language} article={selected} goBack={goReturn}/> : null}
     </View>
-    {!isSubpage ? <BottomNav active={navActive} language={language} onChange={(tab) => tab === "home" ? goHome() : setMode(tab)}/> : null}
+    {!isSubpage ? <BottomNav active={navActive} language={language} onChange={(tab) => goRoot(tab === "home" ? "home" : tab)}/> : null}
   </View>;
 }
 
