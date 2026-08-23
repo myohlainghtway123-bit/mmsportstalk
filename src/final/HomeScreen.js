@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView,
 import { Ionicons } from "@expo/vector-icons";
 import { isLiveMatch } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches, prefetchFastFootballMatches } from "../services/fastFootballApi";
+import { regionalNationalTeamPriority } from "../services/regionalFootball";
 
 const C={bg:"#07090B",panel:"#0D1013",card:"#111519",card2:"#151A1F",border:"#20262C",border2:"#181D22",red:"#F32735",redSoft:"rgba(243,39,53,.12)",text:"#F7F8F9",text2:"#D7DBDF",muted:"#858C93",muted2:"#5F666D",green:"#25C875"};
 const FILTERS=["ALL","LIVE","UPCOMING","FINISHED"];
@@ -30,10 +31,13 @@ function matchPriorityScore(match){
   const home=match?.home?.name,away=match?.away?.name;
   const bigHome=containsTeam(home,BIG_TEAMS),bigAway=containsTeam(away,BIG_TEAMS);
   const eliteHome=containsTeam(home,ELITE_TEAMS),eliteAway=containsTeam(away,ELITE_TEAMS);
+  const regionalPriority=Math.max(regionalNationalTeamPriority(home),regionalNationalTeamPriority(away));
   if(bigHome)score+=38;if(bigAway)score+=38;
   if(eliteHome)score+=18;if(eliteAway)score+=18;
   if(bigHome&&bigAway)score+=115;
   if(eliteHome&&eliteAway)score+=55;
+  if(regionalPriority===2)score+=420;
+  else if(regionalPriority===1)score+=260;
   if(isLiveMatch(match))score+=12;
   return score;
 }
