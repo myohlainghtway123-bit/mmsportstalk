@@ -1,3 +1,5 @@
+import { getSessionToken } from "./accountApi";
+
 const API_BASE = "https://myanmarsportstalk.com/api";
 
 async function decode(response) {
@@ -7,10 +9,21 @@ async function decode(response) {
 }
 
 async function api(path, { method = "GET", body, signal } = {}) {
+  const token = await getSessionToken().catch(() => null);
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    headers["x-mst-session"] = token;
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: "include",
-    headers: { Accept: "application/json", ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal,
   });
@@ -31,9 +44,6 @@ export const getTips = async ({ limit = 50, matchId, tipsterId } = {}) => {
   if (tipsterId) qs.set("tipsterId", String(tipsterId));
   const data = await api(`/tips?${qs.toString()}`);
   if (!Array.isArray(data)) return data;
-  // Once kickoff closes purchases, hide unpaid locked content until the match is
-  // settled. Existing buyers still receive locked=false and keep access; after
-  // settlement the verified record becomes public and returns to the feed.
   return data.filter((tip) => !(tip?.purchaseClosed && tip?.locked));
 };
 export const unlockTip = (tipId) => api("/tips/unlock", { method:"POST", body:{ tipId:String(tipId) } });
@@ -50,6 +60,15 @@ export const submitQualificationTip = (input) => api("/tipsters/qualification", 
 export const getTipsterPartner = () => api("/tipsters/partner");
 export const applyTipsterPartner = (input) => api("/tipsters/partner", { method:"POST", body:input });
 export const claimPartnerReferral = (code) => api("/partners/referral", { method:"POST", body:{ code:String(code||"").trim().toUpperCase() } });
+
+export const rateTipsterApi = (tipsterId, rating, review) =>
+  api(`/tips/tipsters/${encodeURIComponent(String(tipsterId))}/rate`, {
+    method: "POST",
+    body: { rating: Number(rating), review: review || null },
+  });
+
+export const getTipsterRatingApi = (tipsterId) =>
+  api(`/tips/tipsters/${encodeURIComponent(String(tipsterId))}/rate`);
 
 // Keep these fallbacks in lock-step with the server authority in lib/account/tips.ts.
 export const TIPSTER_LEVEL_FALLBACK = {

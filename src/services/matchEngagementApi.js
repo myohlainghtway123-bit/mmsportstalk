@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
+import { getSessionToken } from "./accountApi";
 
 const API_BASE = "https://myanmarsportstalk.com/api";
 
@@ -15,10 +16,22 @@ Notifications.setNotificationHandler({
 });
 
 async function api(path, { method = "GET", body } = {}) {
+  const token = await getSessionToken();
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...(token ? {
+      Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
+    } : {}),
+  };
+
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: "include",
-    headers: { Accept: "application/json", ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();

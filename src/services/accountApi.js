@@ -326,3 +326,40 @@ export function normalizeLeaderboard(payload) {
 
 export const PREDICTION_SCORING = { exact: 3, correctOutcome: 1, wrong: 0 };
 export const MST_SITE_URL = "https://myanmarsportstalk.com";
+
+export async function submitSupportReport({ category, message, deviceInfo, matchId, email }) {
+  return api("/account/support/report", {
+    method: "POST",
+    body: {
+      category: category || "other",
+      message: String(message || "").trim(),
+      deviceInfo: deviceInfo || null,
+      matchId: matchId || null,
+      email: email || null,
+    },
+  });
+}
+
+export async function deleteAccount() {
+  const result = await api("/account/delete", { method: "POST", body: {} });
+  await setSessionToken(null);
+  return result;
+}
+
+export async function clearAppCache() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const purgeKeys = keys.filter(
+      (k) =>
+        k.startsWith("@mst_cache_") ||
+        k.startsWith("@mst_temp_") ||
+        k.startsWith("@mst_scores_") ||
+        k.startsWith("@mst_news_"),
+    );
+    if (purgeKeys.length) await AsyncStorage.multiRemove(purgeKeys);
+    return { ok: true, cleared: purgeKeys.length };
+  } catch {
+    return { ok: false, cleared: 0 };
+  }
+}
+

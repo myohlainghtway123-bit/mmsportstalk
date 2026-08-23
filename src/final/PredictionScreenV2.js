@@ -12,6 +12,7 @@ import {
 } from "../services/accountApi";
 import { fetchFastFootballMatches, peekFastFootballMatches, prefetchFastFootballMatches } from "../services/fastFootballApi";
 import { isLiveMatch } from "../services/footballApi";
+import { shareLeaderboard, sharePrediction } from "../utils/shareUtils";
 
 const C = {
   bg:"#080A0C", card:"#111416", card2:"#15191C", border:"#24292D", border2:"#1D2226",
@@ -175,7 +176,7 @@ export default function PredictionScreenV2({ openMatch, openAccount }) {
   };
 
   return <View style={s.screen}>
-    <View style={s.header}><View><Text style={s.title}>Predictions</Text><Text style={s.subtitle}>Predict scores · earn points · climb the leaderboard</Text></View><Ionicons name="trophy-outline" size={27} color={C.text}/></View>
+    <View style={s.header}><View><Text style={s.title}>Predictions</Text><Text style={s.subtitle}>Predict scores · earn points · climb the leaderboard</Text></View><Pressable hitSlop={8} onPress={() => shareLeaderboard(myRank || "Top", totals.points)}><Ionicons name="share-social-outline" size={24} color={C.text}/></Pressable></View>
     <View style={s.tabs}>{TABS.map((item)=><Pressable key={item} style={[s.tab,tab===item&&s.tabOn]} onPress={()=>setTab(item)}><Text numberOfLines={2} style={[s.tabText,tab===item&&s.tabTextOn]}>{item}</Text></Pressable>)}</View>
     <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>load(true)} colors={[C.red]} tintColor={C.red}/>} showsVerticalScrollIndicator={false}>
       {!auth && tab !== "Leaderboard" ? <Pressable style={s.signInCard} onPress={openAccount}><Ionicons name="person-circle-outline" size={27} color={C.muted}/><View style={{flex:1}}><Text style={s.signInTitle}>Sign in to save predictions</Text><Text style={s.signInText}>The app uses the same MST account and prediction history as the website.</Text></View><Ionicons name="chevron-forward" size={19} color={C.muted}/></Pressable> : null}
