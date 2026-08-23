@@ -33,7 +33,7 @@ export async function readEntityFavorite(type, id) {
   return { authenticated: false, kind, favorite: (prefs[field] || []).map(String).includes(entityId) };
 }
 
-export async function toggleEntityFavorite({ type, entity, active, name, imageUrl, country }) {
+export async function toggleEntityFavorite({ type, entity, active, name, imageUrl, country, teamId, teamName, competitionId, competitionName }) {
   const kind = canonicalKind(type), id = String(entity?.id ?? "");
   if (!kind || !id) throw new Error("Favorite data is unavailable.");
   const status = await getAuthStatus().catch(() => ({ authenticated: false }));
@@ -44,6 +44,10 @@ export async function toggleEntityFavorite({ type, entity, active, name, imageUr
       name: name || entity?.name || entity?.title,
       imageUrl: imageUrl || entity?.logo || entity?.photo || entity?.image,
       country: country || entity?.country,
+      teamId: teamId || null,
+      teamName: teamName || null,
+      competitionId: competitionId || null,
+      competitionName: competitionName || null,
       active,
     });
     return { authenticated: true, favorite: active, requiresAuth: false };
