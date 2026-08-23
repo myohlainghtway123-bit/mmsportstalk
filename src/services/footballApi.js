@@ -5,6 +5,7 @@ const LIVE_CODES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE"]);
 const LIVE_CLOCK_CODES = new Set(["1H", "2H", "ET", "LIVE"]);
 const NON_ACTIVE_CODES = new Set(["SUSP", "INT", "PST", "CANC", "ABD"]);
 const FINISHED_CODES = new Set(["FT", "AET", "PEN"]);
+const TEAM_STATS_LEAGUE_PRIORITY = new Map([39,140,135,78,61,94,88,203,144,71,128,253].map((id,index)=>[String(id),index]));
 
 const root = globalThis;
 if (!root.__MST_FOOTBALL_RESPONSE_CACHE__) root.__MST_FOOTBALL_RESPONSE_CACHE__ = new Map();
@@ -424,9 +425,6 @@ export async function fetchFootballMatches({ date = localDateString(), signal } 
   const normalized = extractArray(payload)
     .map((item, index) => normalizeFootballMatch(item, index))
     .filter((match) => match.home?.name && match.away?.name);
-
-  // The web endpoint can return a broad/cached fixture set. Never let a date tab
-  // display matches whose actual kickoff belongs to another Bangkok calendar day.
   const strict = normalized.filter((match) => dateKeyInTimeZone(match.kickoff) === date);
 
   return {
@@ -510,22 +508,53 @@ export async function fetchCompetitionBundle(league) {
 export const fetchTeamProfile = (id, options) => apiGet(`/teams/${encodeURIComponent(id)}`, options);
 export const fetchTeamMatches = (id, options) => apiGet(`/teams/${encodeURIComponent(id)}/matches`, options);
 export const fetchTeamSquad = (id, options) => apiGet(`/teams/${encodeURIComponent(id)}/squad`, options);
-export const fetchTeamStats = (id, options) => apiGet(`/teams/${encodeURIComponent(id)}/stats`, options);
 export const fetchTeamTransfers = (id, options) => apiGet(`/teams/${encodeURIComponent(id)}/transfers`, options);
 export const fetchTeamTrophies = (id, options) => apiGet(`/teams/${encodeURIComponent(id)}/trophies`, options);
+
+function teamStatsContext(payload) {
+  const matches = extractArray(payload)
+    .map((item,index)=>normalizeFootballMatch(item,index))
+    .filter((match)=>match?.competitionId!=null && Number.isInteger(Number(match?.season)));
+  if (!matches.length) return null;
+  const now = Date.now();
+  matches.sort((a,b)=>{
+    const ap=TEAM_STATS_LEAGUE_PRIORITY.get(String(a.competitionId))??999;
+    const bp=TEAM_STATS_LEAGUE_PRIORITY.get(String(b.competitionId))??999;
+    if(ap!==bp)return ap-bp;
+    const at=a.kickoff?Math.abs(new Date(a.kickoff).getTime()-now):Number.MAX_SAFE_INTEGER;
+    const bt=b.kickoff?Math.abs(new Date(b.kickoff).getTime()-now):Number.MAX_SAFE_INTEGER;
+    return at-bt;
+  });
+  const selected = matches[0];
+  return selected ? { competitionId:selected.competitionId, season:Number(selected.season), competition:selected.competition } : null;
+}
+
+export function fetchTeamStats(id, {competitionId,season,signal} = {}) {
+  if (!competitionId || !Number.isInteger(Number(season))) throw new Error("Team statistics context is unavailable.");
+  return apiGet(`/teams/${encodeURIComponent(id)}/stats?league=${encodeURIComponent(competitionId)}&season=${encodeURIComponent(season)}`, {signal});
+}
 
 export async function fetchTeamBundle(team) {
   const id = team?.id ?? team;
   if (!id) throw new Error("Team ID is unavailable.");
 
-  return settleBundle({
+  const bundle = await settleBundle({
     profile: () => fetchTeamProfile(id),
     matches: () => fetchTeamMatches(id),
     squad: () => fetchTeamSquad(id),
-    stats: () => fetchTeamStats(id),
     transfers: () => fetchTeamTransfers(id),
     trophies: () => fetchTeamTrophies(id),
   }, { id });
+  const context = teamStatsContext(bundle.matches);
+  bundle.statsContext = context;
+  if (!context) {
+    bundle.stats = null;
+    bundle.errors.stats = "Team statistics context is unavailable.";
+    return bundle;
+  }
+  try { bundle.stats = await fetchTeamStats(id, context); }
+  catch (error) { bundle.stats = null; bundle.errors.stats = error?.message ?? "Team statistics are unavailable."; }
+  return bundle;
 }
 
 export const fetchPlayerProfile = (id, options) => apiGet(`/players/${encodeURIComponent(id)}`, options);
