@@ -24,12 +24,17 @@ async function api(path, { method = "GET", body, signal } = {}) {
   return payload?.data ?? payload;
 }
 
-export const getTips = ({ limit = 50, matchId, tipsterId } = {}) => {
+export const getTips = async ({ limit = 50, matchId, tipsterId } = {}) => {
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));
   if (matchId) qs.set("matchId", String(matchId));
   if (tipsterId) qs.set("tipsterId", String(tipsterId));
-  return api(`/tips?${qs.toString()}`);
+  const data = await api(`/tips?${qs.toString()}`);
+  if (!Array.isArray(data)) return data;
+  // Once kickoff closes purchases, hide unpaid locked content until the match is
+  // settled. Existing buyers still receive locked=false and keep access; after
+  // settlement the verified record becomes public and returns to the feed.
+  return data.filter((tip) => !(tip?.purchaseClosed && tip?.locked));
 };
 export const unlockTip = (tipId) => api("/tips/unlock", { method:"POST", body:{ tipId:String(tipId) } });
 export const getTipsMe = () => api("/tips/me");
