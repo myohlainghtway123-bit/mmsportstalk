@@ -241,7 +241,7 @@ export function normalizePredictionPayload(payload) {
     const embeddedMatch = row?.match ?? row?.fixture ?? row?.game ?? null;
     const match = embeddedMatch || storedPredictionMatch(row);
     const predictedHome = firstDefined(row?.homeScore, row?.predictedHomeScore, row?.predicted_home_score, row?.home_score, row?.prediction?.home, row?.prediction?.homeScore);
-    const predictedAway = firstDefined(row?.awayScore, row?.predictedAwayScore, row?.predicted_away_score, row?.away_score, row?.prediction?.away, row?.prediction?.homeScore);
+    const predictedAway = firstDefined(row?.awayScore, row?.predictedAwayScore, row?.predicted_away_score, row?.away_score, row?.prediction?.away, row?.prediction?.awayScore);
     const finalHome = firstDefined(row?.finalHomeScore, row?.resultHomeScore, row?.actualHomeScore, row?.final_home_score, row?.result?.home, match?.homeScore, match?.goals?.home);
     const finalAway = firstDefined(row?.finalAwayScore, row?.resultAwayScore, row?.actualAwayScore, row?.final_away_score, row?.result?.away, match?.awayScore, match?.goals?.away);
     return {
