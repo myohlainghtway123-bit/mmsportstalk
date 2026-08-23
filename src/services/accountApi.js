@@ -117,7 +117,7 @@ function canonicalFavoriteKind(kind) {
   return null;
 }
 
-export async function setFavorite({ kind, id, name, imageUrl, logo, photo, country, competitionId, competitionName, active }) {
+export async function setFavorite({ kind, id, name, imageUrl, logo, photo, country, competitionId, competitionName, teamId, teamName, active }) {
   const type = canonicalFavoriteKind(kind);
   const entityId = String(id ?? "").trim();
   if (!type || !/^\d{1,12}$/.test(entityId)) throw new MstApiError("Choose a valid favorite.");
@@ -141,6 +141,8 @@ export async function setFavorite({ kind, id, name, imageUrl, logo, photo, count
       country: country || curated?.country || null,
       competitionId: competitionId || null,
       competitionName: competitionName || null,
+      teamId: teamId || null,
+      teamName: teamName || null,
     },
   });
 }
@@ -239,7 +241,7 @@ export function normalizePredictionPayload(payload) {
     const embeddedMatch = row?.match ?? row?.fixture ?? row?.game ?? null;
     const match = embeddedMatch || storedPredictionMatch(row);
     const predictedHome = firstDefined(row?.homeScore, row?.predictedHomeScore, row?.predicted_home_score, row?.home_score, row?.prediction?.home, row?.prediction?.homeScore);
-    const predictedAway = firstDefined(row?.awayScore, row?.predictedAwayScore, row?.predicted_away_score, row?.away_score, row?.prediction?.away, row?.prediction?.awayScore);
+    const predictedAway = firstDefined(row?.awayScore, row?.predictedAwayScore, row?.predicted_away_score, row?.away_score, row?.prediction?.away, row?.prediction?.homeScore);
     const finalHome = firstDefined(row?.finalHomeScore, row?.resultHomeScore, row?.actualHomeScore, row?.final_home_score, row?.result?.home, match?.homeScore, match?.goals?.home);
     const finalAway = firstDefined(row?.finalAwayScore, row?.resultAwayScore, row?.actualAwayScore, row?.final_away_score, row?.result?.away, match?.awayScore, match?.goals?.away);
     return {
