@@ -1,5 +1,5 @@
 MST Android validation
-Commit: 0bafa9644d810818a4da131982ab0ec43d0b9f23
+Commit: 4eba417bd101f16823c907d928a3bf046d935d70
 
 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
@@ -16,7 +16,7 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 
-added 745 packages, and audited 746 packages in 12s
+added 745 packages, and audited 746 packages in 11s
 
 76 packages are looking for funding
   run `npm fund` for details
@@ -38,11 +38,10 @@ generated /home/runner/work/mmsportstalk/mmsportstalk/assets/icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/adaptive-icon.png
 generated /home/runner/work/mmsportstalk/mmsportstalk/assets/splash.png
 Starting Metro Bundler
-Android ./index.js ▓░░░░░░░░░░░░░░░ 10.7% ( 66/210)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.7% (408/492)
-Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 89.8% (573/638)
+Android ./index.js ▓▓▓░░░░░░░░░░░░░ 21.8% (120/257)
+Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 79.1% (457/514)
 Android ./index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (812/812)
-Android Bundled 14106ms index.js (812 modules)
+Android Bundled 11991ms index.js (812 modules)
 
 › Assets (20):
 assets/icon.png (993 kB)
@@ -67,7 +66,7 @@ node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Sim
 node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Zocial.ttf (25.8 kB)
 
 › android bundles (1):
-_expo/static/js/android/index-304c9be7c65c0cfd7ff88885bfd04aaa.hbc (2.85 MB)
+_expo/static/js/android/index-f2bbda60aa6f89e7b2e5595826499c46.hbc (2.85 MB)
 
 › Files (1):
 metadata.json (1.41 kB)
