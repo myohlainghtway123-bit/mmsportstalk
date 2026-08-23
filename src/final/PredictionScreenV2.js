@@ -102,6 +102,7 @@ function StatBox({ label, value, accent }) {
 
 export default function PredictionScreenV2({ openMatch, openAccount }) {
   const [tab,setTab] = useState("Predict");
+  const [timeframe,setTimeframe] = useState("all");
   const [auth,setAuth] = useState(false);
   const [loading,setLoading] = useState(true);
   const [refreshing,setRefreshing] = useState(false);
@@ -112,6 +113,13 @@ export default function PredictionScreenV2({ openMatch, openAccount }) {
   const [message,setMessage] = useState("");
   const [error,setError] = useState("");
 
+  const loadLeaderboard = useCallback(async (tf = timeframe) => {
+    try {
+      const leaderPayload = await getLeaderboard(tf).catch(()=>null);
+      setLeaders(normalizeLeaderboard(leaderPayload));
+    } catch (_) {}
+  }, [timeframe]);
+
   const load = useCallback(async (refresh=false) => {
     refresh ? setRefreshing(true) : setLoading(true);
     setError("");
@@ -120,7 +128,7 @@ export default function PredictionScreenV2({ openMatch, openAccount }) {
       prefetchFastFootballMatches(dates);
       const [authStatus,leaderPayload] = await Promise.all([
         getAuthStatus().catch(()=>({authenticated:false})),
-        getLeaderboard().catch(()=>null),
+        getLeaderboard(timeframe).catch(()=>null),
       ]);
       setAuth(Boolean(authStatus.authenticated));
       setLeaders(normalizeLeaderboard(leaderPayload));
@@ -141,7 +149,12 @@ export default function PredictionScreenV2({ openMatch, openAccount }) {
       }
     } catch (e) { setError(e?.message || "Could not update predictions."); }
     finally { setLoading(false); setRefreshing(false); }
-  },[]);
+  },[timeframe]);
+
+  const changeTimeframe = (tf) => {
+    setTimeframe(tf);
+    loadLeaderboard(tf);
+  };
 
   useEffect(()=>{load(false);},[load]);
   const savedByMatch = useMemo(()=>Object.fromEntries(history.filter((x)=>x.matchId!==undefined&&x.matchId!==null).map((x)=>[String(x.matchId),x])),[history]);
@@ -205,8 +218,15 @@ export default function PredictionScreenV2({ openMatch, openAccount }) {
 
       {tab === "Leaderboard" ? <>
         <View style={s.leaderIntro}><View><Text style={s.sectionTitle}>MST PREDICTION LEADERBOARD</Text><Text style={s.leaderIntroText}>Same leaderboard as myanmarsportstalk.com</Text></View><Ionicons name="podium-outline" size={25} color={C.gold}/></View>
+        <View style={s.tfRow}>
+          {[["all","ALL TIME"],["weekly","THIS WEEK"],["monthly","THIS MONTH"],["season","SEASON"]].map(([key,label]) => (
+            <Pressable key={key} style={[s.tfPill, timeframe === key && s.tfPillOn]} onPress={() => changeTimeframe(key)}>
+              <Text style={[s.tfText, timeframe === key && s.tfTextOn]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
         {loading && !leaders.length ? <View style={s.compactLoading}><ActivityIndicator color={C.red}/><Text style={s.loadingText}>Loading leaderboard…</Text></View> : null}
-        <View style={s.leaderCard}><View style={[s.leaderRow,s.leaderHeader]}><Text style={[s.leaderCell,{width:28}]}>#</Text><Text style={[s.leaderCell,{flex:1}]}>PLAYER</Text><Text style={s.leaderCell}>PTS</Text><Text style={s.leaderCell}>EXACT</Text><Text style={s.leaderCell}>CORRECT</Text><Text style={s.leaderCell}>PLAYED</Text></View>{leaders.length ? leaders.map((x,i)=>{const me=Boolean(x.raw?.isCurrentUser||x.raw?.you||x.raw?.currentUser);return <View key={`${x.id}-${i}`} style={[s.leaderRow,i!==leaders.length-1&&s.divider,me&&s.leaderMe]}><Text style={[s.leaderRank,{width:28},Number(x.rank)<=3&&{color:C.gold}]}>{x.rank}</Text><View style={s.leaderNameWrap}><Text numberOfLines={1} style={s.leaderName}>{x.name}</Text>{me?<Text style={s.youBadge}>YOU</Text>:null}</View><Text style={s.leaderValue}>{x.points}</Text><Text style={s.leaderValue}>{x.exact}</Text><Text style={s.leaderValue}>{x.correct}</Text><Text style={s.leaderValue}>{x.played}</Text></View>;}) : <Text style={s.emptyText}>Leaderboard is empty right now.</Text>}</View>
+        <View style={s.leaderCard}><View style={[s.leaderRow,s.leaderHeader]}><Text style={[s.leaderCell,{width:28}]}>#</Text><Text style={[s.leaderCell,{flex:1}]}>PLAYER</Text><Text style={s.leaderCell}>PTS</Text><Text style={s.leaderCell}>EXACT</Text><Text style={s.leaderCell}>CORRECT</Text><Text style={s.leaderCell}>PLAYED</Text></View>{leaders.length ? leaders.map((x,i)=>{const me=Boolean(x.raw?.isCurrentUser||x.raw?.you||x.raw?.currentUser);return <View key={`${x.id}-${i}`} style={[s.leaderRow,i!==leaders.length-1&&s.divider,me&&s.leaderMe]}><Text style={[s.leaderRank,{width:28},Number(x.rank)<=3&&{color:C.gold}]}>{x.rank}</Text><View style={s.leaderNameWrap}><Text numberOfLines={1} style={s.leaderName}>{x.name}</Text>{me?<Text style={s.youBadge}>YOU</Text>:null}</View><Text style={s.leaderValue}>{x.points}</Text><Text style={s.leaderValue}>{x.exact}</Text><Text style={s.leaderValue}>{x.correct}</Text><Text style={s.leaderValue}>{x.played}</Text></View>;}) : <Text style={s.emptyText}>Leaderboard is empty for this timeframe.</Text>}</View>
       </> : null}
     </ScrollView>
   </View>;
@@ -217,5 +237,5 @@ const s = StyleSheet.create({
   signInCard:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,padding:12,flexDirection:"row",alignItems:"center",gap:10,marginBottom:10},signInTitle:{fontSize:12.5,fontWeight:"800",color:C.text},signInText:{fontSize:9.5,lineHeight:13,color:C.muted,marginTop:3},scoring:{backgroundColor:"#151413",borderRadius:10,padding:12,flexDirection:"row",gap:9,marginBottom:10},scoringLabel:{fontSize:10,fontWeight:"900",color:C.red},scoringText:{flex:1,fontSize:10.2,lineHeight:15,color:C.text2},success:{fontSize:10,color:C.green,marginBottom:9},error:{fontSize:10,color:C.red,marginBottom:9},sectionHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginVertical:8},sectionTitle:{fontSize:11.5,fontWeight:"900",color:C.text2,marginVertical:9},sectionCount:{fontSize:10,color:C.muted},
   predictCard:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,padding:12,marginBottom:9},predictTop:{flexDirection:"row",alignItems:"center",gap:8},competition:{fontSize:10.5,fontWeight:"800",color:C.text2},kickoff:{fontSize:9.3,color:C.muted,marginTop:2},lockPill:{flexDirection:"row",gap:4,alignItems:"center",backgroundColor:"rgba(53,199,111,.08)",borderRadius:7,paddingHorizontal:7,paddingVertical:5},lockText:{fontSize:8.6,fontWeight:"900",color:C.muted},predictTeams:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginTop:12},predictTeam:{width:"31%",alignItems:"center",gap:6},predictName:{fontSize:11.5,lineHeight:15,color:C.text,textAlign:"center"},scoreEntry:{width:"34%",flexDirection:"row",alignItems:"center",justifyContent:"center",gap:7},scoreInput:{width:43,height:43,borderRadius:9,backgroundColor:C.card2,borderWidth:1,borderColor:C.border,color:C.text,textAlign:"center",fontSize:20,fontWeight:"900",padding:0},colon:{color:C.text2,fontSize:20,fontWeight:"800"},saveButton:{height:39,borderRadius:8,backgroundColor:C.red,alignItems:"center",justifyContent:"center",marginTop:12},saveDisabled:{opacity:.35},saveText:{fontSize:10,fontWeight:"900",color:C.text},lockNotice:{fontSize:9.5,color:C.muted,textAlign:"center",marginTop:11},logoFallback:{backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},compactLoading:{minHeight:64,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:8},loadingText:{fontSize:10,color:C.muted},emptyText:{fontSize:10.5,color:C.muted,textAlign:"center",padding:18},
   statsGrid:{flexDirection:"row",gap:8,marginVertical:4},stat:{flex:1,minHeight:75,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:10,padding:10,justifyContent:"space-between"},statLabel:{fontSize:8.3,fontWeight:"900",color:C.muted},statNumber:{fontSize:22,fontWeight:"900",color:C.text},historyCard:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},historyRow:{padding:11},historyTeams:{flexDirection:"row",alignItems:"center",gap:8},historyTeam:{flex:1,flexDirection:"row",alignItems:"center",gap:7},historyName:{flex:1,fontSize:10.5,fontWeight:"700",color:C.text2},historyScore:{fontSize:15,fontWeight:"900",color:C.text,minWidth:54,textAlign:"center"},historyMeta:{marginTop:8,flexDirection:"row",justifyContent:"flex-end",alignItems:"center",gap:8},historyStatus:{fontSize:9.4,color:C.muted},historyResult:{fontSize:8.8,fontWeight:"800",color:C.muted2,marginTop:2},pointsBadge:{minWidth:44,height:25,borderRadius:13,backgroundColor:C.card2,alignItems:"center",justifyContent:"center",paddingHorizontal:8},pointsText:{fontSize:9.5,fontWeight:"900",color:C.text},divider:{borderBottomWidth:1,borderBottomColor:C.border2},pointsInfo:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,padding:12,flexDirection:"row",alignItems:"center",gap:9,marginTop:5},pointsInfoText:{flex:1,fontSize:10,lineHeight:15,color:C.text2},
-  leaderIntro:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginBottom:5},leaderIntroText:{fontSize:9.3,color:C.muted,marginTop:-4},leaderCard:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},leaderRow:{minHeight:45,paddingHorizontal:9,flexDirection:"row",alignItems:"center",gap:5},leaderHeader:{backgroundColor:"#151515"},leaderMe:{backgroundColor:C.redSoft},leaderCell:{width:46,fontSize:7.7,fontWeight:"900",color:C.muted},leaderRank:{fontSize:10.5,fontWeight:"800",color:C.text2},leaderNameWrap:{flex:1,minWidth:0,flexDirection:"row",alignItems:"center",gap:5},leaderName:{flex:1,fontSize:10.5,fontWeight:"700",color:C.text2},youBadge:{fontSize:6.8,fontWeight:"900",color:C.red,borderWidth:1,borderColor:C.red,borderRadius:5,paddingHorizontal:4,paddingVertical:2},leaderValue:{width:46,fontSize:10,fontWeight:"800",color:C.text2,textAlign:"left"}
+  leaderIntro:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginBottom:5},leaderIntroText:{fontSize:9.3,color:C.muted,marginTop:-4},tfRow:{flexDirection:"row",gap:6,marginBottom:10},tfPill:{flex:1,height:32,borderRadius:8,backgroundColor:C.card,borderWidth:1,borderColor:C.border2,alignItems:"center",justifyContent:"center",paddingHorizontal:4},tfPillOn:{backgroundColor:C.redSoft,borderColor:"rgba(243,38,45,0.4)"},tfText:{fontSize:8,fontWeight:"900",color:C.muted},tfTextOn:{color:C.red},leaderCard:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:11,overflow:"hidden"},leaderRow:{minHeight:45,paddingHorizontal:9,flexDirection:"row",alignItems:"center",gap:5},leaderHeader:{backgroundColor:"#151515"},leaderMe:{backgroundColor:C.redSoft},leaderCell:{width:46,fontSize:7.7,fontWeight:"900",color:C.muted},leaderRank:{fontSize:10.5,fontWeight:"800",color:C.text2},leaderNameWrap:{flex:1,minWidth:0,flexDirection:"row",alignItems:"center",gap:5},leaderName:{flex:1,fontSize:10.5,fontWeight:"700",color:C.text2},youBadge:{fontSize:6.8,fontWeight:"900",color:C.red,borderWidth:1,borderColor:C.red,borderRadius:5,paddingHorizontal:4,paddingVertical:2},leaderValue:{width:46,fontSize:10,fontWeight:"800",color:C.text2,textAlign:"left"}
 });

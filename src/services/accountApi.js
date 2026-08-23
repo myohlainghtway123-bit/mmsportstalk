@@ -142,7 +142,11 @@ export async function logout() {
 export const getProfile = (options) => api("/account/profile", options);
 export const getFavorites = (options) => api("/account/favorites", options);
 export const getAccountPredictions = (options) => api("/account/predictions", options);
-export const getLeaderboard = (options) => api("/predictions/leaderboard", options);
+export const getLeaderboard = (timeframe = "all", options) => {
+  const tf = typeof timeframe === "string" ? timeframe : "all";
+  const opts = typeof timeframe === "object" ? timeframe : options;
+  return api(`/predictions/leaderboard?timeframe=${encodeURIComponent(tf)}`, opts);
+};
 
 async function tryMutation(attempts) {
   let lastError = null;
