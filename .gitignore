@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# temp build artifacts
+dist-ci/
+.mst-backups/

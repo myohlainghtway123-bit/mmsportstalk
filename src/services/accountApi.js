@@ -1,6 +1,35 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { syncStoredOnboardingFavorites } from "./onboardingStore";
 import { favoriteMetadata } from "./favoriteCatalog";
+
 const API_BASE = "https://myanmarsportstalk.com/api";
+const AUTH_TOKEN_KEY = "@mst_session_token";
+
+let memoryToken = null;
+
+export async function getSessionToken() {
+  if (memoryToken) return memoryToken;
+  try {
+    const stored = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    if (stored) memoryToken = stored;
+    return stored;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSessionToken(token) {
+  memoryToken = token ? String(token).trim() : null;
+  try {
+    if (memoryToken) {
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, memoryToken);
+    } else {
+      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  } catch {
+    // Non-blocking storage fallback
+  }
+}
 
 export class MstApiError extends Error {
   constructor(message, status = 0, payload = null) {
@@ -24,13 +53,22 @@ function errorMessage(payload, fallback) {
 }
 
 async function api(path, { method = "GET", body, signal } = {}) {
+  const token = await getSessionToken();
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...(token ? {
+      Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
+    } : {}),
+  };
+
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: "include",
-    headers: {
-      Accept: "application/json",
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal,
   });
@@ -66,7 +104,10 @@ export async function getAuthStatus(options) {
     if (result.authenticated) syncStoredOnboardingFavorites(setFavorite).catch(() => false);
     return result;
   } catch (error) {
-    if (error instanceof MstApiError && error.status === 401) return { authenticated: false, user: null, payload: error.payload };
+    if (error instanceof MstApiError && error.status === 401) {
+      await setSessionToken(null);
+      return { authenticated: false, user: null, payload: error.payload };
+    }
     throw error;
   }
 }
@@ -79,13 +120,20 @@ export async function verifyEmailLogin(email, code) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const normalizedCode = String(code || "").trim();
   const payload = await api("/auth/email/verify", { method: "POST", body: { email: normalizedEmail, code: normalizedCode } });
+  if (payload?.token) {
+    await setSessionToken(payload.token);
+  }
   const status = await getAuthStatus().catch(() => null);
   return { payload, status };
 }
 
 export async function logout() {
-  try { return await api("/auth/logout", { method: "POST", body: {} }); }
-  catch (error) {
+  try {
+    const res = await api("/auth/logout", { method: "POST", body: {} });
+    await setSessionToken(null);
+    return res;
+  } catch (error) {
+    await setSessionToken(null);
     if (error instanceof MstApiError && error.status === 405) return api("/auth/logout");
     throw error;
   }

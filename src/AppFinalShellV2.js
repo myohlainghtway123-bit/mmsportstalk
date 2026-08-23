@@ -95,7 +95,7 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   };
 
   const pushMode = (next, origin) => {
-    const from = origin || rememberOrigin();
+    const from = typeof origin === "string" ? origin : rememberOrigin();
     historyRef.current.push(from);
     setReturnMode(from);
     setMode(next);
@@ -105,7 +105,7 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
 
   const openMatch = (match, origin) => {
     if (!match) return;
-    const from = origin || rememberOrigin();
+    const from = typeof origin === "string" ? origin : rememberOrigin();
     historyRef.current.push(from);
     setReturnMode(from);
     setSelected(match);
@@ -114,7 +114,7 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
 
   const openEntity = (type, entity, origin) => {
     if (!entity?.id) return;
-    const from = origin || rememberOrigin();
+    const from = typeof origin === "string" ? origin : rememberOrigin();
     historyRef.current.push(from);
     setReturnMode(from);
     setSelected({ type, entity });
@@ -131,10 +131,10 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
     setMode("article");
   };
 
-  const openAccount = (origin) => pushMode("account", origin);
-  const openNotifications = (origin) => pushMode("notifications", origin);
-  const openSettings = (origin) => pushMode("settings", origin);
-  const openSearch = (origin) => pushMode("search", origin);
+  const openAccount = (origin) => pushMode("account", typeof origin === "string" ? origin : "home");
+  const openNotifications = (origin) => pushMode("notifications", typeof origin === "string" ? origin : "home");
+  const openSettings = (origin) => pushMode("settings", typeof origin === "string" ? origin : "home");
+  const openSearch = (origin) => pushMode("search", typeof origin === "string" ? origin : "home");
 
   const goReturn = () => {
     const next = historyRef.current.length ? historyRef.current.pop() : (returnMode || "home");
@@ -153,6 +153,29 @@ export default function AppFinalShellV2({ initialLanguage = "my", onLanguageChan
   const isSubpage = ["account", "notifications", "settings", "about", "match", "entity", "article", "search"].includes(mode);
   const navActive = isContent ? "content-news" : mode;
   const androidInset = Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0;
+
+  useEffect(() => {
+    const handleUrl = async (event) => {
+      const url = typeof event === "string" ? event : event?.url;
+      if (!url) return;
+      try {
+        const match = url.match(/[?&]token=([^&]+)/);
+        if (match && match[1]) {
+          const token = decodeURIComponent(match[1]);
+          const { setSessionToken, getAuthStatus } = require("./services/accountApi");
+          await setSessionToken(token);
+          await getAuthStatus().catch(() => null);
+          pushMode("account", mode);
+        }
+      } catch {
+        // Deep link parsing fallback
+      }
+    };
+
+    Linking.getInitialURL().then(handleUrl).catch(() => {});
+    const sub = Linking.addEventListener("url", handleUrl);
+    return () => sub.remove();
+  }, [mode]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
