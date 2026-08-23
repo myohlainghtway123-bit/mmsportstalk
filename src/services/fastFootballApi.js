@@ -49,6 +49,65 @@ function sortMatches(matches) {
   });
 }
 
+function statusCode(match) {
+  return String(match?.statusCode ?? match?.status ?? "").trim().toUpperCase();
+}
+
+function isScheduledSnapshot(match) {
+  return ["", "NS", "TBD", "SCHEDULED", "NOT_STARTED", "UPCOMING", "UNKNOWN"].includes(statusCode(match));
+}
+
+function mergeMatchSnapshot(previous, fresh) {
+  if (!previous) return fresh;
+  if (!fresh) return previous;
+
+  const merged = {
+    ...previous,
+    ...fresh,
+    home: { ...(previous.home || {}), ...(fresh.home || {}) },
+    away: { ...(previous.away || {}), ...(fresh.away || {}) },
+  };
+
+  // Provider/cache refreshes can temporarily omit score fields. Never replace a
+  // known score with null while the same fixture is still on screen.
+  if (fresh.homeScore == null && previous.homeScore != null) merged.homeScore = previous.homeScore;
+  if (fresh.awayScore == null && previous.awayScore != null) merged.awayScore = previous.awayScore;
+
+  // A stale upstream snapshot can briefly regress LIVE/FT back to NS. Preserve
+  // the last known progressed state, but allow real non-scheduled states such as
+  // SUSP/PST/CANC/ABD to replace it.
+  const previousProgressed = Boolean(previous.isLive || previous.isFinished);
+  if (previousProgressed && isScheduledSnapshot(fresh)) {
+    merged.status = previous.status;
+    merged.statusCode = previous.statusCode;
+    merged.statusLong = previous.statusLong;
+    merged.isLive = previous.isLive;
+    merged.isFinished = previous.isFinished;
+    merged.minute = previous.minute;
+    merged.elapsed = previous.elapsed;
+  }
+
+  // Once a fixture is confirmed finished, a non-finished stale response must not
+  // reopen it. This keeps FT scores stable during background refreshes.
+  if (previous.isFinished && !fresh.isFinished) {
+    merged.status = previous.status;
+    merged.statusCode = previous.statusCode;
+    merged.statusLong = previous.statusLong;
+    merged.isLive = false;
+    merged.isFinished = true;
+    merged.minute = previous.minute;
+    merged.elapsed = previous.elapsed;
+  }
+
+  return merged;
+}
+
+function mergeWithCachedMatches(freshMatches, savedMatches = []) {
+  if (!savedMatches.length) return freshMatches;
+  const previousById = new Map(savedMatches.map((match) => [String(match.id), match]));
+  return freshMatches.map((match) => mergeMatchSnapshot(previousById.get(String(match.id)), match));
+}
+
 async function fetchJson(url, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   let timer = null;
@@ -133,7 +192,22 @@ async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
   // If neither does, keep the most informative payload instead of discarding it.
   candidates.sort((a, b) => b.requested.length - a.requested.length || b.normalized.length - a.normalized.length);
   const best = candidates[0];
-  const matches = best.requested;
+  const saved = cache.get(date);
+
+  // A transient successful-but-empty API response must not blank a day that
+  // already has known fixtures. Keep the last known good list until a real
+  // fixture payload arrives again.
+  if (!best.normalized.length && saved?.matches?.length) {
+    return {
+      ...saved,
+      payload: best.payload,
+      cached: true,
+      stale: true,
+      sourceUrl: best.sourceUrl,
+    };
+  }
+
+  const matches = sortMatches(mergeWithCachedMatches(best.requested, saved?.matches || []));
 
   const result = {
     matches,
