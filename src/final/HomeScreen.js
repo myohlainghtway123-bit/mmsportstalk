@@ -636,9 +636,9 @@ export default function HomeScreen({
 
   const header = (
     <View>
-      {/* 1. TOP BRAND & ACCOUNT BAR */}
+      {/* 1. TOP BRAND & ACTION BAR (Search, Notifications, Avatar) */}
       <View style={[s.topbar, { borderBottomColor: colors.border2 }]}>
-        <View>
+        <View style={s.brandWrap}>
           <Text style={[s.brand, { color: colors.text }]}>
             <Text style={[s.brandMst, { color: colors.red }]}>MST</Text> Score
           </Text>
@@ -647,19 +647,11 @@ export default function HomeScreen({
           </Text>
         </View>
         <View style={s.topActions}>
-          {liveCount > 0 ? (
-            <Pressable
-              style={[s.liveChip, { backgroundColor: typeFilter === "LIVE" ? colors.red : colors.redSoft }]}
-              onPress={() => setTypeFilter((prev) => (prev === "LIVE" ? "ALL" : "LIVE"))}
-            >
-              <View style={[s.liveChipDot, { backgroundColor: typeFilter === "LIVE" ? "#FFFFFF" : colors.red }]} />
-              <Text style={[s.liveChipText, { color: typeFilter === "LIVE" ? "#FFFFFF" : colors.red }]}>
-                {liveCount} LIVE
-              </Text>
-            </Pressable>
-          ) : null}
-          <Pressable hitSlop={8} style={s.iconButton} onPress={openNotifications}>
-            <Ionicons name="notifications-outline" size={23} color={colors.text} />
+          <Pressable hitSlop={8} style={[s.topActionBtn, { backgroundColor: colors.card, borderColor: colors.border2 }]} onPress={openSearch}>
+            <Ionicons name="search-outline" size={19} color={colors.text} />
+          </Pressable>
+          <Pressable hitSlop={8} style={[s.topActionBtn, { backgroundColor: colors.card, borderColor: colors.border2 }]} onPress={openNotifications}>
+            <Ionicons name="notifications-outline" size={19} color={colors.text} />
           </Pressable>
           <Pressable hitSlop={8} style={s.avatarHeaderBtn} onPress={openAccount}>
             {currentUser?.avatar ? (
@@ -679,21 +671,7 @@ export default function HomeScreen({
         </View>
       </View>
 
-      {/* 2. PROMINENT SEARCH BAR ENTRY */}
-      <Pressable
-        style={[s.searchBarEntry, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={openSearch}
-      >
-        <Ionicons name="search-outline" size={18} color={colors.muted} />
-        <Text numberOfLines={1} style={[s.searchBarPlaceholder, { color: colors.muted }]}>
-          {my ? "အသင်း၊ ပြိုင်ပွဲ၊ နိုင်ငံ၊ ကစားသမား ရှာရန်…" : "Search clubs, leagues, nations, players…"}
-        </Text>
-        <View style={[s.searchShortcutBadge, { backgroundColor: colors.panel, borderColor: colors.border2 }]}>
-          <Text style={[s.searchShortcutText, { color: colors.muted }]}>SEARCH</Text>
-        </View>
-      </Pressable>
-
-      {/* 3. COMPACT PREDICTION HERO */}
+      {/* 2. COMPACT PREDICTION HERO */}
       <Pressable
         style={[s.predictionBanner, { backgroundColor: colors.card, borderColor: colors.red }]}
         onPress={openPredictions}
@@ -1121,69 +1099,51 @@ const s = StyleSheet.create({
   // Top Bar
   topbar: {
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
   },
+  brandWrap: { flex: 1 },
   brand: { fontSize: 20, fontWeight: "900", letterSpacing: 0.3 },
   brandMst: { fontWeight: "900" },
-  tagline: { fontSize: 9, fontWeight: "800", marginTop: 1, letterSpacing: 0.4 },
-  topActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  liveChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4.5,
-    borderRadius: 12,
-  },
-  liveChipDot: { width: 6, height: 6, borderRadius: 3 },
-  liveChipText: { fontSize: 10.5, fontWeight: "900" },
-  iconButton: { padding: 4 },
-  avatarHeaderBtn: { padding: 2 },
-  headerAvatarImg: { width: 30, height: 30, borderRadius: 15 },
-  headerAvatarInitials: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  headerInitialsText: { fontSize: 11, fontWeight: "900" },
-  headerAvatarPlaceholder: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-
-  // Search Entry
-  searchBarEntry: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    height: 40,
-    borderRadius: 10,
+  tagline: { fontSize: 8.5, fontWeight: "800", marginTop: 1, letterSpacing: 0.4 },
+  topActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  topActionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
   },
-  searchBarPlaceholder: { flex: 1, fontSize: 11.5, fontWeight: "600" },
-  searchShortcutBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 0.5 },
-  searchShortcutText: { fontSize: 8.5, fontWeight: "800", letterSpacing: 0.5 },
+  avatarHeaderBtn: { padding: 1 },
+  headerAvatarImg: { width: 32, height: 32, borderRadius: 16 },
+  headerAvatarInitials: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  headerInitialsText: { fontSize: 11.5, fontWeight: "900" },
+  headerAvatarPlaceholder: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 
   // Prediction Hero
   predictionBanner: {
     marginHorizontal: 12,
-    marginTop: 8,
+    marginTop: 6,
     borderRadius: 10,
     borderWidth: 1,
-    padding: 9,
-    gap: 5,
+    padding: 8,
+    gap: 4,
   },
   predHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  predBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 5 },
+  predBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   predBadgeText: { color: "#FFFFFF", fontSize: 8.5, fontWeight: "900", letterSpacing: 0.4 },
-  predLeaderboardLink: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 2.5, borderRadius: 5, borderWidth: 0.5 },
+  predLeaderboardLink: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5, borderWidth: 0.5 },
   predLeaderboardText: { fontSize: 8.5, fontWeight: "800" },
   predContent: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  predTitle: { fontSize: 12, fontWeight: "900" },
-  predSub: { fontSize: 9.5, marginTop: 1 },
-  predBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7 },
-  predBtnText: { color: "#FFFFFF", fontSize: 9, fontWeight: "900" },
+  predTitle: { fontSize: 11.5, fontWeight: "900" },
+  predSub: { fontSize: 9, marginTop: 1 },
+  predBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4.5, borderRadius: 6 },
+  predBtnText: { color: "#FFFFFF", fontSize: 8.5, fontWeight: "900" },
 
   // Consolidated Single Date Bar
   singleDateBar: {

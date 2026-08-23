@@ -173,7 +173,12 @@ export default function PolicyScreen({ policyId, onBack, language = "my" }) {
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.navStrip}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={s.navScrollView}
+        contentContainerStyle={s.navStrip}
+      >
         {POLICY_CATALOG.map((p) => {
           const on = p.id === selectedId;
           return (
@@ -227,40 +232,41 @@ export default function PolicyScreen({ policyId, onBack, language = "my" }) {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 0,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 44,
   },
   header: {
-    minHeight: 56,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     gap: 8,
   },
-  backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 16, fontWeight: "900" },
-  headerSub: { fontSize: 10.5, fontWeight: "600", marginTop: 2 },
-  navStrip: { paddingHorizontal: 14, paddingVertical: 10, gap: 8, height: 56 },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 15, fontWeight: "900" },
+  headerSub: { fontSize: 10, fontWeight: "600", marginTop: 1 },
+  navScrollView: { flexGrow: 0, height: 46 },
+  navStrip: { paddingHorizontal: 12, paddingVertical: 6, gap: 6 },
   navTab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 20,
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 5.5,
+    borderRadius: 16,
     borderWidth: 1,
   },
-  navTabText: { fontSize: 11, fontWeight: "800" },
+  navTabText: { fontSize: 10.5, fontWeight: "800" },
   body: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 44, gap: 14 },
-  heroCard: { padding: 18, borderRadius: 16, borderWidth: 1, alignItems: "center", gap: 10 },
-  iconCircle: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" },
-  policyTitle: { fontSize: 17, fontWeight: "900", textAlign: "center" },
-  policySummary: { fontSize: 12, lineHeight: 18, textAlign: "center" },
-  secCard: { padding: 16, borderRadius: 14, borderWidth: 1, gap: 8 },
-  secHead: { fontSize: 14, fontWeight: "900" },
-  secBody: { fontSize: 12.5, lineHeight: 21 },
-  footer: { marginTop: 12, alignItems: "center", paddingBottom: 10 },
-  footerText: { fontSize: 10, fontWeight: "700" },
+  content: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 36, gap: 10 },
+  heroCard: { padding: 14, borderRadius: 14, borderWidth: 1, alignItems: "center", gap: 8 },
+  iconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  policyTitle: { fontSize: 15.5, fontWeight: "900", textAlign: "center" },
+  policySummary: { fontSize: 11.5, lineHeight: 17, textAlign: "center" },
+  secCard: { padding: 14, borderRadius: 12, borderWidth: 1, gap: 6 },
+  secHead: { fontSize: 13, fontWeight: "900" },
+  secBody: { fontSize: 12, lineHeight: 19 },
+  footer: { marginTop: 8, alignItems: "center", paddingBottom: 8 },
+  footerText: { fontSize: 9.5, fontWeight: "700" },
 });
 

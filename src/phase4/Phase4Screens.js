@@ -219,8 +219,8 @@ export function AboutScreen({ goBack }) {
 }
 
 const s = StyleSheet.create({
-  screen:{flex:1,backgroundColor:C.bg},content:{paddingHorizontal:16,paddingTop:12,paddingBottom:40},
-  header:{minHeight:66,paddingHorizontal:16,flexDirection:"row",alignItems:"center",borderBottomWidth:1,borderBottomColor:C.border2},title:{fontSize:17,fontWeight:"800",color:C.text},subtitle:{fontSize:10.5,color:C.muted,marginTop:2},
+  screen:{flex:1,backgroundColor:C.bg},content:{paddingHorizontal:14,paddingTop:8,paddingBottom:36},
+  header:{minHeight:48,paddingHorizontal:12,flexDirection:"row",alignItems:"center",borderBottomWidth:1,borderBottomColor:C.border2},title:{fontSize:16,fontWeight:"800",color:C.text},subtitle:{fontSize:10,color:C.muted,marginTop:1},
   section:{fontSize:11,fontWeight:"900",color:C.text2,marginTop:13,marginBottom:8},sectionRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:13,marginBottom:8},sectionInline:{fontSize:11,fontWeight:"900",color:C.text2},actionLink:{fontSize:11,fontWeight:"800",color:C.red},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,overflow:"hidden",marginBottom:8},divider:{borderBottomWidth:1,borderBottomColor:C.border2},
   row:{minHeight:64,paddingHorizontal:12,paddingVertical:9,flexDirection:"row",alignItems:"center",gap:10},settingsRow:{minHeight:62,paddingHorizontal:12,paddingVertical:9,flexDirection:"row",alignItems:"center",gap:10},rowIcon:{width:35,height:35,borderRadius:9,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},rowTitle:{fontSize:13,fontWeight:"700",color:C.text2},rowSub:{fontSize:9.5,color:C.muted,marginTop:3,lineHeight:13},
   toggle:{width:42,height:24,borderRadius:12,backgroundColor:C.border,justifyContent:"center",paddingHorizontal:3},toggleOn:{backgroundColor:C.red},toggleKnob:{width:18,height:18,borderRadius:9,backgroundColor:C.text},toggleKnobOn:{alignSelf:"flex-end"},
