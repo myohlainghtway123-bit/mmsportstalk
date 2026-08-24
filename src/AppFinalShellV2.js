@@ -170,16 +170,6 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
       const url = typeof event === "string" ? event : event?.url;
       if (!url) return;
       try {
-        const match = url.match(/[?&]token=([^&]+)/);
-        if (match && match[1]) {
-          const token = decodeURIComponent(match[1]);
-          const { setSessionToken, getAuthStatus } = require("./services/accountApi");
-          await setSessionToken(token);
-          await getAuthStatus().catch(() => null);
-          pushMode("account", mode);
-          return;
-        }
-
         const matchDeep = url.match(/mst:\/\/(?:match|fixture)\/(\d+)/i) || url.match(/[?&]matchId=(\d+)/i);
         if (matchDeep && matchDeep[1]) {
           openMatch({ id: String(matchDeep[1]) }, mode);

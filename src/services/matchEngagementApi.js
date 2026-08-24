@@ -3,8 +3,8 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { getSessionToken } from "./accountApi";
-
-const API_BASE = "https://myanmarsportstalk.com/api";
+import { MST_API_BASE } from "./mstApiConfig";
+import { setStoredDevicePushToken } from "./pushTokenStore";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -28,7 +28,7 @@ async function api(path, { method = "GET", body } = {}) {
     } : {}),
   };
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${MST_API_BASE}${path}`, {
     method,
     credentials: "include",
     headers,
@@ -87,6 +87,7 @@ export async function registerDeviceForPush() {
         deviceName: Device.modelName || Device.deviceName || null,
       },
     });
+    await setStoredDevicePushToken(token);
     return { granted: true, remote: true, token };
   } catch (error) {
     return { granted: false, remote: false, reason: error?.message || "push-registration-failed", error };
