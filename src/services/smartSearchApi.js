@@ -1,4 +1,6 @@
-const SEARCH_URL = "https://myanmarsportstalk.com/api/football/search";
+import { MST_FOOTBALL_API_BASE } from "./mstApiConfig";
+
+const SEARCH_URL = `${MST_FOOTBALL_API_BASE}/search`;
 const CACHE_MS = 6 * 60 * 60 * 1000;
 const root = globalThis;
 

@@ -1,5 +1,7 @@
-const API_BASE = "https://myanmarsportstalk.com/api";
-const SITE = "https://myanmarsportstalk.com";
+import { MST_API_BASE, MST_SITE_ORIGIN } from "./mstApiConfig";
+
+const API_BASE = MST_API_BASE;
+const SITE = MST_SITE_ORIGIN;
 const YOUTUBE_CHANNEL = "https://www.youtube.com/@MyanmarSportsTalk/videos";
 const TIMEOUT_MS = 9000;
 

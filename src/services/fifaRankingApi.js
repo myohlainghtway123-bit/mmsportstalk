@@ -1,4 +1,6 @@
-const FIFA_RANKING_URL = "https://myanmarsportstalk.com/api/football/rankings/fifa";
+import { MST_FOOTBALL_API_BASE } from "./mstApiConfig";
+
+const FIFA_RANKING_URL = `${MST_FOOTBALL_API_BASE}/rankings/fifa`;
 const CACHE_MS = 6 * 60 * 60 * 1000;
 const root = globalThis;
 

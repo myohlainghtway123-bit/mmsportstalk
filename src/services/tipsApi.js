@@ -1,6 +1,5 @@
 import { getSessionToken } from "./accountApi";
-
-const API_BASE = "https://myanmarsportstalk.com/api";
+import { MST_API_BASE } from "./mstApiConfig";
 
 async function decode(response) {
   const text = await response.text();
@@ -20,7 +19,7 @@ async function api(path, { method = "GET", body, signal } = {}) {
     headers["x-mst-session"] = token;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${MST_API_BASE}${path}`, {
     method,
     credentials: "include",
     headers,

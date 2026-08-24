@@ -1,6 +1,7 @@
 import { extractArray, normalizeFootballMatch } from "./footballApi";
+import { MST_FOOTBALL_API_BASE } from "./mstApiConfig";
 
-export const FOOTBALL_API_BASE = "https://myanmarsportstalk.com/api/football";
+export const FOOTBALL_API_BASE = MST_FOOTBALL_API_BASE;
 const APP_TIME_ZONE = "Asia/Bangkok";
 const DEFAULT_TIMEOUT_MS = 15000;
 

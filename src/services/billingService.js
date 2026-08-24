@@ -1,41 +1,5 @@
 import { getSessionToken } from "./accountApi";
-
-const API_BASE = "https://myanmarsportstalk.com/api";
-
-export const GOOGLE_PLAY_CREDIT_PRODUCTS = [
-  {
-    id: "mst_credits_100",
-    credits: 100,
-    priceThb: 250,
-    title: "100 MST Credits",
-    description: "Standard pack for unlocking tipster analysis",
-    popular: false,
-  },
-  {
-    id: "mst_credits_220",
-    credits: 220,
-    priceThb: 500,
-    title: "220 MST Credits",
-    description: "Includes +20 bonus credits",
-    popular: true,
-  },
-  {
-    id: "mst_credits_480",
-    credits: 480,
-    priceThb: 1000,
-    title: "480 MST Credits",
-    description: "Includes +80 bonus credits",
-    popular: false,
-  },
-  {
-    id: "mst_credits_1000",
-    credits: 1000,
-    priceThb: 2000,
-    title: "1,000 MST Credits",
-    description: "Includes +200 bonus credits (Best Value)",
-    popular: false,
-  },
-];
+import { MST_API_BASE } from "./mstApiConfig";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = await getSessionToken().catch(() => null);
@@ -49,7 +13,7 @@ async function api(path, { method = "GET", body } = {}) {
     headers["x-mst-session"] = token;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${MST_API_BASE}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -73,8 +37,12 @@ async function api(path, { method = "GET", body } = {}) {
   return payload?.data ?? payload;
 }
 
-export function getCreditPackages() {
-  return GOOGLE_PLAY_CREDIT_PRODUCTS;
+export async function getCreditPackages() {
+  const payload = await api("/account/wallet/packages");
+  const providers = Array.isArray(payload?.providers) ? payload.providers : [];
+  const verifiedCheckoutAvailable = payload?.purchasingEnabled === true
+    && providers.some((provider) => provider?.enabled === true);
+  return verifiedCheckoutAvailable && Array.isArray(payload?.packages) ? payload.packages : [];
 }
 
 export async function verifyPlayPurchaseOnServer({
@@ -100,28 +68,12 @@ export async function verifyPlayPurchaseOnServer({
  * Designed for immediate plug-and-play connection when Google Play Console
  * Merchant credentials and in-app product IDs are activated.
  */
-export async function purchaseCredits(packageId, { sandbox = false } = {}) {
-  const pkg = GOOGLE_PLAY_CREDIT_PRODUCTS.find((p) => p.id === packageId);
-  if (!pkg) throw new Error("Invalid credit package selected.");
-
-  // Generate unique client transaction reference for idempotency
-  const purchaseToken = `token_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  const orderId = `GPA.${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(10000 + Math.random() * 90000)}`;
-
-  const result = await verifyPlayPurchaseOnServer({
-    packageId: pkg.id,
-    purchaseToken,
-    orderId,
-    sandbox,
-  });
-
-  return {
-    success: true,
-    package: pkg,
-    orderId: result.orderId || orderId,
-    creditsGranted: result.creditsGranted || pkg.credits,
-    balance: result.balance,
-  };
+export async function purchaseCredits(packageId) {
+  const packages = await getCreditPackages();
+  if (!packages.some((pkg) => pkg.id === packageId)) throw new Error("Invalid credit package selected.");
+  const error = new Error("Google Play checkout is not available yet. No payment was submitted and no credits were changed.");
+  error.code = "GOOGLE_PLAY_BILLING_NOT_CONFIGURED";
+  throw error;
 }
 
 export async function restorePurchases() {

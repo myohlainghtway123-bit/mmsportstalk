@@ -1,4 +1,6 @@
-const API_BASE = "https://myanmarsportstalk.com/api/football";
+import { MST_FOOTBALL_API_BASE } from "./mstApiConfig";
+
+const API_BASE = MST_FOOTBALL_API_BASE;
 const TIMEOUT_MS = 8000;
 
 const root = globalThis;

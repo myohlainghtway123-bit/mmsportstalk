@@ -18,7 +18,7 @@ import {
   saveOnboardingPreferences,
   syncStoredOnboardingFavorites,
 } from "../services/onboardingStore";
-import { getAuthStatus, setFavorite } from "../services/accountApi";
+import { getAuthStatus, setFavorite, updateProfile } from "../services/accountApi";
 
 const C = {
   bg: "#07090B",
@@ -182,6 +182,7 @@ export default function OnboardingGate({ children }) {
     setLanguageChoice(next);
     setPrefs((p) => ({ ...(p || {}), language: next }));
     persistAppLanguage(next).catch(() => {});
+    updateProfile({ preferredLanguage: next }).catch(() => {});
   };
 
   if (phase === "splash") {
