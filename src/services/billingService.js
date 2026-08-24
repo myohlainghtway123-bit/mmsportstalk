@@ -39,7 +39,10 @@ async function api(path, { method = "GET", body } = {}) {
 
 export async function getCreditPackages() {
   const payload = await api("/account/wallet/packages");
-  return Array.isArray(payload?.packages) ? payload.packages : [];
+  const providers = Array.isArray(payload?.providers) ? payload.providers : [];
+  const verifiedCheckoutAvailable = payload?.purchasingEnabled === true
+    && providers.some((provider) => provider?.enabled === true);
+  return verifiedCheckoutAvailable && Array.isArray(payload?.packages) ? payload.packages : [];
 }
 
 export async function verifyPlayPurchaseOnServer({
