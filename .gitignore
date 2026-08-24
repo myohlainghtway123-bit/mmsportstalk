@@ -42,4 +42,5 @@ yarn-error.*
 
 # temp build artifacts
 dist-ci/
+dist-ios/
 .mst-backups/

@@ -38,7 +38,7 @@ function normalizePlayer(player) {
 
 export async function searchFootballEntities(query, { signal } = {}) {
   const cleaned = cleanQuery(query);
-  if (cleaned.length < 4) return { teams:[], players:[], stale:false };
+  if (cleaned.length < 2) return { teams:[], players:[], stale:false };
   const key = cleaned.toLowerCase();
   const cache = root.__MST_SMART_SEARCH_CACHE__;
   const saved = cache.get(key);

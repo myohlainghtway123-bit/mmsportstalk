@@ -9,6 +9,7 @@
     "ios": "node scripts/generate_assets.js && expo start --ios",
     "web": "expo start --web",
     "validate:android": "node scripts/generate_assets.js && expo export --platform android --output-dir dist-ci",
+    "validate:ios": "node scripts/generate_assets.js && expo export --platform ios --output-dir dist-ios",
     "build:android:apk": "npx eas-cli@latest build --platform android --profile preview",
     "build:ios:internal": "npx eas-cli@latest build --platform ios --profile preview",
     "build:android:store": "npx eas-cli@latest build --platform android --profile production",

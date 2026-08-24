@@ -162,6 +162,37 @@ export async function verifyEmailLogin(email, code) {
   return { payload, status };
 }
 
+export async function loginWithPassword(email, password) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const payload = await api("/auth/password/login", {
+    method: "POST",
+    body: { email: normalizedEmail, password: String(password || "") },
+  });
+  if (payload?.token) {
+    await setSessionToken(payload.token);
+  }
+  const status = await getAuthStatus().catch(() => null);
+  return { payload, status };
+}
+
+export async function getPasswordStatus() {
+  try {
+    return await api("/account/password", { method: "GET" });
+  } catch {
+    return { ok: false, hasPassword: false };
+  }
+}
+
+export async function setUserPassword({ newPassword, currentPassword }) {
+  return api("/account/password", {
+    method: "POST",
+    body: {
+      newPassword: String(newPassword || ""),
+      currentPassword: currentPassword ? String(currentPassword) : undefined,
+    },
+  });
+}
+
 export async function logout() {
   try {
     const res = await api("/auth/logout", { method: "POST", body: {} });

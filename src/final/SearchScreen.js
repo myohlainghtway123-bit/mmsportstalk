@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
-import { extractArray, fetchCompetitionCatalog } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
 import { fetchFifaMenRanking, peekFifaMenRanking } from "../services/fifaRankingApi";
 import { searchFootballEntities as fetchSmartSearch } from "../services/smartSearchApi";
@@ -10,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const RECENT_SEARCH_KEY = "@mst_recent_searches";
 const EMPTY_REMOTE = { teams: [], players: [], stale: false };
+const SEARCH_TABS = ["ALL", "CLUBS", "PLAYERS", "NATIONS"];
 
 const POPULAR_SEARCH_TEAMS = [
   { id: 33, name: "Manchester United", logo: "https://media.api-sports.io/football/teams/33.png", priority: 100, country: "England" },
@@ -27,6 +27,24 @@ const POPULAR_SEARCH_TEAMS = [
   { id: 47, name: "Tottenham", logo: "https://media.api-sports.io/football/teams/47.png", priority: 90, country: "England" },
   { id: 165, name: "Borussia Dortmund", logo: "https://media.api-sports.io/football/teams/165.png", priority: 90, country: "Germany" },
   { id: 530, name: "Atletico Madrid", logo: "https://media.api-sports.io/football/teams/530.png", priority: 90, country: "Spain" },
+];
+
+const POPULAR_SEARCH_PLAYERS = [
+  { id: 1100, name: "Erling Haaland", photo: "https://media.api-sports.io/football/players/1100.png", team: "Manchester City", nationality: "Norway", position: "Attacker", priority: 100 },
+  { id: 278, name: "Kylian Mbappé", photo: "https://media.api-sports.io/football/players/278.png", team: "Real Madrid", nationality: "France", position: "Attacker", priority: 100 },
+  { id: 154, name: "Lionel Messi", photo: "https://media.api-sports.io/football/players/154.png", team: "Inter Miami", nationality: "Argentina", position: "Attacker", priority: 100 },
+  { id: 874, name: "Cristiano Ronaldo", photo: "https://media.api-sports.io/football/players/874.png", team: "Al Nassr", nationality: "Portugal", position: "Attacker", priority: 100 },
+  { id: 19183, name: "Jude Bellingham", photo: "https://media.api-sports.io/football/players/19183.png", team: "Real Madrid", nationality: "England", position: "Midfielder", priority: 95 },
+  { id: 306, name: "Mohamed Salah", photo: "https://media.api-sports.io/football/players/306.png", team: "Liverpool", nationality: "Egypt", position: "Attacker", priority: 95 },
+  { id: 186, name: "Son Heung-min", photo: "https://media.api-sports.io/football/players/186.png", team: "Tottenham", nationality: "South Korea", position: "Attacker", priority: 95 },
+  { id: 757, name: "Vinícius Júnior", photo: "https://media.api-sports.io/football/players/757.png", team: "Real Madrid", nationality: "Brazil", position: "Attacker", priority: 95 },
+  { id: 629, name: "Kevin De Bruyne", photo: "https://media.api-sports.io/football/players/629.png", team: "Manchester City", nationality: "Belgium", position: "Midfielder", priority: 90 },
+  { id: 1465, name: "Bukayo Saka", photo: "https://media.api-sports.io/football/players/1465.png", team: "Arsenal", nationality: "England", position: "Attacker", priority: 90 },
+  { id: 387343, name: "Lamine Yamal", photo: "https://media.api-sports.io/football/players/387343.png", team: "Barcelona", nationality: "Spain", position: "Attacker", priority: 90 },
+  { id: 184, name: "Harry Kane", photo: "https://media.api-sports.io/football/players/184.png", team: "Bayern Munich", nationality: "England", position: "Attacker", priority: 90 },
+  { id: 44, name: "Rodri", photo: "https://media.api-sports.io/football/players/44.png", team: "Manchester City", nationality: "Spain", position: "Midfielder", priority: 90 },
+  { id: 152982, name: "Cole Palmer", photo: "https://media.api-sports.io/football/players/152982.png", team: "Chelsea", nationality: "England", position: "Midfielder", priority: 90 },
+  { id: 1485, name: "Bruno Fernandes", photo: "https://media.api-sports.io/football/players/1485.png", team: "Manchester United", nationality: "Portugal", position: "Midfielder", priority: 90 },
 ];
 
 const POPULAR_NATIONAL_TEAMS = [
@@ -87,7 +105,17 @@ function todayBangkok() {
   }
 }
 
-function ResultRow({ icon, image, title, subtitle, onPress, accent = false, colors }) {
+const ResultRow = React.memo(function ResultRow({
+  icon,
+  image,
+  title,
+  subtitle,
+  badge,
+  badgeColor,
+  onPress,
+  accent = false,
+  colors,
+}) {
   return (
     <Pressable
       style={[
@@ -96,6 +124,7 @@ function ResultRow({ icon, image, title, subtitle, onPress, accent = false, colo
         accent && { borderColor: colors.red, backgroundColor: colors.redSoft },
       ]}
       onPress={onPress}
+      android_ripple={{ color: "rgba(255,255,255,0.06)" }}
     >
       <View style={[s.avatar, { backgroundColor: colors.card2 }]}>
         {image ? (
@@ -105,21 +134,36 @@ function ResultRow({ icon, image, title, subtitle, onPress, accent = false, colo
         )}
       </View>
       <View style={s.rowBody}>
-        <Text numberOfLines={1} style={[s.rowTitle, { color: colors.text }]}>
-          {title}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text numberOfLines={1} style={[s.rowTitle, { color: colors.text }]}>
+            {title}
+          </Text>
+          {badge ? (
+            <View style={[s.typeBadge, { backgroundColor: badgeColor || colors.panel }]}>
+              <Text style={[s.typeBadgeText, { color: colors.muted }]}>{badge}</Text>
+            </View>
+          ) : null}
+        </View>
         {subtitle ? (
           <Text numberOfLines={1} style={[s.rowSub, { color: colors.muted }]}>
             {subtitle}
           </Text>
         ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.muted2} />
+      <Ionicons name="chevron-forward" size={16} color={colors.muted} />
     </Pressable>
   );
-}
+});
 
-export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, language = "my" }) {
+export default function SearchScreen({
+  goBack,
+  openEntity,
+  openMatch,
+  onSelectTeam,
+  onSelectLeague,
+  onSelectPlayer,
+  language = "my",
+}) {
   const { colors } = useTheme();
   const my = language === "my";
   const [query, setQuery] = useState("");
@@ -137,7 +181,7 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
       .catch(() => {});
   }, []);
 
-  const saveRecentSearch = (term) => {
+  const saveRecentSearch = useCallback((term) => {
     const clean = term.trim();
     if (!clean) return;
     setRecentSearches((prev) => {
@@ -146,12 +190,12 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
       AsyncStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(updated)).catch(() => {});
       return updated;
     });
-  };
+  }, []);
 
-  const clearRecentSearches = () => {
+  const clearRecentSearches = useCallback(() => {
     setRecentSearches([]);
     AsyncStorage.removeItem(RECENT_SEARCH_KEY).catch(() => {});
-  };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -165,6 +209,7 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
     };
   }, []);
 
+  // Remote smart search with debouncing
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
@@ -184,7 +229,7 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
       } catch (_) {
         if (alive) setLoading(false);
       }
-    }, 250);
+    }, 200);
 
     return () => {
       alive = false;
@@ -206,12 +251,18 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
     return Array.from(map.values());
   }, [matchesPayload]);
 
-  const filteredTeams = useMemo(() => {
+  const localPlayers = useMemo(() => POPULAR_SEARCH_PLAYERS, []);
+
+  // Combined and scored entity lists
+  const { filteredTeams, filteredPlayers, combinedResults } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    const localMatches = localTeams
+    if (!q) return { filteredTeams: [], filteredPlayers: [], combinedResults: [] };
+
+    // Teams
+    const localTeamMatches = localTeams
       .map((team) => ({
         ...team,
+        type: "team",
         score: scoreSearchRelevance(team.name, q, team.priority || 0),
       }))
       .filter((t) => t.score > 0);
@@ -221,15 +272,70 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
       name: t.name,
       logo: t.logo,
       country: t.country,
+      type: "team",
       score: scoreSearchRelevance(t.name, q, 50),
     }));
 
-    const combined = new Map();
-    for (const t of [...localMatches, ...remoteTeams]) {
-      combined.set(String(t.id || t.name), t);
+    const teamMap = new Map();
+    for (const t of [...localTeamMatches, ...remoteTeams]) {
+      teamMap.set(String(t.id || t.name), t);
     }
-    return Array.from(combined.values()).sort((a, b) => b.score - a.score);
-  }, [query, localTeams, remoteResults.teams]);
+    const teams = Array.from(teamMap.values()).sort((a, b) => b.score - a.score);
+
+    // Players
+    const localPlayerMatches = localPlayers
+      .map((player) => ({
+        ...player,
+        type: "player",
+        score: scoreSearchRelevance(player.name, q, player.priority || 0),
+      }))
+      .filter((p) => p.score > 0);
+
+    const remotePlayers = (remoteResults.players || []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      photo: p.photo,
+      nationality: p.nationality,
+      position: p.position || "Player",
+      team: p.team || p.nationality || "Football",
+      type: "player",
+      score: scoreSearchRelevance(p.name, q, 50),
+    }));
+
+    const playerMap = new Map();
+    for (const p of [...localPlayerMatches, ...remotePlayers]) {
+      playerMap.set(String(p.id || p.name), p);
+    }
+    const players = Array.from(playerMap.values()).sort((a, b) => b.score - a.score);
+
+    // Combined stream
+    const combined = [...teams, ...players].sort((a, b) => b.score - a.score);
+
+    return { filteredTeams: teams, filteredPlayers: players, combinedResults: combined };
+  }, [query, localTeams, localPlayers, remoteResults]);
+
+  const displayedResults = useMemo(() => {
+    if (activeTab === "CLUBS") return filteredTeams;
+    if (activeTab === "PLAYERS") return filteredPlayers;
+    return combinedResults;
+  }, [activeTab, filteredTeams, filteredPlayers, combinedResults]);
+
+  const handleSelectEntity = useCallback((item) => {
+    saveRecentSearch(item.name);
+    if (item.type === "player") {
+      if (openEntity) openEntity("player", item);
+      else onSelectPlayer?.(item);
+    } else if (item.type === "team") {
+      if (openEntity) openEntity("team", item);
+      else onSelectTeam?.(item);
+    } else if (item.type === "competition") {
+      if (openEntity) openEntity("competition", item);
+      else onSelectLeague?.(item);
+    } else {
+      if (openEntity) openEntity("team", item);
+      else onSelectTeam?.(item);
+    }
+  }, [saveRecentSearch, openEntity, onSelectPlayer, onSelectTeam, onSelectLeague]);
 
   return (
     <View style={[s.screen, { backgroundColor: colors.bg }]}>
@@ -244,8 +350,8 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
             value={query}
             onChangeText={setQuery}
             autoFocus
-            placeholder={my ? "အသင်း၊ ပြိုင်ပွဲ၊ နိုင်ငံ၊ ကစားသမား ရှာရန်…" : "Search clubs, leagues, nations, players…"}
-            placeholderTextColor={colors.muted2}
+            placeholder={my ? "ကစားသမား၊ အသင်း၊ ပြိုင်ပွဲ၊ နိုင်ငံ ရှာရန်…" : "Search players, clubs, leagues, nations…"}
+            placeholderTextColor={colors.muted}
             style={[s.input, { color: colors.text }]}
             returnKeyType="search"
             onSubmitEditing={() => saveRecentSearch(query)}
@@ -257,6 +363,30 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
           ) : null}
         </View>
       </View>
+
+      {/* Filter Tabs when Query is typed */}
+      {query ? (
+        <View style={[s.tabsRow, { borderBottomColor: colors.border2 }]}>
+          {SEARCH_TABS.map((tab) => {
+            const on = activeTab === tab;
+            const label = my
+              ? ({ ALL: "အားလုံး", CLUBS: "ကလပ်အသင်း", PLAYERS: "ကစားသမား", NATIONS: "လက်ရွေးစင်" }[tab] || tab)
+              : tab;
+            const count = tab === "CLUBS" ? filteredTeams.length : tab === "PLAYERS" ? filteredPlayers.length : combinedResults.length;
+            return (
+              <Pressable
+                key={tab}
+                style={[s.tabButton, on && { borderBottomColor: colors.red, borderBottomWidth: 2 }]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Text style={[s.tabText, { color: on ? colors.red : colors.muted }]}>
+                  {label} {count > 0 ? `(${count})` : ""}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         {/* Recent Searches */}
@@ -283,35 +413,38 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
           </View>
         ) : null}
 
-        {/* Live Search Query Results */}
+        {/* Live Search Results */}
         {query ? (
           <View style={s.section}>
             <View style={s.sectionHead}>
               <Text style={[s.sectionTitle, { color: colors.muted }]}>
-                {my ? `ရှာဖွေတွေ့ရှိချက်များ (${filteredTeams.length})` : `SEARCH RESULTS (${filteredTeams.length})`}
+                {my ? `ရှာဖွေတွေ့ရှိချက်များ (${displayedResults.length})` : `SEARCH RESULTS (${displayedResults.length})`}
               </Text>
               {loading ? <ActivityIndicator size="small" color={colors.red} /> : null}
             </View>
-            {filteredTeams.length > 0 ? (
-              filteredTeams.map((team) => (
-                <ResultRow
-                  key={team.id || team.name}
-                  image={team.logo}
-                  title={team.name}
-                  subtitle={team.country || "Club"}
-                  onPress={() => {
-                    saveRecentSearch(team.name);
-                    onSelectTeam?.(team);
-                  }}
-                  colors={colors}
-                />
-              ))
+            {displayedResults.length > 0 ? (
+              displayedResults.map((item) => {
+                const isPlayer = item.type === "player";
+                return (
+                  <ResultRow
+                    key={`${item.type || "ent"}-${item.id || item.name}`}
+                    image={isPlayer ? item.photo : item.logo}
+                    icon={isPlayer ? "person-outline" : "football-outline"}
+                    title={item.name}
+                    subtitle={isPlayer ? `${item.team || ""} · ${item.position || "Player"}` : (item.country || "Club")}
+                    badge={isPlayer ? (my ? "ကစားသမား" : "PLAYER") : (my ? "အသင်း" : "CLUB")}
+                    badgeColor={isPlayer ? colors.blueSoft || "rgba(76,139,245,0.12)" : colors.redSoft}
+                    onPress={() => handleSelectEntity(item)}
+                    colors={colors}
+                  />
+                );
+              })
             ) : !loading ? (
               <View style={s.noResults}>
                 <Ionicons name="search-outline" size={32} color={colors.muted} />
                 <Text style={[s.noResultsTitle, { color: colors.text }]}>{my ? "ရှာမတွေ့ပါ" : "No results found"}</Text>
                 <Text style={[s.noResultsSub, { color: colors.muted }]}>
-                  {my ? "အခြားနာမည် သို့မဟုတ် စာလုံးပေါင်း စမ်းကြည့်ပါ။" : "Check the spelling or try a different search term."}
+                  {my ? "ကစားသမား သို့မဟုတ် အသင်းနာမည် စာလုံးပေါင်း စစ်ဆေးပါ။" : "Check player or club spelling and try again."}
                 </Text>
               </View>
             ) : null}
@@ -352,6 +485,29 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
               </View>
             </View>
 
+            {/* Popular Global Star Players */}
+            <View style={s.section}>
+              <View style={s.sectionHead}>
+                <Text style={[s.sectionTitle, { color: colors.gold || "#F4C84D" }]}>
+                  {my ? "ထိပ်တန်း ကမ္ဘာ့ကြယ်ပွင့် ကစားသမားများ" : "POPULAR WORLD PLAYERS"}
+                </Text>
+                <Text style={[s.sectionSub, { color: colors.muted }]}>Stars</Text>
+              </View>
+              {POPULAR_SEARCH_PLAYERS.slice(0, 6).map((player) => (
+                <ResultRow
+                  key={player.id}
+                  image={player.photo}
+                  icon="person-outline"
+                  title={player.name}
+                  subtitle={`${player.team} · ${player.nationality}`}
+                  badge={my ? "ကစားသမား" : "PLAYER"}
+                  badgeColor={colors.blueSoft || "rgba(76,139,245,0.12)"}
+                  onPress={() => handleSelectEntity({ ...player, type: "player" })}
+                  colors={colors}
+                />
+              ))}
+            </View>
+
             {/* Major European Clubs */}
             <View style={s.section}>
               <View style={s.sectionHead}>
@@ -366,10 +522,8 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
                   image={team.logo}
                   title={team.name}
                   subtitle={team.country}
-                  onPress={() => {
-                    saveRecentSearch(team.name);
-                    onSelectTeam?.(team);
-                  }}
+                  badge={my ? "အသင်း" : "CLUB"}
+                  onPress={() => handleSelectEntity({ ...team, type: "team" })}
                   colors={colors}
                 />
               ))}
@@ -389,10 +543,8 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
                   image={team.logo}
                   title={team.name}
                   subtitle={team.country}
-                  onPress={() => {
-                    saveRecentSearch(team.name);
-                    onSelectTeam?.(team);
-                  }}
+                  badge={my ? "လက်ရွေးစင်" : "NATION"}
+                  onPress={() => handleSelectEntity({ ...team, type: "team" })}
                   colors={colors}
                 />
               ))}
@@ -426,6 +578,20 @@ const s = StyleSheet.create({
     gap: 8,
   },
   input: { flex: 1, fontSize: 12.5, fontWeight: "600" },
+  tabsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  tabButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
   content: { padding: 14, paddingBottom: 40, gap: 18 },
   section: { gap: 8 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
@@ -458,7 +624,7 @@ const s = StyleSheet.create({
   aseanName: { fontSize: 11.5, fontWeight: "800", textAlign: "center" },
   aseanRank: { fontSize: 9, fontWeight: "700" },
   row: {
-    minHeight: 52,
+    minHeight: 54,
     borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -466,11 +632,20 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  avatarImage: { width: 24, height: 24 },
+  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  avatarImage: { width: 26, height: 26 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTitle: { fontSize: 12.5, fontWeight: "800" },
   rowSub: { fontSize: 9.5, marginTop: 1 },
+  typeBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  typeBadgeText: {
+    fontSize: 8.5,
+    fontWeight: "900",
+  },
   noResults: { padding: 40, alignItems: "center", justifyContent: "center", gap: 8 },
   noResultsTitle: { fontSize: 15, fontWeight: "900" },
   noResultsSub: { fontSize: 11, textAlign: "center" },
