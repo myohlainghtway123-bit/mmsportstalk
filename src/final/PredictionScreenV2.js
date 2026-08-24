@@ -315,7 +315,7 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
     }
   }, []);
 
-  const loadData = useCallback(async (silent = false) => {
+  const loadData = useCallback(async ({ silent = false, forceMatches = false } = {}) => {
     if (!silent && matches.length === 0) setLoading(true);
     try {
       const authRes = await getAuthStatus().catch(() => ({ authenticated: false }));
@@ -325,8 +325,8 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
       const today = bangkokDate(0);
       const tomorrow = bangkokDate(1);
       const [todayMatches, tomorrowMatches] = await Promise.all([
-        fetchFastFootballMatches({ date: today }).catch(() => ({ matches: [] })),
-        fetchFastFootballMatches({ date: tomorrow }).catch(() => ({ matches: [] })),
+        fetchFastFootballMatches({ date: today, force: forceMatches }).catch(() => ({ matches: [] })),
+        fetchFastFootballMatches({ date: tomorrow, force: forceMatches }).catch(() => ({ matches: [] })),
       ]);
 
       const seen = new Set();
@@ -366,7 +366,7 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
     setSavingId(match.id);
     try {
       await savePredictionScore({ matchId: match.id, homeScore, awayScore });
-      await loadData(true);
+      await loadData({ silent: true });
     } catch (e) {
       alert(e?.message || "Could not save prediction");
     } finally {
@@ -439,7 +439,10 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
                 styles.tabItem,
                 on && { backgroundColor: colors.redSoft, borderColor: colors.red, borderWidth: 1 },
               ]}
-              onPress={() => setTab(t)}
+              onPress={() => {
+                setTab(t);
+                if (t === "Predict") loadData({ silent: matches.length > 0, forceMatches: true });
+              }}
             >
               <Text style={[styles.tabItemText, { color: on ? colors.red : colors.muted }]}>
                 {label}
@@ -458,7 +461,7 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              loadData(true);
+              loadData({ silent: true, forceMatches: true });
             }}
             colors={[colors.red]}
             tintColor={colors.red}

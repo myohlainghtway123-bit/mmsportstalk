@@ -104,7 +104,8 @@ function cleanText(value) {
 
 function articleImage(raw) {
   return first(
-    raw?.imageUrl, raw?.image_url, raw?.featuredImageUrl, raw?.featured_image_url,
+    raw?.heroImageUrl, raw?.hero_image_url, raw?.imageUrl, raw?.image_url,
+    raw?.featuredImageUrl, raw?.featured_image_url, raw?.socialImageUrl, raw?.social_image_url,
     raw?.featuredImage?.url, raw?.featured_image?.url, raw?.coverImage?.url, raw?.cover_image?.url,
     raw?.thumbnailUrl, raw?.thumbnail_url, raw?.thumbnail?.url, raw?.media?.url, raw?.media?.source_url,
     raw?.image?.url, raw?.image?.src,

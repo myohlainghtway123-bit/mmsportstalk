@@ -15,6 +15,8 @@ function files(directory) {
 const packageJson = JSON.parse(read("package.json"));
 const account = read("src/services/accountApi.js");
 const accountScreen = read("src/final/AccountScreenV2.js");
+const predictionScreen = read("src/final/PredictionScreenV2.js");
+const content = read("src/services/contentApi.js");
 const billing = read("src/services/billingService.js");
 const shell = read("src/AppFinalShellV2.js");
 const quickScores = read("src/final/QuickScoresScreen.js");
@@ -40,6 +42,12 @@ assert.match(accountScreen, /startEmailLogin\(email,\s*\{\s*resend:\s*true\s*\}\
 assert.match(accountScreen, /getAccountPredictions\(\)/);
 assert.match(accountScreen, /meta\?\.summary\?\.points/);
 assert.match(accountScreen, /predictionPointsFrom\(predictions\)/);
+assert.match(predictionScreen, /fetchFastFootballMatches\(\{ date: today, force: forceMatches \}\)/);
+assert.match(predictionScreen, /fetchFastFootballMatches\(\{ date: tomorrow, force: forceMatches \}\)/);
+assert.match(predictionScreen, /t === "Predict"/);
+assert.match(predictionScreen, /forceMatches: true/);
+assert.match(content, /raw\?\.heroImageUrl/);
+assert.match(content, /raw\?\.socialImageUrl/);
 assert.match(quickScores, /import \{ isPremierLeagueEngland \} from "\.\.\/services\/footballClassification"/);
 assert.match(quickScores, /aIsEpl = isPremierLeagueEngland\(a\)/);
 assert.doesNotMatch(quickScores, /const POPULAR = \[[^\]]*"Premier League"/);
