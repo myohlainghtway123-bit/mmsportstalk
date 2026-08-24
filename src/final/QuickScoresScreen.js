@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleShe
 import { Ionicons } from "@expo/vector-icons";
 import { isLiveMatch } from "../services/footballApi";
 import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
+import { isPremierLeagueEngland } from "../services/footballClassification";
 
 const C = {
   bg: "#080A0C",
@@ -18,7 +19,7 @@ const C = {
 };
 
 const DAY_TABS = ["YESTERDAY", "TODAY", "TOMORROW"];
-const POPULAR = ["Premier League", "UEFA Champions League", "LaLiga", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Europa League"];
+const POPULAR = ["UEFA Champions League", "LaLiga", "La Liga", "Serie A", "Bundesliga", "Ligue 1", "Europa League"];
 
 function bangkokDate(offset = 0) {
   const date = new Date(Date.now() + offset * 86400000);
