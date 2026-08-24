@@ -17,6 +17,8 @@ const account = read("src/services/accountApi.js");
 const accountScreen = read("src/final/AccountScreenV2.js");
 const billing = read("src/services/billingService.js");
 const shell = read("src/AppFinalShellV2.js");
+const quickScores = read("src/final/QuickScoresScreen.js");
+const footballClassification = read("src/services/footballClassification.js");
 const validationWorkflow = read(".github/workflows/validate-app.yml");
 const easWorkflow = read(".github/workflows/eas-build.yml");
 const services = files(path.join(root, "src", "services"))
@@ -38,6 +40,10 @@ assert.match(accountScreen, /startEmailLogin\(email,\s*\{\s*resend:\s*true\s*\}\
 assert.match(accountScreen, /getAccountPredictions\(\)/);
 assert.match(accountScreen, /meta\?\.summary\?\.points/);
 assert.match(accountScreen, /predictionPointsFrom\(predictions\)/);
+assert.match(quickScores, /import \{ isPremierLeagueEngland \} from "\.\.\/services\/footballClassification"/);
+assert.match(quickScores, /aIsEpl = isPremierLeagueEngland\(a\)/);
+assert.doesNotMatch(quickScores, /const POPULAR = \[[^\]]*"Premier League"/);
+assert.match(footballClassification, /country === "england" && \/\\b\(premier\\s\*league\|epl\)\\b\/i\.test\(compName\)/);
 
 assert.doesNotMatch(shell, /\[\?&\]token=/);
 assert.doesNotMatch(billing, /Math\.random|token_\$\{|GPA\.\$\{/);
