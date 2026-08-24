@@ -42,6 +42,8 @@ import {
   isPremierLeagueEngland,
 } from "../services/footballClassification";
 
+const DATE_OFFSETS = Array.from({ length: 15 }, (_, i) => i - 7);
+
 function kickoffTime(match) {
   const t = match?.kickoff ? new Date(match.kickoff).getTime() : 0;
   return Number.isFinite(t) ? t : 0;
@@ -415,7 +417,7 @@ export default function HomeScreen({
     const map = new Map();
     state.matches.forEach((m) => {
       const comp = m.competition || "Other";
-      const score = matchPriorityScore(m, favorites);
+      const score = calculateFactualMatchPriority(m, favorites, regionalNationalTeamPriority);
       if (!map.has(comp)) map.set(comp, score);
       else map.set(comp, Math.max(map.get(comp), score));
     });
