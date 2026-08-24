@@ -9,15 +9,26 @@ on:
       - 'scripts/**'
       - 'app.json'
       - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validate-app.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'App.js'
+      - 'src/**'
+      - 'scripts/**'
+      - 'app.json'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/validate-app.yml'
   workflow_dispatch:
 
 concurrency:
-  group: validate-mst-app
-  cancel-in-progress: true
+  group: validate-mst-app-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate-android:
@@ -25,45 +36,19 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20.19.4'
+          node-version: '22.18.0'
+          cache: npm
 
-      - name: Compile and capture report
-        id: validate
-        shell: bash
-        run: |
-          mkdir -p .release
-          : > .release/validate-report.txt
-          echo "MST Android validation" >> .release/validate-report.txt
-          echo "Commit: $GITHUB_SHA" >> .release/validate-report.txt
-          echo "" >> .release/validate-report.txt
-          set +e
-          npm install >> .release/validate-report.txt 2>&1
-          code=$?
-          if [ "$code" -eq 0 ]; then
-            npm run validate:android >> .release/validate-report.txt 2>&1
-            code=$?
-          fi
-          echo "" >> .release/validate-report.txt
-          echo "EXIT_CODE=$code" >> .release/validate-report.txt
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+      - name: Install locked dependencies
+        run: npm ci
 
-      - name: Publish validation report
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .release/validate-report.txt
-          if ! git diff --cached --quiet; then
-            git commit -m "Update MST Android validation report"
-            git push
-          fi
+      - name: Validate shared backend boundary
+        run: npm run validate:shared-backend
 
-      - name: Fail if compile failed
-        if: steps.validate.outputs.exit_code != '0'
-        run: exit 1
+      - name: Export Android application
+        run: npm run validate:android

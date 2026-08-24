@@ -16,6 +16,8 @@ const packageJson = JSON.parse(read("package.json"));
 const account = read("src/services/accountApi.js");
 const billing = read("src/services/billingService.js");
 const shell = read("src/AppFinalShellV2.js");
+const validationWorkflow = read(".github/workflows/validate-app.yml");
+const easWorkflow = read(".github/workflows/eas-build.yml");
 const services = files(path.join(root, "src", "services"))
   .filter((file) => /\.js$/.test(file))
   .map((file) => ({ file, source: fs.readFileSync(file, "utf8") }));
@@ -32,6 +34,13 @@ assert.doesNotMatch(billing, /Math\.random|token_\$\{|GPA\.\$\{/);
 assert.match(billing, /GOOGLE_PLAY_BILLING_NOT_CONFIGURED/);
 assert.match(billing, /\/account\/wallet\/packages/);
 
+for (const workflow of [validationWorkflow, easWorkflow]) {
+  assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v[1-6]\b/);
+  assert.match(workflow, /npm ci/);
+}
+assert.doesNotMatch(validationWorkflow, /contents:\s*write|git push|npm install\b/);
+assert.match(validationWorkflow, /pull_request:/);
+
 for (const { file, source } of services) {
   if (file.endsWith("mstApiConfig.js")) continue;
   assert.doesNotMatch(source, /https:\/\/myanmarsportstalk\.com\/api/, `${file} bypasses the canonical API config`);
@@ -45,4 +54,3 @@ assert.doesNotMatch(clientSource, /API_FOOTBALL_KEY|api[_-]?football[_-]?key/i);
 assert.doesNotMatch(clientSource, /@cloudflare\/|wrangler\s+d1|D1Database/);
 
 console.log("MST shared-backend client validation passed.");
-
