@@ -28,6 +28,8 @@ assert.match(account, /LEGACY_AUTH_TOKEN_KEY/);
 assert.match(account, /AUTH_TOKEN_MIGRATION_KEY/);
 assert.doesNotMatch(account, /AsyncStorage\.setItem\(AUTH_TOKEN_KEY/);
 assert.match(account, /method:\s*"DELETE",\s*body:\s*\{\s*token:\s*pushToken/);
+assert.match(account, /MST_SITE_ORIGIN/);
+assert.doesNotMatch(account, /`\$\{MST_SITE_URL\}/);
 
 assert.doesNotMatch(shell, /\[\?&\]token=/);
 assert.doesNotMatch(billing, /Math\.random|token_\$\{|GPA\.\$\{/);

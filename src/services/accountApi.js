@@ -99,8 +99,8 @@ export function normalizeAvatarUrl(url) {
   const clean = url.trim();
   if (!clean) return null;
   if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
-  if (clean.startsWith("/")) return `${MST_SITE_URL}${clean}`;
-  return `${MST_SITE_URL}/${clean}`;
+  if (clean.startsWith("/")) return `${MST_SITE_ORIGIN}${clean}`;
+  return `${MST_SITE_ORIGIN}/${clean}`;
 }
 
 export function extractUser(payload) {
