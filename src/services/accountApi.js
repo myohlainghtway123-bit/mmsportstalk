@@ -137,7 +137,7 @@ export function extractUser(payload) {
     email: raw.email || "",
     avatar,
     avatarUrl: avatar,
-    points: raw.points ?? raw.predictionPoints ?? raw.score ?? 0,
+    points: raw.points ?? raw.predictionPoints ?? raw.score ?? null,
     role: raw.role || "user",
   };
 }

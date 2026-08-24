@@ -32,8 +32,12 @@ assert.match(account, /method:\s*"DELETE",\s*body:\s*\{\s*token:\s*pushToken/);
 assert.match(account, /MST_SITE_ORIGIN/);
 assert.doesNotMatch(account, /`\$\{MST_SITE_URL\}/);
 assert.match(account, /resend\s*\?\s*\{\s*resend:\s*true\s*\}/);
+assert.match(account, /points:\s*raw\.points\s*\?\?\s*raw\.predictionPoints\s*\?\?\s*raw\.score\s*\?\?\s*null/);
 assert.match(accountScreen, /REQUEST NEW CODE/);
 assert.match(accountScreen, /startEmailLogin\(email,\s*\{\s*resend:\s*true\s*\}\)/);
+assert.match(accountScreen, /getAccountPredictions\(\)/);
+assert.match(accountScreen, /meta\?\.summary\?\.points/);
+assert.match(accountScreen, /predictionPointsFrom\(predictions\)/);
 
 assert.doesNotMatch(shell, /\[\?&\]token=/);
 assert.doesNotMatch(billing, /Math\.random|token_\$\{|GPA\.\$\{/);

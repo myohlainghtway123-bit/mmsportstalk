@@ -18,23 +18,34 @@ import { useTheme } from "../theme/ThemeContext";
 import {
   deleteAvatar,
   extractUser,
+  getAccountPredictions,
   getAuthStatus,
   getProfile,
   logout,
   MST_SITE_URL,
+  normalizePredictionPayload,
   normalizeAvatarUrl,
   startEmailLogin,
   uploadAvatar,
   verifyEmailLogin,
 } from "../services/accountApi";
 
-function profileFrom(payload, user) {
+function predictionPointsFrom(payload) {
+  const summaryPoints = payload?.meta?.summary?.points;
+  if (summaryPoints !== undefined && summaryPoints !== null && Number.isFinite(Number(summaryPoints))) {
+    return Number(summaryPoints);
+  }
+  if (!payload) return null;
+  return normalizePredictionPayload(payload).reduce((total, prediction) => total + (Number(prediction.points) || 0), 0);
+}
+
+function profileFrom(payload, user, predictionPoints = null) {
   const parsed = extractUser(payload) || extractUser(user) || {};
   return {
     name: parsed.name || parsed.displayName || "MST User",
     email: parsed.email || "",
     avatar: parsed.avatar || parsed.avatarUrl || null,
-    points: parsed.points ?? null,
+    points: predictionPoints ?? parsed.points ?? null,
     joined: parsed.createdAt || parsed.created_at || null,
   };
 }
@@ -226,8 +237,11 @@ export default function AccountScreenV2({
       const status = await getAuthStatus();
       setAuth(status);
       if (status.authenticated) {
-        const payload = await getProfile().catch(() => null);
-        const resolved = profileFrom(payload, status.user);
+        const [payload, predictions] = await Promise.all([
+          getProfile().catch(() => null),
+          getAccountPredictions().catch(() => null),
+        ]);
+        const resolved = profileFrom(payload, status.user, predictionPointsFrom(predictions));
         setProfile(resolved);
         onProfileUpdated?.(resolved);
       } else {
