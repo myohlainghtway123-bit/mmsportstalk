@@ -1,11 +1,14 @@
 /**
- * MST Football Classification & Ranking Engine
+ * MST Football Classification & Dynamic Season Engine
  * Strict hierarchy: COUNTRY -> COMPETITION -> SEASON -> TEAMS -> MATCHES
  * 
  * Cleanly separates:
  * 1. Factual Metadata Classification (Country, Competition IDs, Gender, Age Group)
- * 2. MST Priority Ranking (Favorites, Regional/Myanmar/ASEAN, Big Clubs, Live Status)
+ * 2. Dynamic Provider Season Membership (Source of truth from backend / provider API)
+ * 3. MST Priority Ranking (Favorites, Regional/Myanmar/ASEAN, Big Clubs, Live Status)
  */
+
+import { fetchCompetitionTeams, normalizeTeams } from "./footballApi";
 
 // -------------------------------------------------------------
 // 1. FACTUAL COMPETITION DATABASE & IDS
@@ -58,30 +61,6 @@ export const FACTUAL_COMPETITIONS = {
   368: { id: 368, name: "Singapore Premier League", country: "Singapore", code: "SPL", tier: 1, type: "league", gender: "men" },
 };
 
-// Official 20 Premier League Teams (Current Season)
-export const OFFICIAL_PREMIER_LEAGUE_20_TEAMS = [
-  "Arsenal",
-  "Aston Villa",
-  "Bournemouth",
-  "Brentford",
-  "Brighton",
-  "Chelsea",
-  "Crystal Palace",
-  "Everton",
-  "Fulham",
-  "Ipswich",
-  "Leicester",
-  "Liverpool",
-  "Manchester City",
-  "Manchester United",
-  "Newcastle",
-  "Nottingham Forest",
-  "Southampton",
-  "Tottenham",
-  "West Ham",
-  "Wolves",
-];
-
 // Major Global Teams for Priority Boosts
 export const BIG_GLOBAL_CLUBS = [
   "real madrid", "barcelona", "atletico madrid", "manchester united", "man utd",
@@ -94,6 +73,7 @@ export const ELITE_GLOBAL_CLUBS = [
   "borussia dortmund", "dortmund", "bayer leverkusen", "leverkusen", "napoli",
   "roma", "as roma", "aston villa", "newcastle", "newcastle united",
   "sporting cp", "benfica", "porto", "fc porto", "ajax", "al hilal", "al nassr", "inter miami",
+  "leeds", "sunderland", "coventry", "hull city",
 ];
 
 const YOUTH_REGEX = /\b(u17|u18|u19|u20|u21|u23|youth|juniors|reserve|reserves|primavera|oberliga|regionalliga|tercera|sub-19|sub-20|sub-21|sub-23)\b/i;
@@ -175,6 +155,25 @@ export function getFactualCompetitionKey(match) {
     return `${country} - ${compName}`;
   }
   return compName;
+}
+
+/**
+ * Dynamic Provider Season Membership Validation (Live API Source of Truth)
+ * Validates current membership against actual provider/backend competition ID + season data.
+ */
+export async function validateProviderSeasonMembership(competitionId = 39, season = 2026) {
+  const payload = await fetchCompetitionTeams(competitionId, { season });
+  const teams = normalizeTeams(payload);
+  const teamIds = new Set(teams.map((t) => String(t.id)));
+
+  return {
+    competitionId: Number(competitionId),
+    season: Number(season),
+    count: teams.length,
+    uniqueIdCount: teamIds.size,
+    isExact20: teams.length === 20 && teamIds.size === 20,
+    teams: teams.map((t) => ({ id: t.id, name: t.name, country: t.country })),
+  };
 }
 
 // -------------------------------------------------------------

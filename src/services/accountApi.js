@@ -175,6 +175,15 @@ export async function logout() {
 }
 
 export const getProfile = (options) => api("/account/profile", options);
+export const updateProfile = ({ displayName, preferredLanguage }, options) =>
+  api("/account/profile", {
+    method: "PATCH",
+    body: {
+      displayName: typeof displayName === "string" ? displayName.trim() : undefined,
+      preferredLanguage: preferredLanguage || undefined,
+    },
+    ...options,
+  });
 export const getFavorites = (options) => api("/account/favorites", options);
 export const getAccountPredictions = (options) => api("/account/predictions", options);
 export const getLeaderboard = (timeframe = "all", options) => {
