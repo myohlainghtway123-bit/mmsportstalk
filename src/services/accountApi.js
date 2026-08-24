@@ -1,16 +1,36 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { syncStoredOnboardingFavorites } from "./onboardingStore";
+import * as SecureStore from "expo-secure-store";
+import { persistAppLanguage, syncStoredOnboardingFavorites } from "./onboardingStore";
 import { favoriteMetadata } from "./favoriteCatalog";
+import { MST_API_BASE, MST_SITE_ORIGIN } from "./mstApiConfig";
+import { getStoredDevicePushToken, setStoredDevicePushToken } from "./pushTokenStore";
 
-const API_BASE = "https://myanmarsportstalk.com/api";
-const AUTH_TOKEN_KEY = "@mst_session_token";
+const AUTH_TOKEN_KEY = "mst.session.v1";
+const LEGACY_AUTH_TOKEN_KEY = "@mst_session_token";
+const AUTH_TOKEN_MIGRATION_KEY = "@mst_session_secure_store_migrated_v1";
 
 let memoryToken = null;
+let tokenLoad = null;
+
+async function loadSessionToken() {
+  const stored = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+  if (stored) return stored;
+
+  const migrated = await AsyncStorage.getItem(AUTH_TOKEN_MIGRATION_KEY);
+  if (migrated === "1") return null;
+
+  const legacy = String(await AsyncStorage.getItem(LEGACY_AUTH_TOKEN_KEY) || "").trim();
+  if (legacy) await SecureStore.setItemAsync(AUTH_TOKEN_KEY, legacy);
+  await AsyncStorage.multiRemove([LEGACY_AUTH_TOKEN_KEY]);
+  await AsyncStorage.setItem(AUTH_TOKEN_MIGRATION_KEY, "1");
+  return legacy || null;
+}
 
 export async function getSessionToken() {
   if (memoryToken) return memoryToken;
   try {
-    const stored = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    tokenLoad ||= loadSessionToken().finally(() => { tokenLoad = null; });
+    const stored = await tokenLoad;
     if (stored) memoryToken = stored;
     return stored;
   } catch {
@@ -19,16 +39,13 @@ export async function getSessionToken() {
 }
 
 export async function setSessionToken(token) {
-  memoryToken = token ? String(token).trim() : null;
-  try {
-    if (memoryToken) {
-      await AsyncStorage.setItem(AUTH_TOKEN_KEY, memoryToken);
-    } else {
-      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-    }
-  } catch {
-    // Non-blocking storage fallback
-  }
+  const clean = token ? String(token).trim() : null;
+  memoryToken = clean;
+  tokenLoad = null;
+  if (clean) await SecureStore.setItemAsync(AUTH_TOKEN_KEY, clean);
+  else await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+  await AsyncStorage.multiRemove([LEGACY_AUTH_TOKEN_KEY]);
+  await AsyncStorage.setItem(AUTH_TOKEN_MIGRATION_KEY, "1");
 }
 
 export class MstApiError extends Error {
@@ -49,7 +66,7 @@ async function decodeResponse(response) {
 function errorMessage(payload, fallback) {
   if (!payload) return fallback;
   if (typeof payload === "string") return payload;
-  return payload.error || payload.message || payload.detail || payload.reason || payload.errors?.[0]?.message || fallback;
+  return payload.error?.message || (typeof payload.error === "string" ? payload.error : null) || payload.message || payload.detail || payload.reason || payload.errors?.[0]?.message || fallback;
 }
 
 async function api(path, { method = "GET", body, signal } = {}) {
@@ -65,7 +82,7 @@ async function api(path, { method = "GET", body, signal } = {}) {
     } : {}),
   };
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${MST_API_BASE}${path}`, {
     method,
     credentials: "include",
     headers,
@@ -118,11 +135,20 @@ export async function getAuthStatus(options) {
   try {
     const payload = await api("/auth/status", options);
     const result = { authenticated: isAuthenticatedPayload(payload), user: extractUser(payload), payload };
-    if (result.authenticated) syncStoredOnboardingFavorites(setFavorite).catch(() => false);
+    if (result.authenticated) {
+      if (result.user?.preferredLanguage !== "my" && result.user?.preferredLanguage !== "en") {
+        const profilePayload = await api("/account/profile").catch(() => null);
+        result.user = extractUser(profilePayload) || result.user;
+      }
+      if (result.user?.preferredLanguage === "my" || result.user?.preferredLanguage === "en") {
+        persistAppLanguage(result.user.preferredLanguage).catch(() => {});
+      }
+      syncStoredOnboardingFavorites(setFavorite).catch(() => false);
+    }
     return result;
   } catch (error) {
     if (error instanceof MstApiError && error.status === 401) {
-      await setSessionToken(null);
+      await setSessionToken(null).catch(() => {});
       return { authenticated: false, user: null, payload: error.payload };
     }
     throw error;
@@ -145,18 +171,31 @@ export async function verifyEmailLogin(email, code) {
 }
 
 export async function logout() {
-  try {
-    const res = await api("/auth/logout", { method: "POST", body: {} });
-    await setSessionToken(null);
-    return res;
-  } catch (error) {
-    await setSessionToken(null);
-    if (error instanceof MstApiError && error.status === 405) return api("/auth/logout");
-    throw error;
+  const pushToken = await getStoredDevicePushToken().catch(() => null);
+  if (pushToken) {
+    try {
+      await api("/account/push-token", { method: "DELETE", body: { token: pushToken } });
+      await setStoredDevicePushToken(null);
+    } catch {
+      // The session logout remains authoritative; failed push tokens are also
+      // retired by the backend when the delivery provider rejects them.
+    }
   }
+
+  let result;
+  try {
+    result = await api("/auth/logout", { method: "POST", body: {} });
+  } catch (error) {
+    if (error instanceof MstApiError && error.status === 405) result = await api("/auth/logout");
+    else throw error;
+  } finally {
+    await setSessionToken(null);
+  }
+  return result;
 }
 
 export const getProfile = (options) => api("/account/profile", options);
+export const updateProfile = (profile, options = {}) => api("/account/profile", { ...options, method: "PATCH", body: profile });
 export const getFavorites = (options) => api("/account/favorites", options);
 export const getAccountPredictions = (options) => api("/account/predictions", options);
 export const getLeaderboard = (timeframe = "all", options) => {
@@ -196,7 +235,7 @@ export async function uploadAvatar(input) {
     throw new MstApiError("Invalid image selection.");
   }
 
-  const response = await fetch(`${API_BASE}/account/avatar`, {
+  const response = await fetch(`${MST_API_BASE}/account/avatar`, {
     method: "POST",
     headers,
     body,
@@ -225,7 +264,7 @@ export async function deleteAvatar() {
     } : {}),
   };
 
-  const response = await fetch(`${API_BASE}/account/avatar`, {
+  const response = await fetch(`${MST_API_BASE}/account/avatar`, {
     method: "DELETE",
     headers,
   });
@@ -421,7 +460,7 @@ export function normalizeLeaderboard(payload) {
 }
 
 export const PREDICTION_SCORING = { exact: 3, correctOutcome: 1, wrong: 0 };
-export const MST_SITE_URL = "https://myanmarsportstalk.com";
+export const MST_SITE_URL = MST_SITE_ORIGIN;
 
 export async function submitSupportReport({ category, message, deviceInfo, matchId, email }) {
   return api("/account/support/report", {
@@ -439,6 +478,7 @@ export async function submitSupportReport({ category, message, deviceInfo, match
 export async function deleteAccount() {
   const result = await api("/account/delete", { method: "POST", body: {} });
   await setSessionToken(null);
+  await setStoredDevicePushToken(null).catch(() => {});
   return result;
 }
 
@@ -458,4 +498,3 @@ export async function clearAppCache() {
     return { ok: false, cleared: 0 };
   }
 }
-

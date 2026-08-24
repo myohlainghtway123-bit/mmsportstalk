@@ -18,7 +18,7 @@ import {
   peekFastFootballMatches,
   prefetchFastFootballMatches,
 } from "../services/fastFootballApi";
-import { purchaseCredits } from "../services/billingService";
+import { getCreditPackages, purchaseCredits } from "../services/billingService";
 import {
   applyTipster,
   applyTipsterPartner,
@@ -283,15 +283,9 @@ function TipsterCard({ item, colors }) {
   );
 }
 
-function CreditPanel({ me, authenticated, openAccount, my, onClaimReferral, onBuyPack, loading, buyingPack, colors }) {
+function CreditPanel({ me, packages, authenticated, openAccount, my, onClaimReferral, onBuyPack, loading, buyingPack, colors }) {
   const balance = me?.wallet?.balance ?? 0;
   const [code, setCode] = useState("");
-  const packs = [
-    { id: "mst_credits_100", credits: 100, thb: 250, label: "100 Credits", popular: false },
-    { id: "mst_credits_220", credits: 220, thb: 500, label: "220 Credits (+20 Bonus)", popular: true },
-    { id: "mst_credits_480", credits: 480, thb: 1000, label: "480 Credits (+80 Bonus)", popular: false },
-    { id: "mst_credits_1000", credits: 1000, thb: 2000, label: "1,000 Credits (+200 Bonus)", popular: false },
-  ];
 
   return (
     <>
@@ -329,7 +323,7 @@ function CreditPanel({ me, authenticated, openAccount, my, onClaimReferral, onBu
       <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Choose a credit package", "Credit Package ရွေးချယ်ပါ")}</Text>
 
       <View style={s.packGrid}>
-        {packs.map((pkg) => (
+        {packages.map((pkg) => (
           <Pressable
             key={pkg.id}
             disabled={!authenticated || buyingPack === pkg.id}
@@ -347,7 +341,7 @@ function CreditPanel({ me, authenticated, openAccount, my, onClaimReferral, onBu
             ) : null}
             <Text style={[s.packCredits, { color: colors.text }]}>{pkg.credits}</Text>
             <Text style={[s.packLabel, { color: colors.gold }]}>CREDITS</Text>
-            <Text style={[s.packPrice, { color: colors.muted }]}>≈ ฿{pkg.thb}</Text>
+            <Text style={[s.packPrice, { color: colors.muted }]}>≈ ฿{pkg.priceThb}</Text>
             <View style={[s.buyBtn, { backgroundColor: colors.red }]}>
               {buyingPack === pkg.id ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
@@ -358,6 +352,7 @@ function CreditPanel({ me, authenticated, openAccount, my, onClaimReferral, onBu
           </Pressable>
         ))}
       </View>
+      {!packages.length ? <Text style={[s.empty, { color: colors.muted }]}>{tx(my, "Credit packages are temporarily unavailable.", "Credit package များကို ယာယီမရရှိနိုင်သေးပါ။")}</Text> : null}
 
       {authenticated ? (
         <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -414,6 +409,7 @@ export default function TipsScreen({ language = "my", openAccount }) {
   const [auth, setAuth] = useState(false);
   const [tips, setTips] = useState([]);
   const [tipsters, setTipsters] = useState([]);
+  const [creditPackages, setCreditPackages] = useState([]);
   const [me, setMe] = useState(null);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -453,14 +449,16 @@ export default function TipsScreen({ language = "my", openAccount }) {
       try {
         const a = await getAuthStatus().catch(() => ({ authenticated: false }));
         setAuth(Boolean(a.authenticated));
-        const [tipsData, tipsterData, meData] = await Promise.all([
+        const [tipsData, tipsterData, meData, packageData] = await Promise.all([
           getTips({ limit: 60 }).catch(() => []),
           getTipsters({ limit: 60 }).catch(() => []),
           a.authenticated ? getTipsMe().catch(() => null) : Promise.resolve(null),
+          getCreditPackages().catch(() => []),
         ]);
         setTips(Array.isArray(tipsData) ? tipsData : []);
         setTipsters(Array.isArray(tipsterData) ? tipsterData : []);
         setMe(meData);
+        setCreditPackages(Array.isArray(packageData) ? packageData : []);
         const needsMatches = Boolean(
           a.authenticated &&
             (meData?.tipster?.status === "approved" ||
@@ -619,6 +617,7 @@ export default function TipsScreen({ language = "my", openAccount }) {
         {tab === "CREDITS" ? (
           <CreditPanel
             me={me}
+            packages={creditPackages}
             authenticated={auth}
             openAccount={openAccount}
             my={my}

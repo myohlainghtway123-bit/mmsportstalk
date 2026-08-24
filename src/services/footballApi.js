@@ -1,4 +1,4 @@
-const FOOTBALL_API_BASE = "https://myanmarsportstalk.com/api/football";
+import { MST_FOOTBALL_API_BASE as FOOTBALL_API_BASE } from "./mstApiConfig";
 const APP_TIME_ZONE = "Asia/Bangkok";
 
 const LIVE_CODES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE"]);
