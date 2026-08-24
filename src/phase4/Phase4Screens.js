@@ -207,7 +207,7 @@ export function SettingsScreen({ goBack, openNotifications, openAccount, openFav
         </View>
         <View style={s.settingsRow}>
           <View style={s.rowIcon}><Ionicons name="phone-portrait-outline" size={21} color={C.red}/></View>
-          <View style={{flex:1}}><Text style={s.rowTitle}>MST Score</Text><Text style={s.rowSub}>Version 1.5.2 · Android Build 12 (Closed Beta)</Text></View>
+          <View style={{flex:1}}><Text style={s.rowTitle}>MST Score</Text><Text style={s.rowSub}>Version 1.5.3 · Android Build 13 (Closed Beta)</Text></View>
         </View>
       </View>
     </ScrollView>
@@ -215,7 +215,7 @@ export function SettingsScreen({ goBack, openNotifications, openAccount, openFav
 }
 
 export function AboutScreen({ goBack }) {
-  return <View style={s.screen}><Header title="About MST Score" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MST SCORE · VERSION 1.5.2 (CLOSED BETA)</Text><Text style={s.aboutText}>Myanmar Sports Talk's premier football application for live scores, in-depth match stats, verified news, transfer updates, score predictions, and qualified Tipsters.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
+  return <View style={s.screen}><Header title="About MST Score" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MST SCORE · VERSION 1.5.3 (CLOSED BETA)</Text><Text style={s.aboutText}>Myanmar Sports Talk's premier football application for live scores, in-depth match stats, verified news, transfer updates, score predictions, and qualified Tipsters.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
 }
 
 const s = StyleSheet.create({

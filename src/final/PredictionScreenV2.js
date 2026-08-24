@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -24,11 +26,10 @@ import {
 import {
   fetchFastFootballMatches,
   peekFastFootballMatches,
-  prefetchFastFootballMatches,
 } from "../services/fastFootballApi";
 import { isLiveMatch } from "../services/footballApi";
-import { isFactualWomenMatch, isFactualYouthMatch, isPremierLeagueEngland } from "../services/footballClassification";
-import { shareLeaderboard, sharePrediction } from "../utils/shareUtils";
+import { isPremierLeagueEngland } from "../services/footballClassification";
+import { shareLeaderboard } from "../utils/shareUtils";
 
 const TABS = ["Predict", "My Predictions", "Points", "Leaderboard"];
 
@@ -47,11 +48,10 @@ const MAJOR_LEAGUE_PATTERNS = [
   [/\b(bundesliga|1\.\s*bundesliga)\b/i, 790],
   [/\b(ligue\s*1|french\s*ligue\s*1)\b/i, 770],
 
-  // 4. Domestic Cups & Top World Leagues (750 - 600)
+  // 3. Domestic Cups & Top World Leagues (750 - 600)
   [/\b(fa\s*cup|copa\s*del\s*rey|coppa\s*italia|dfb\s*pokal|coupe\s*de\s*france)\b/i, 750],
   [/\b(primeira\s*liga|eredivisie|saudi\s*pro|super\s*lig|brasileir|mls)\b/i, 650],
 ];
-
 
 const BIG_CLUB_PATTERNS = [
   /real\s*madrid/i, /barcelona/i, /manchester\s*united/i, /manchester\s*city/i,
@@ -110,7 +110,6 @@ export function calculatePredictionPriority(match) {
   return score;
 }
 
-
 function bangkokDate(offset = 0) {
   const date = new Date(Date.now() + offset * 86400000);
   try {
@@ -166,13 +165,21 @@ function locked(match) {
   return Number.isFinite(kickoff) ? Date.now() >= kickoff : false;
 }
 
-function PredictionCard({ match, saved, onSave, saving, onOpen, colors, my }) {
+const PredictionCard = React.memo(function PredictionCard({
+  match,
+  saved,
+  onSave,
+  saving,
+  onOpen,
+  colors,
+  my,
+}) {
   const [home, setHome] = useState(saved?.homeScore != null ? String(saved.homeScore) : "");
   const [away, setAway] = useState(saved?.awayScore != null ? String(saved.awayScore) : "");
 
   useEffect(() => {
-    if (saved?.homeScore != null) setHome(String(saved.homeScore));
-    if (saved?.awayScore != null) setAway(String(saved.awayScore));
+    setHome(saved?.homeScore != null ? String(saved.homeScore) : "");
+    setAway(saved?.awayScore != null ? String(saved.awayScore) : "");
   }, [saved?.homeScore, saved?.awayScore]);
 
   const isLocked = locked(match);
@@ -266,7 +273,7 @@ function PredictionCard({ match, saved, onSave, saving, onOpen, colors, my }) {
       )}
     </View>
   );
-}
+});
 
 function getInitialPredictionMatches() {
   try {
@@ -292,16 +299,84 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
   const [tab, setTab] = useState("Predict");
   const [auth, setAuth] = useState(false);
   const [savingId, setSavingId] = useState(null);
-  const [myPredictions, setMyPredictions] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [lbTimeframe, setLbTimeframe] = useState("all");
-  const [lbMeta, setLbMeta] = useState(null);
-  const [lbLoading, setLbLoading] = useState(false);
+
+  // Fixtures State
   const initialMatches = useMemo(() => getInitialPredictionMatches(), []);
   const [loading, setLoading] = useState(initialMatches.length === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [matches, setMatches] = useState(initialMatches);
 
+  // My Predictions State (Loaded Lazily)
+  const [myPredictions, setMyPredictions] = useState([]);
+  const [myPredsLoading, setMyPredsLoading] = useState(false);
+  const [myPredsLoaded, setMyPredsLoaded] = useState(false);
+
+  // Leaderboard State (Loaded Lazily)
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [lbTimeframe, setLbTimeframe] = useState("all");
+  const [lbMeta, setLbMeta] = useState(null);
+  const [lbLoading, setLbLoading] = useState(false);
+  const [lbLoadedMap, setLbLoadedMap] = useState({});
+
+  // 1. Matches Loader (Fast, Non-blocking)
+  const loadMatches = useCallback(async (isRefresh = false) => {
+    if (!isRefresh && matches.length === 0) setLoading(true);
+    try {
+      // Check auth status quietly in background
+      getAuthStatus().then((res) => {
+        setAuth(Boolean(res?.authenticated));
+      }).catch(() => {
+        setAuth(false);
+      });
+
+      const today = bangkokDate(0);
+      const tomorrow = bangkokDate(1);
+      const [todayRes, tomorrowRes] = await Promise.all([
+        fetchFastFootballMatches({ date: today }).catch(() => ({ matches: [] })),
+        fetchFastFootballMatches({ date: tomorrow }).catch(() => ({ matches: [] })),
+      ]);
+
+      const seen = new Set();
+      const all = [...(todayRes.matches || []), ...(tomorrowRes.matches || [])].filter((m) => {
+        if (!m?.id || seen.has(String(m.id))) return false;
+        seen.add(String(m.id));
+        return true;
+      });
+
+      if (all.length > 0) {
+        setMatches(all);
+      }
+    } catch (_) {
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [matches.length]);
+
+  // Initial mount: load matches
+  useEffect(() => {
+    loadMatches(false);
+  }, []);
+
+  // 2. Lazy Loader for My Predictions
+  const loadMyPredictions = useCallback(async () => {
+    setMyPredsLoading(true);
+    try {
+      const authRes = await getAuthStatus().catch(() => ({ authenticated: false }));
+      const isAuthed = Boolean(authRes?.authenticated);
+      setAuth(isAuthed);
+      if (isAuthed) {
+        const preds = await getAccountPredictions().catch(() => []);
+        setMyPredictions(normalizePredictionPayload(preds));
+      }
+    } catch (_) {
+    } finally {
+      setMyPredsLoading(false);
+      setMyPredsLoaded(true);
+    }
+  }, []);
+
+  // 3. Lazy Loader for Leaderboard
   const loadLeaderboard = useCallback(async (tf = "all") => {
     setLbLoading(true);
     try {
@@ -309,56 +384,36 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
       if (board) {
         setLeaderboard(normalizeLeaderboard(board));
         setLbMeta(board?.meta || null);
+        setLbLoadedMap((prev) => ({ ...prev, [tf]: true }));
       }
     } finally {
       setLbLoading(false);
     }
   }, []);
 
-  const loadData = useCallback(async (silent = false) => {
-    if (!silent && matches.length === 0) setLoading(true);
-    try {
-      const authRes = await getAuthStatus().catch(() => ({ authenticated: false }));
-      setAuth(Boolean(authRes.authenticated));
-
-      // Fetch today + tomorrow matches for prediction
-      const today = bangkokDate(0);
-      const tomorrow = bangkokDate(1);
-      const [todayMatches, tomorrowMatches] = await Promise.all([
-        fetchFastFootballMatches({ date: today }).catch(() => ({ matches: [] })),
-        fetchFastFootballMatches({ date: tomorrow }).catch(() => ({ matches: [] })),
-      ]);
-
-      const seen = new Set();
-      const all = [...(todayMatches.matches || []), ...(tomorrowMatches.matches || [])].filter((m) => {
-        if (!m?.id || seen.has(String(m.id))) return false;
-        seen.add(String(m.id));
-        return true;
-      });
-
-      if (all.length) {
-        setMatches(all);
-      }
-
-      if (authRes.authenticated) {
-        const preds = await getAccountPredictions().catch(() => []);
-        setMyPredictions(normalizePredictionPayload(preds));
-      }
-
-      // Load leaderboard independently
+  // Handle Tab Activation (Lazy Secondary Data Fetching)
+  useEffect(() => {
+    if (tab === "My Predictions" && !myPredsLoaded && !myPredsLoading) {
+      loadMyPredictions();
+    } else if (tab === "Leaderboard" && !lbLoadedMap[lbTimeframe] && !lbLoading) {
       loadLeaderboard(lbTimeframe);
-    } catch (_) {
-    } finally {
-      setLoading(false);
+    }
+  }, [tab, myPredsLoaded, myPredsLoading, loadMyPredictions, lbTimeframe, lbLoadedMap, lbLoading, loadLeaderboard]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    if (tab === "Predict") {
+      loadMatches(true);
+    } else if (tab === "My Predictions") {
+      loadMyPredictions().then(() => setRefreshing(false));
+    } else if (tab === "Leaderboard") {
+      loadLeaderboard(lbTimeframe).then(() => setRefreshing(false));
+    } else {
       setRefreshing(false);
     }
-  }, [lbTimeframe, loadLeaderboard, matches.length]);
+  }, [tab, loadMatches, loadMyPredictions, loadLeaderboard, lbTimeframe]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const handleSave = async (match, homeScore, awayScore) => {
+  const handleSave = useCallback(async (match, homeScore, awayScore) => {
     if (!auth) {
       alert(my ? "ခန့်မှန်းချက်သိမ်းရန် အကောင့်ဝင်ပါ" : "Sign in to save predictions");
       return;
@@ -366,13 +421,15 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
     setSavingId(match.id);
     try {
       await savePredictionScore({ matchId: match.id, homeScore, awayScore });
-      await loadData(true);
+      // Refresh user predictions in background
+      const preds = await getAccountPredictions().catch(() => []);
+      setMyPredictions(normalizePredictionPayload(preds));
     } catch (e) {
       alert(e?.message || "Could not save prediction");
     } finally {
       setSavingId(null);
     }
-  };
+  }, [auth, my]);
 
   const predMap = useMemo(() => {
     const map = new Map();
@@ -382,28 +439,275 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
     return map;
   }, [myPredictions]);
 
-  const { featuredMatches, otherMatches } = useMemo(() => {
-    const list = [...matches];
-    list.sort((a, b) => {
-      const pa = calculatePredictionPriority(a);
-      const pb = calculatePredictionPriority(b);
-      if (pa !== pb) return pb - pa;
-      const ka = a.kickoff ? new Date(a.kickoff).getTime() : Number.MAX_SAFE_INTEGER;
-      const kb = b.kickoff ? new Date(b.kickoff).getTime() : Number.MAX_SAFE_INTEGER;
-      return ka - kb;
+  // Single-pass priority computation and virtualized flat list construction
+  const flatListItems = useMemo(() => {
+    if (!matches || matches.length === 0) return [];
+
+    const scored = matches.map((m) => ({
+      match: m,
+      priority: calculatePredictionPriority(m),
+      kickoffMs: m.kickoff ? new Date(m.kickoff).getTime() : Number.MAX_SAFE_INTEGER,
+    }));
+
+    scored.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return a.kickoffMs - b.kickoffMs;
     });
 
     const featured = [];
     const others = [];
-    for (const m of list) {
-      if (calculatePredictionPriority(m) >= 500) {
-        featured.push(m);
+    for (const item of scored) {
+      if (item.priority >= 500) {
+        featured.push(item.match);
       } else {
-        others.push(m);
+        others.push(item.match);
       }
     }
-    return { featuredMatches: featured, otherMatches: others };
-  }, [matches]);
+
+    const items = [];
+    if (featured.length > 0) {
+      items.push({
+        key: "section_header_featured",
+        type: "section_header",
+        title: my ? "ထိပ်တန်း ခန့်မှန်းပွဲစဉ်များ" : "FEATURED PREDICTIONS",
+        icon: "star",
+        iconColor: colors.gold || "#F4C84D",
+        count: featured.length,
+        badgeBg: colors.redSoft,
+        badgeColor: colors.red,
+        isFeatured: true,
+        hasMarginTop: false,
+      });
+      for (const m of featured) {
+        items.push({ key: `match_${m.id}`, type: "match", match: m });
+      }
+    }
+
+    if (others.length > 0) {
+      items.push({
+        key: "section_header_others",
+        type: "section_header",
+        title: my ? "ပွဲစဉ်အားလုံး" : "ALL PREDICTIONS",
+        icon: "football-outline",
+        iconColor: colors.text2,
+        count: others.length,
+        badgeBg: colors.panel,
+        badgeColor: colors.muted,
+        isFeatured: false,
+        hasMarginTop: featured.length > 0,
+      });
+      for (const m of others) {
+        items.push({ key: `match_${m.id}`, type: "match", match: m });
+      }
+    }
+
+    return items;
+  }, [matches, my, colors.gold, colors.redSoft, colors.red, colors.text2, colors.panel, colors.muted]);
+
+  const renderPredictItem = useCallback(({ item }) => {
+    if (item.type === "section_header") {
+      return (
+        <View style={[styles.matchesHead, item.hasMarginTop && { marginTop: 14 }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Ionicons name={item.icon} size={14} color={item.iconColor} />
+            <Text style={[styles.matchesTitle, { color: colors.text }]}>
+              {item.title}
+            </Text>
+          </View>
+          <View style={[styles.countBadge, { backgroundColor: item.badgeBg }]}>
+            <Text style={[styles.countBadgeText, { color: item.badgeColor }]}>
+              {item.count} {my ? "ပွဲ" : "matches"}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (item.type === "match" && item.match) {
+      const matchIdStr = String(item.match.id);
+      return (
+        <PredictionCard
+          match={item.match}
+          saved={predMap.get(matchIdStr)}
+          onSave={handleSave}
+          saving={savingId === item.match.id}
+          onOpen={onOpenMatch}
+          colors={colors}
+          my={my}
+        />
+      );
+    }
+
+    return null;
+  }, [colors, my, predMap, handleSave, savingId, onOpenMatch]);
+
+  const renderPredictHeader = useCallback(() => {
+    return (
+      <View style={{ gap: 12, marginBottom: 8 }}>
+        {!auth ? (
+          <View style={[styles.authCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="person-circle-outline" size={32} color={colors.red} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.authTitle, { color: colors.text }]}>
+                {my ? "ခန့်မှန်းချက်များ သိမ်းဆည်းရန် အကောင့်ဝင်ပါ" : "Sign in to save predictions"}
+              </Text>
+              <Text style={[styles.authSub, { color: colors.muted }]}>
+                {my ? "MST account ဖြင့် ဖုန်းနှင့် ဝဘ်ဆိုက်တွင် တစ်ပြိုင်နက် သုံးနိုင်ပါသည်" : "Sync prediction history across app and web seamlessly."}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={[styles.scoringBanner, { backgroundColor: colors.panel, borderColor: colors.border }]}>
+          <View style={[styles.scoringTag, { backgroundColor: colors.redSoft }]}>
+            <Text style={[styles.scoringTagText, { color: colors.red }]}>SCORING</Text>
+          </View>
+          <Text style={[styles.scoringInfo, { color: colors.text2 }]}>
+            {my ? "ရလဒ်အတိအကျ ၃ မှတ် · အနိုင်/အရှုံး/သရေ ၁ မှတ် · မှားယွင်း ၀ မှတ်" : "Exact score: 3 points · Correct win/draw/loss: 1 point · Wrong: 0 points."}
+          </Text>
+        </View>
+
+        {loading && matches.length === 0 ? (
+          <ActivityIndicator size="large" color={colors.red} style={{ marginVertical: 30 }} />
+        ) : null}
+      </View>
+    );
+  }, [auth, colors, my, loading, matches.length]);
+
+  const renderPredictEmpty = useCallback(() => {
+    if (loading) return null;
+    return (
+      <View style={styles.emptyWrap}>
+        <Ionicons name="calendar-outline" size={32} color={colors.muted} />
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>{my ? "ပွဲစဉ်မရှိသေးပါ" : "No open matches"}</Text>
+        <Text style={[styles.emptySub, { color: colors.muted }]}>
+          {my ? "နောက်ထပ်ပွဲစဉ်များ မကြာမီ ထွက်ပေါ်လာပါမည်" : "Upcoming prediction fixtures will appear soon."}
+        </Text>
+      </View>
+    );
+  }, [loading, colors, my]);
+
+  // History Tab Item Renderer
+  const renderHistoryItem = useCallback(({ item }) => (
+    <View style={[styles.historyRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.historyHead}>
+        <Text style={[styles.historyComp, { color: colors.muted }]}>{item.match?.competition || "Match"}</Text>
+        <View style={[styles.pointPill, { backgroundColor: item.points === 3 ? colors.green : item.points === 1 ? (colors.gold || "#F4C84D") : colors.panel }]}>
+          <Text style={styles.pointPillText}>{item.points != null ? `${item.points} PTS` : "PENDING"}</Text>
+        </View>
+      </View>
+      <View style={styles.historyTeams}>
+        <Text style={[styles.historyTeamName, { color: colors.text }]}>{item.match?.home?.name || "Home"}</Text>
+        <Text style={[styles.historyPick, { color: colors.red }]}>
+          {item.homeScore} - {item.awayScore}
+        </Text>
+        <Text style={[styles.historyTeamName, { color: colors.text, textAlign: "right" }]}>{item.match?.away?.name || "Away"}</Text>
+      </View>
+    </View>
+  ), [colors]);
+
+  const renderHistoryEmpty = useCallback(() => {
+    if (myPredsLoading) {
+      return <ActivityIndicator size="large" color={colors.red} style={{ marginVertical: 30 }} />;
+    }
+    return (
+      <View style={styles.emptyWrap}>
+        <Ionicons name="trophy-outline" size={32} color={colors.muted} />
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          {my ? "ခန့်မှန်းချက် မှတ်တမ်းမရှိသေးပါ" : "No predictions yet"}
+        </Text>
+        <Text style={[styles.emptySub, { color: colors.muted }]}>
+          {my ? "Predict tab သို့သွား၍ ပွဲရလဒ်များ စတင်ခန့်မှန်းပါ" : "Head to the Predict tab to make your first score prediction."}
+        </Text>
+      </View>
+    );
+  }, [myPredsLoading, colors, my]);
+
+  // Leaderboard Item Renderer
+  const renderLeaderboardItem = useCallback(({ item, index }) => {
+    const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : null;
+    const isTop = index < 3;
+    return (
+      <View
+        style={[
+          styles.rankRow,
+          { borderBottomColor: colors.border2 },
+          index === 0 && { backgroundColor: colors.redSoft },
+        ]}
+      >
+        {medal ? (
+          <Text style={styles.rankMedal}>{medal}</Text>
+        ) : (
+          <View style={[styles.rankBadge, { backgroundColor: colors.panel }]}>
+            <Text style={[styles.rankNum, { color: colors.muted }]}>#{item.rank || index + 1}</Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={[styles.rankName, { color: colors.text, fontWeight: isTop ? "900" : "700" }]}>
+            {item.name || "MST Player"}
+          </Text>
+          <Text style={[styles.rankStats, { color: colors.muted }]}>
+            {my
+              ? `ပြည့်ကျသင့် ${item.exact} · မှန် ${item.correct} · ကစားထားသည် ${item.played}`
+              : `Exact ${item.exact} · Correct ${item.correct} · Played ${item.played}`}
+          </Text>
+        </View>
+        <Text style={[styles.rankPts, { color: isTop ? colors.red : colors.text, fontSize: isTop ? 14 : 12 }]}>
+          {item.points || 0}
+          <Text style={{ fontSize: 9, fontWeight: "600", color: colors.muted }}> PTS</Text>
+        </Text>
+      </View>
+    );
+  }, [colors, my]);
+
+  const renderLeaderboardHeader = useCallback(() => (
+    <View style={{ gap: 10, marginBottom: 6 }}>
+      {/* Timeframe selector */}
+      <View style={styles.lbTimeframeRow}>
+        {["weekly", "monthly", "all"].map((tf) => {
+          const on = lbTimeframe === tf;
+          const label = my
+            ? ({ weekly: "ဒီပတ်", monthly: "ဒီလ", all: "အားလုံး" }[tf])
+            : ({ weekly: "This Week", monthly: "This Month", all: "All Time" }[tf]);
+          return (
+            <Pressable
+              key={tf}
+              style={[styles.lbTfBtn, on && { backgroundColor: colors.red }]}
+              onPress={() => {
+                setLbTimeframe(tf);
+                loadLeaderboard(tf);
+              }}
+            >
+              <Text style={[styles.lbTfText, { color: on ? "#FFF" : colors.muted }]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.leaderboardHead}>
+        <Text style={[styles.leaderboardTitle, { color: colors.text }]}>
+          {my ? "ဦးဆောင်သူများ ဇယား" : "Prediction Leaderboard"}
+        </Text>
+        <Text style={[styles.leaderboardSub, { color: colors.muted }]}>
+          {my ? "ထိပ်ဆုံး ခန့်မှန်းသူများ" : "Top Predictors"}
+        </Text>
+      </View>
+    </View>
+  ), [lbTimeframe, my, colors, loadLeaderboard]);
+
+  const renderLeaderboardFooter = useCallback(() => {
+    if (lbMeta?.currentUserRank) {
+      return (
+        <View style={[styles.myRankBadge, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
+          <Ionicons name="person" size={14} color={colors.red} />
+          <Text style={[styles.myRankText, { color: colors.red }]}>
+            {my ? `သင်၏ ရပ်တည်မှု: #${lbMeta.currentUserRank}` : `Your rank: #${lbMeta.currentUserRank}`}
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  }, [lbMeta?.currentUserRank, colors, my]);
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
@@ -420,7 +724,7 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
         </Pressable>
       </View>
 
-      {/* Navigation Subtabs — horizontal scroll so all 4 fit on narrow screens */}
+      {/* Navigation Subtabs */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -449,159 +753,63 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
         })}
       </ScrollView>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadData(true);
-            }}
-            colors={[colors.red]}
-            tintColor={colors.red}
-          />
-        }
-      >
-        {/* PREDICT TAB */}
-        {tab === "Predict" ? (
-          <>
-            {!auth ? (
-              <View style={[styles.authCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Ionicons name="person-circle-outline" size={32} color={colors.red} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.authTitle, { color: colors.text }]}>
-                    {my ? "ခန့်မှန်းချက်များ သိမ်းဆည်းရန် အကောင့်ဝင်ပါ" : "Sign in to save predictions"}
-                  </Text>
-                  <Text style={[styles.authSub, { color: colors.muted }]}>
-                    {my ? "MST account ဖြင့် ဖုန်းနှင့် ဝဘ်ဆိုက်တွင် တစ်ပြိုင်နက် သုံးနိုင်ပါသည်" : "Sync prediction history across app and web seamlessly."}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
+      {/* TAB 1: PREDICT (High-Performance Virtualized FlatList) */}
+      {tab === "Predict" ? (
+        <FlatList
+          data={flatListItems}
+          keyExtractor={(item) => item.key}
+          renderItem={renderPredictItem}
+          ListHeaderComponent={renderPredictHeader}
+          ListEmptyComponent={renderPredictEmpty}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={Platform.OS === "android"}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[colors.red]}
+              tintColor={colors.red}
+            />
+          }
+        />
+      ) : null}
 
-            <View style={[styles.scoringBanner, { backgroundColor: colors.panel, borderColor: colors.border }]}>
-              <View style={[styles.scoringTag, { backgroundColor: colors.redSoft }]}>
-                <Text style={[styles.scoringTagText, { color: colors.red }]}>SCORING</Text>
-              </View>
-              <Text style={[styles.scoringInfo, { color: colors.text2 }]}>
-                {my ? "ရလဒ်အတိအကျ ၃ မှတ် · အနိုင်/အရှုံး/သရေ ၁ မှတ် · မှားယွင်း ၀ မှတ်" : "Exact score: 3 points · Correct win/draw/loss: 1 point · Wrong: 0 points."}
-              </Text>
-            </View>
+      {/* TAB 2: MY PREDICTIONS (Virtualized History FlatList) */}
+      {tab === "My Predictions" ? (
+        <FlatList
+          data={myPredictions}
+          keyExtractor={(item, index) => String(item.id || item.matchId || index)}
+          renderItem={renderHistoryItem}
+          ListEmptyComponent={renderHistoryEmpty}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === "android"}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[colors.red]}
+              tintColor={colors.red}
+            />
+          }
+        />
+      ) : null}
 
-            {loading ? (
-              <ActivityIndicator size="large" color={colors.red} style={{ marginVertical: 30 }} />
-            ) : matches.length ? (
-              <>
-                {featuredMatches.length > 0 ? (
-                  <>
-                    <View style={styles.matchesHead}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Ionicons name="star" size={14} color={colors.gold || "#F4C84D"} />
-                        <Text style={[styles.matchesTitle, { color: colors.text }]}>
-                          {my ? "ထိပ်တန်း ခန့်မှန်းပွဲစဉ်များ" : "FEATURED PREDICTIONS"}
-                        </Text>
-                      </View>
-                      <View style={[styles.countBadge, { backgroundColor: colors.redSoft }]}>
-                        <Text style={[styles.countBadgeText, { color: colors.red }]}>
-                          {featuredMatches.length} {my ? "ပွဲ" : "matches"}
-                        </Text>
-                      </View>
-                    </View>
-                    {featuredMatches.map((m) => (
-                      <PredictionCard
-                        key={m.id}
-                        match={m}
-                        saved={predMap.get(String(m.id))}
-                        onSave={handleSave}
-                        saving={savingId === m.id}
-                        onOpen={onOpenMatch}
-                        colors={colors}
-                        my={my}
-                      />
-                    ))}
-                  </>
-                ) : null}
-
-                {otherMatches.length > 0 ? (
-                  <>
-                    <View style={[styles.matchesHead, featuredMatches.length > 0 && { marginTop: 14 }]}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Ionicons name="football-outline" size={14} color={colors.text2} />
-                        <Text style={[styles.matchesTitle, { color: colors.text }]}>
-                          {my ? "ပွဲစဉ်အားလုံး" : "ALL PREDICTIONS"}
-                        </Text>
-                      </View>
-                      <View style={[styles.countBadge, { backgroundColor: colors.panel }]}>
-                        <Text style={[styles.countBadgeText, { color: colors.muted }]}>
-                          {otherMatches.length} {my ? "ပွဲ" : "matches"}
-                        </Text>
-                      </View>
-                    </View>
-                    {otherMatches.map((m) => (
-                      <PredictionCard
-                        key={m.id}
-                        match={m}
-                        saved={predMap.get(String(m.id))}
-                        onSave={handleSave}
-                        saving={savingId === m.id}
-                        onOpen={onOpenMatch}
-                        colors={colors}
-                        my={my}
-                      />
-                    ))}
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <View style={styles.emptyWrap}>
-                <Ionicons name="calendar-outline" size={32} color={colors.muted} />
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>{my ? "ပွဲစဉ်မရှိသေးပါ" : "No open matches"}</Text>
-                <Text style={[styles.emptySub, { color: colors.muted }]}>
-                  {my ? "နောက်ထပ်ပွဲစဉ်များ မကြာမီ ထွက်ပေါ်လာပါမည်" : "Upcoming prediction fixtures will appear soon."}
-                </Text>
-              </View>
-            )}
-          </>
-        ) : null}
-
-        {/* MY PREDICTIONS TAB */}
-        {tab === "My Predictions" ? (
-          myPredictions.length ? (
-            myPredictions.map((item, idx) => (
-              <View key={idx} style={[styles.historyRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.historyHead}>
-                  <Text style={[styles.historyComp, { color: colors.muted }]}>{item.match?.competition || "Match"}</Text>
-                  <View style={[styles.pointPill, { backgroundColor: item.points === 3 ? colors.green : item.points === 1 ? colors.gold : colors.panel }]}>
-                    <Text style={styles.pointPillText}>{item.points != null ? `${item.points} PTS` : "PENDING"}</Text>
-                  </View>
-                </View>
-                <View style={styles.historyTeams}>
-                  <Text style={[styles.historyTeamName, { color: colors.text }]}>{item.match?.home?.name || "Home"}</Text>
-                  <Text style={[styles.historyPick, { color: colors.red }]}>
-                    {item.homeScore} - {item.awayScore}
-                  </Text>
-                  <Text style={[styles.historyTeamName, { color: colors.text, textAlign: "right" }]}>{item.match?.away?.name || "Away"}</Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyWrap}>
-              <Ionicons name="trophy-outline" size={32} color={colors.muted} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                {my ? "ခန့်မှန်းချက် မှတ်တမ်းမရှိသေးပါ" : "No predictions yet"}
-              </Text>
-              <Text style={[styles.emptySub, { color: colors.muted }]}>
-                {my ? "Predict tab သို့သွား၍ ပွဲရလဒ်များ စတင်ခန့်မှန်းပါ" : "Head to the Predict tab to make your first score prediction."}
-              </Text>
-            </View>
-          )
-        ) : null}
-
-        {/* POINTS MATRIX TAB */}
-        {tab === "Points" ? (
+      {/* TAB 3: POINTS (Static Rules ScrollView) */}
+      {tab === "Points" ? (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={[styles.pointsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.pointsHeading, { color: colors.text }]}>
               {my ? "တရားဝင် အမှတ်ပေးစည်းမျဉ်းများ" : "Official Scoring Rules"}
@@ -634,101 +842,42 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
               </View>
             </View>
           </View>
-        ) : null}
+        </ScrollView>
+      ) : null}
 
-        {/* LEADERBOARD TAB */}
-        {tab === "Leaderboard" ? (
-          <>
-            {/* Timeframe selector */}
-            <View style={styles.lbTimeframeRow}>
-              {["weekly", "monthly", "all"].map((tf) => {
-                const on = lbTimeframe === tf;
-                const label = my
-                  ? ({ weekly: "ဒီပတ်", monthly: "ဒီလ", all: "အားလုံး" }[tf])
-                  : ({ weekly: "This Week", monthly: "This Month", all: "All Time" }[tf]);
-                return (
-                  <Pressable
-                    key={tf}
-                    style={[styles.lbTfBtn, on && { backgroundColor: colors.red }]}
-                    onPress={() => {
-                      setLbTimeframe(tf);
-                      loadLeaderboard(tf);
-                    }}
-                  >
-                    <Text style={[styles.lbTfText, { color: on ? "#FFF" : colors.muted }]}>{label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={[styles.leaderboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.leaderboardHead}>
-                <Text style={[styles.leaderboardTitle, { color: colors.text }]}>
-                  {my ? "ဦးဆောင်သူများ ဇယား" : "Prediction Leaderboard"}
-                </Text>
-                <Text style={[styles.leaderboardSub, { color: colors.muted }]}>
-                  {my ? "ထိပ်ဆုံး ခန့်မှန်းသူများ" : "Top Predictors"}
-                </Text>
-              </View>
-
-              {lbLoading ? (
-                <ActivityIndicator size="small" color={colors.red} style={{ marginVertical: 20 }} />
-              ) : leaderboard.length ? (
-                leaderboard.map((u, i) => {
-                  const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null;
-                  const isTop = i < 3;
-                  return (
-                    <View
-                      key={u.id || i}
-                      style={[
-                        styles.rankRow,
-                        { borderBottomColor: colors.border2 },
-                        i === 0 && { backgroundColor: colors.redSoft },
-                      ]}
-                    >
-                      {medal ? (
-                        <Text style={styles.rankMedal}>{medal}</Text>
-                      ) : (
-                        <View style={[styles.rankBadge, { backgroundColor: colors.panel }]}>
-                          <Text style={[styles.rankNum, { color: colors.muted }]}>#{u.rank || i + 1}</Text>
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text numberOfLines={1} style={[styles.rankName, { color: colors.text, fontWeight: isTop ? "900" : "700" }]}>
-                          {u.name || "MST Player"}
-                        </Text>
-                        <Text style={[styles.rankStats, { color: colors.muted }]}>
-                          {my
-                            ? `ပြည့်ကျသင့် ${u.exact} · မှန် ${u.correct} · ကစားထားသည် ${u.played}`
-                            : `Exact ${u.exact} · Correct ${u.correct} · Played ${u.played}`}
-                        </Text>
-                      </View>
-                      <Text style={[styles.rankPts, { color: isTop ? colors.red : colors.text, fontSize: isTop ? 14 : 12 }]}>
-                        {u.points || 0}
-                        <Text style={{ fontSize: 9, fontWeight: "600", color: colors.muted }}> PTS</Text>
-                      </Text>
-                    </View>
-                  );
-                })
-              ) : (
-                <Text style={[styles.emptySub, { color: colors.muted, textAlign: "center", marginVertical: 24 }]}>
-                  {my ? "ဦးဆောင်သူများ တွက်ချက်နေသည်…" : "Leaderboard calculating…"}
-                </Text>
-              )}
-
-              {/* Current user rank badge */}
-              {lbMeta?.currentUserRank ? (
-                <View style={[styles.myRankBadge, { backgroundColor: colors.redSoft, borderColor: colors.red }]}>
-                  <Ionicons name="person" size={14} color={colors.red} />
-                  <Text style={[styles.myRankText, { color: colors.red }]}>
-                    {my ? `သင်၏ ရပ်တည်မှု: #${lbMeta.currentUserRank}` : `Your rank: #${lbMeta.currentUserRank}`}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </>
-        ) : null}
-      </ScrollView>
+      {/* TAB 4: LEADERBOARD (Virtualized Leaderboard FlatList) */}
+      {tab === "Leaderboard" ? (
+        <FlatList
+          data={leaderboard}
+          keyExtractor={(item, index) => String(item.id || item.rank || index)}
+          renderItem={renderLeaderboardItem}
+          ListHeaderComponent={renderLeaderboardHeader}
+          ListFooterComponent={renderLeaderboardFooter}
+          ListEmptyComponent={
+            lbLoading ? (
+              <ActivityIndicator size="small" color={colors.red} style={{ marginVertical: 20 }} />
+            ) : (
+              <Text style={[styles.emptySub, { color: colors.muted, textAlign: "center", marginVertical: 24 }]}>
+                {my ? "ဦးဆောင်သူများ တွက်ချက်နေသည်…" : "Leaderboard calculating…"}
+              </Text>
+            )
+          }
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === "android"}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[colors.red]}
+              tintColor={colors.red}
+            />
+          }
+        />
+      ) : null}
     </View>
   );
 }
@@ -744,6 +893,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   title: { fontSize: 18, fontWeight: "900" },
+  sub: { fontSize: 10, marginTop: 2 },
   tabStrip: { flexGrow: 0, height: 48, borderBottomWidth: 1, paddingVertical: 6 },
   tabStripContent: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 6 },
   tabItem: { paddingHorizontal: 12, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", flexShrink: 0 },
