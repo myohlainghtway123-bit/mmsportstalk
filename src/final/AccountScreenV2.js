@@ -91,6 +91,21 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
     }
   };
 
+  const resend = async () => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await startEmailLogin(email, { resend: true });
+      setCode("");
+      setMessage(my ? "အတည်ပြုကုဒ်အသစ် ပို့ပြီးပါပြီ။ နောက်ဆုံး Email ကို စစ်ဆေးပါ။" : "A new verification code was sent. Use the newest email.");
+    } catch (e) {
+      setError(e?.message || (my ? "ကုဒ်အသစ်ပို့၍ မရသေးပါ။ ခဏနေ ပြန်စမ်းပါ။" : "Could not send a new code yet. Try again shortly."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <View style={[s.loginCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={[s.mstBadge, { backgroundColor: colors.redSoft }]}>
@@ -140,18 +155,26 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
         )}
       </Pressable>
       {step === "code" ? (
-        <Pressable
-          onPress={() => {
-            setStep("email");
-            setCode("");
-            setError("");
-            setMessage("");
-          }}
-        >
-          <Text style={[s.textButton, { color: colors.text2 }]}>
-            {my ? "အခြား Email ဖြင့် စမ်းမည်" : "Use a different email"}
-          </Text>
-        </Pressable>
+        <>
+          <Pressable disabled={busy} onPress={resend}>
+            <Text style={[s.textButton, { color: colors.red }]}>
+              {my ? "ကုဒ်အသစ် တောင်းမည်" : "REQUEST NEW CODE"}
+            </Text>
+          </Pressable>
+          <Pressable
+            disabled={busy}
+            onPress={() => {
+              setStep("email");
+              setCode("");
+              setError("");
+              setMessage("");
+            }}
+          >
+            <Text style={[s.textButton, { color: colors.text2 }]}>
+              {my ? "အခြား Email ဖြင့် စမ်းမည်" : "Use a different email"}
+            </Text>
+          </Pressable>
+        </>
       ) : null}
       <Pressable onPress={() => Linking.openURL(`${MST_SITE_URL}/login`).catch(() => {})}>
         <Text style={[s.webLink, { color: colors.muted }]}>
@@ -667,4 +690,3 @@ const s = StyleSheet.create({
     fontWeight: "800",
   },
 });
-

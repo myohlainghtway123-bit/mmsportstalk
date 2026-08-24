@@ -173,8 +173,14 @@ export async function getAuthStatus(options) {
   }
 }
 
-export async function startEmailLogin(email) {
-  return api("/auth/email/start", { method: "POST", body: { email: String(email || "").trim().toLowerCase() } });
+export async function startEmailLogin(email, { resend = false } = {}) {
+  return api("/auth/email/start", {
+    method: "POST",
+    body: {
+      email: String(email || "").trim().toLowerCase(),
+      ...(resend ? { resend: true } : {}),
+    },
+  });
 }
 
 export async function verifyEmailLogin(email, code) {
