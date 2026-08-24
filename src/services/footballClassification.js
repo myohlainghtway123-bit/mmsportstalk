@@ -188,6 +188,7 @@ function containsClub(teamName, list) {
 
 /**
  * Calculates factual competition baseline weight.
+ * Establishing a strict hierarchy to ensure major leagues always rank above minor leagues.
  */
 export function getFactualCompetitionWeight(match) {
   if (!match) return 20;
@@ -203,7 +204,7 @@ export function getFactualCompetitionWeight(match) {
   if (compId === 7 || compId === 6) return 880; // Asian Cup / AFCON
 
   // 2. The Big 5 European Leagues
-  if (isPremierLeagueEngland(match) || compId === 39) return 850; // England Premier League
+  if (compId === 39) return 1500; // England Premier League - BOOSTED TO BE ALWAYS FIRST
   if (compId === 140) return 830; // La Liga
   if (compId === 135) return 810; // Serie A
   if (compId === 78) return 790;  // Bundesliga
@@ -231,7 +232,7 @@ export function getFactualCompetitionWeight(match) {
   if (comp.includes("copa america")) return 920;
   if (comp.includes("conference league") || comp.includes("uecl")) return 900;
 
-  if (country === "england" && comp.includes("premier league")) return 850;
+  if (country === "england" && /\b(premier\s*league|epl)\b/i.test(comp)) return 1500; // Strict EPL fallback
   if (country === "spain" && (comp.includes("la liga") || comp.includes("laliga") || comp.includes("primera division"))) return 830;
   if (country === "italy" && (comp.includes("serie a") || comp.includes("calcio"))) return 810;
   if (country === "germany" && comp.includes("bundesliga")) return 790;
@@ -300,9 +301,17 @@ export function calculateFactualMatchPriority(match, favorites = {}, regionalNat
   if (homeElite && awayElite) score += 70;
   else if (homeElite || awayElite) score += 30;
 
-  // 4. Youth Match Demotion (unless favorite or regional)
-  if (isFactualYouthMatch(match) && !isHomeFav && !isAwayFav && regionalPriority === 0) {
-    score -= 300;
+  // 4. Demographic Demotions (unless favorite or regional)
+  const isYouth = isFactualYouthMatch(match);
+  const isWomen = isFactualWomenMatch(match);
+  const hasStrongPriority = isHomeFav || isAwayFav || regionalPriority > 0;
+
+  if (isYouth && !hasStrongPriority) {
+    score -= 1000; // Heavy demotion for Youth in ALL view
+  }
+
+  if (isWomen && !hasStrongPriority) {
+    score -= 800; // Heavy demotion for Women in ALL view
   }
 
   // 5. Live match bonus

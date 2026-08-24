@@ -481,9 +481,11 @@ export default function HomeScreen({
       );
       const hasLiveInLeague = ordered.some(isLiveMatch);
       const first = ordered[0];
+      const compId = Number(first?.competitionId || first?.leagueId || first?.raw?.league?.id);
 
       return {
         groupKey,
+        compId,
         title: first?.competition || groupKey,
         data: ordered,
         logo: first?.competitionLogo,
@@ -492,13 +494,25 @@ export default function HomeScreen({
       };
     });
 
-    // Sort competitions: Highest priority / big leagues / leagues with live games first!
-    rows.sort(
-      (a, b) =>
-        b.priority - a.priority ||
-        getFactualCompetitionWeight(b.data[0]) - getFactualCompetitionWeight(a.data[0]) ||
-        a.title.localeCompare(b.title),
-    );
+    // Sort competitions: England Premier League ALWAYS FIRST, then Highest priority / big leagues / live games.
+    rows.sort((a, b) => {
+      // 1. England Premier League is absolute priority 1
+      const aIsEPL = isPremierLeagueEngland(a.data[0]);
+      const bIsEPL = isPremierLeagueEngland(b.data[0]);
+      if (aIsEPL !== bIsEPL) return aIsEPL ? -1 : 1;
+
+      // 2. Then follow calculated priority score
+      if (b.priority !== a.priority) return b.priority - a.priority;
+
+      // 3. Fallback to base factual weight
+      const aWeight = getFactualCompetitionWeight(a.data[0]);
+      const bWeight = getFactualCompetitionWeight(b.data[0]);
+      if (bWeight !== aWeight) return bWeight - aWeight;
+
+      // 4. Alphabetical fallback
+      return a.title.localeCompare(b.title);
+    });
+
 
     return rows.map((sec) => ({
       ...sec,

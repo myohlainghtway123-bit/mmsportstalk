@@ -27,6 +27,7 @@ import {
   prefetchFastFootballMatches,
 } from "../services/fastFootballApi";
 import { isLiveMatch } from "../services/footballApi";
+import { isFactualWomenMatch, isFactualYouthMatch, isPremierLeagueEngland } from "../services/footballClassification";
 import { shareLeaderboard, sharePrediction } from "../utils/shareUtils";
 
 const TABS = ["Predict", "My Predictions", "Points", "Leaderboard"];
@@ -40,17 +41,17 @@ const MAJOR_LEAGUE_PATTERNS = [
   [/\b(copa\s*america)\b/i, 920],
   [/\b(conference\s*league|uecl|uefa\s*super\s*cup)\b/i, 900],
 
-  // 2. The Big 5 European Men's Leagues (850 - 770)
-  [/\b(premier\s*league|epl|english\s*premier\s*league)\b/i, 850],
+  // 2. The Big 5 European Men's Leagues (830 - 770)
   [/\b(la\s*liga|laliga|primera\s*division)\b/i, 830],
   [/\b(serie\s*a|calcio)\b/i, 810],
   [/\b(bundesliga|1\.\s*bundesliga)\b/i, 790],
   [/\b(ligue\s*1|french\s*ligue\s*1)\b/i, 770],
 
-  // 3. Domestic Cups & Top World Leagues (750 - 600)
+  // 4. Domestic Cups & Top World Leagues (750 - 600)
   [/\b(fa\s*cup|copa\s*del\s*rey|coppa\s*italia|dfb\s*pokal|coupe\s*de\s*france)\b/i, 750],
   [/\b(primeira\s*liga|eredivisie|saudi\s*pro|super\s*lig|brasileir|mls)\b/i, 650],
 ];
+
 
 const BIG_CLUB_PATTERNS = [
   /real\s*madrid/i, /barcelona/i, /manchester\s*united/i, /manchester\s*city/i,
@@ -71,11 +72,16 @@ export function calculatePredictionPriority(match) {
 
   let score = 50;
 
-  // Check European & Big 5 Leagues first
-  for (const [regex, weight] of MAJOR_LEAGUE_PATTERNS) {
-    if (regex.test(comp)) {
-      score = Math.max(score, weight);
-      break;
+  // 1. Strict England Premier League (ALWAYS FIRST) check
+  if (isPremierLeagueEngland(match)) {
+    score = 1500;
+  } else {
+    // Check other European & Big Leagues
+    for (const [regex, weight] of MAJOR_LEAGUE_PATTERNS) {
+      if (regex.test(comp)) {
+        score = Math.max(score, weight);
+        break;
+      }
     }
   }
 
@@ -90,13 +96,20 @@ export function calculatePredictionPriority(match) {
   if (homeBig && awayBig) score += 180;
   else if (homeBig || awayBig) score += 90;
 
-  // Demote women / youth
-  if (/\b(women|u19|u20|u21|u23|youth|reserve)\b/i.test(comp)) {
-    score -= 300;
+  // Demographic Demotions (unless strong reason like big clubs/ASEAN)
+  const isYouth = /\b(u17|u18|u19|u20|u21|u23|youth|reserve|reserves|juniors|primavera)\b/i.test(comp) || /\b(u17|u18|u19|u20|u21|u23|youth)\b/i.test(home) || /\b(u17|u18|u19|u20|u21|u23|youth)\b/i.test(away);
+  const isWomen = /\b(women|woman|feminine|femmes|frauen|w-league|nwsl|femenina)\b/i.test(comp) || /\b(women|woman|feminine)\b/i.test(home) || /\b(women|woman|feminine)\b/i.test(away);
+
+  if (isYouth && !isAseanTeam && !homeBig && !awayBig) {
+    score -= 1000;
+  }
+  if (isWomen && !isAseanTeam && !homeBig && !awayBig) {
+    score -= 800;
   }
 
   return score;
 }
+
 
 function bangkokDate(offset = 0) {
   const date = new Date(Date.now() + offset * 86400000);
