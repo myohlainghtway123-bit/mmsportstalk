@@ -97,7 +97,8 @@ export function isPremierLeagueEngland(match) {
   const country = String(match.country || match.raw?.league?.country || "").trim().toLowerCase();
   const compName = String(match.competition || match.raw?.league?.name || "").trim().toLowerCase();
 
-  if (country === "england" && (compName === "premier league" || compName === "english premier league")) {
+  // Strict identification: country is England AND name matches premier league or epl
+  if (country === "england" && /\b(premier\s*league|epl)\b/i.test(compName)) {
     return true;
   }
   return false;
