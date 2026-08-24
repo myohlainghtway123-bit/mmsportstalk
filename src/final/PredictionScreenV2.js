@@ -27,35 +27,42 @@ import {
   prefetchFastFootballMatches,
 } from "../services/fastFootballApi";
 import { isLiveMatch } from "../services/footballApi";
+import { isFactualWomenMatch, isFactualYouthMatch, isPremierLeagueEngland } from "../services/footballClassification";
 import { shareLeaderboard, sharePrediction } from "../utils/shareUtils";
 
 const TABS = ["Predict", "My Predictions", "Points", "Leaderboard"];
 
 const MAJOR_LEAGUE_PATTERNS = [
-  /champions\s*league/i,
-  /premier\s*league/i,
-  /la\s*liga/i,
-  /serie\s*a/i,
-  /bundesliga/i,
-  /ligue\s*1/i,
-  /europa\s*league/i,
-  /conference\s*league/i,
-  /world\s*cup/i,
-  /euro\b/i,
-  /asian\s*cup/i,
-  /afcon/i,
-  /copa\s*america/i,
+  // 1. European Competitions & Global Tournaments (1000 - 900)
+  [/\b(champions\s*league|ucl)\b/i, 1000],
+  [/\b(fifa\s*world\s*cup|world\s*cup)\b/i, 980],
+  [/\b(uefa\s*euro|euro\s*championship)\b/i, 960],
+  [/\b(europa\s*league|uel)\b/i, 950],
+  [/\b(copa\s*america)\b/i, 920],
+  [/\b(conference\s*league|uecl|uefa\s*super\s*cup)\b/i, 900],
+
+  // 2. The Big 5 European Men's Leagues (830 - 770)
+  [/\b(la\s*liga|laliga|primera\s*division)\b/i, 830],
+  [/\b(serie\s*a|calcio)\b/i, 810],
+  [/\b(bundesliga|1\.\s*bundesliga)\b/i, 790],
+  [/\b(ligue\s*1|french\s*ligue\s*1)\b/i, 770],
+
+  // 4. Domestic Cups & Top World Leagues (750 - 600)
+  [/\b(fa\s*cup|copa\s*del\s*rey|coppa\s*italia|dfb\s*pokal|coupe\s*de\s*france)\b/i, 750],
+  [/\b(primeira\s*liga|eredivisie|saudi\s*pro|super\s*lig|brasileir|mls)\b/i, 650],
 ];
+
 
 const BIG_CLUB_PATTERNS = [
   /real\s*madrid/i, /barcelona/i, /manchester\s*united/i, /manchester\s*city/i,
   /liverpool/i, /arsenal/i, /chelsea/i, /bayern/i, /juventus/i, /inter\b/i,
   /milan/i, /paris\s*saint/i, /psg/i, /tottenham/i, /dortmund/i, /atletico/i,
+  /leverkusen/i, /napoli/i, /aston\s*villa/i, /newcastle/i, /al\s*nassr/i, /inter\s*miami/i,
 ];
 
 const ASEAN_PATTERNS = [
   /myanmar/i, /thailand/i, /vietnam/i, /indonesia/i, /malaysia/i, /singapore/i,
-  /cambodia/i, /laos/i, /philippines/i, /thai\s*league/i, /aff\b/i, /asean/i,
+  /cambodia/i, /laos/i, /philippines/i, /thai\s*league/i, /aff\b/i, /asean/i, /mnl\b/i,
 ];
 
 export function calculatePredictionPriority(match) {
@@ -63,22 +70,46 @@ export function calculatePredictionPriority(match) {
   const home = String(match?.home?.name || "");
   const away = String(match?.away?.name || "");
 
-  // Priority A: Myanmar / ASEAN (1000)
+  let score = 50;
+
+  // 1. Strict England Premier League (ALWAYS FIRST) check
+  if (isPremierLeagueEngland(match)) {
+    score = 1500;
+  } else {
+    // Check other European & Big Leagues
+    for (const [regex, weight] of MAJOR_LEAGUE_PATTERNS) {
+      if (regex.test(comp)) {
+        score = Math.max(score, weight);
+        break;
+      }
+    }
+  }
+
+  // Myanmar / ASEAN priority
   const isAseanComp = ASEAN_PATTERNS.some((p) => p.test(comp));
   const isAseanTeam = ASEAN_PATTERNS.some((p) => p.test(home) || p.test(away));
-  if (isAseanComp || isAseanTeam) return 1000;
+  if (isAseanComp || isAseanTeam) score = Math.max(score, 880);
 
-  // Priority B: Major global football (800)
-  const isMajorComp = MAJOR_LEAGUE_PATTERNS.some((p) => p.test(comp));
-  if (isMajorComp) return 800;
+  // Big clubs bonus
+  const homeBig = BIG_CLUB_PATTERNS.some((p) => p.test(home));
+  const awayBig = BIG_CLUB_PATTERNS.some((p) => p.test(away));
+  if (homeBig && awayBig) score += 180;
+  else if (homeBig || awayBig) score += 90;
 
-  // Priority C: Big clubs / nations (500)
-  const isBigClub = BIG_CLUB_PATTERNS.some((p) => p.test(home) || p.test(away));
-  if (isBigClub) return 500;
+  // Demographic Demotions (unless strong reason like big clubs/ASEAN)
+  const isYouth = /\b(u17|u18|u19|u20|u21|u23|youth|reserve|reserves|juniors|primavera)\b/i.test(comp) || /\b(u17|u18|u19|u20|u21|u23|youth)\b/i.test(home) || /\b(u17|u18|u19|u20|u21|u23|youth)\b/i.test(away);
+  const isWomen = /\b(women|woman|feminine|femmes|frauen|w-league|nwsl|femenina)\b/i.test(comp) || /\b(women|woman|feminine)\b/i.test(home) || /\b(women|woman|feminine)\b/i.test(away);
 
-  // Priority D: Remaining fixtures (100)
-  return 100;
+  if (isYouth && !isAseanTeam && !homeBig && !awayBig) {
+    score -= 1000;
+  }
+  if (isWomen && !isAseanTeam && !homeBig && !awayBig) {
+    score -= 800;
+  }
+
+  return score;
 }
+
 
 function bangkokDate(offset = 0) {
   const date = new Date(Date.now() + offset * 86400000);
@@ -237,6 +268,24 @@ function PredictionCard({ match, saved, onSave, saving, onOpen, colors, my }) {
   );
 }
 
+function getInitialPredictionMatches() {
+  try {
+    const today = bangkokDate(0);
+    const tomorrow = bangkokDate(1);
+    const cToday = peekFastFootballMatches(today);
+    const cTomorrow = peekFastFootballMatches(tomorrow);
+    const combined = [...(cToday?.matches || []), ...(cTomorrow?.matches || [])];
+    const seen = new Set();
+    return combined.filter((m) => {
+      if (!m?.id || seen.has(String(m.id))) return false;
+      seen.add(String(m.id));
+      return true;
+    });
+  } catch (_) {
+    return [];
+  }
+}
+
 export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
   const { colors } = useTheme();
   const my = language === "my";
@@ -248,9 +297,10 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
   const [lbTimeframe, setLbTimeframe] = useState("all");
   const [lbMeta, setLbMeta] = useState(null);
   const [lbLoading, setLbLoading] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const initialMatches = useMemo(() => getInitialPredictionMatches(), []);
+  const [loading, setLoading] = useState(initialMatches.length === 0);
   const [refreshing, setRefreshing] = useState(false);
-  const [matches, setMatches] = useState([]);
+  const [matches, setMatches] = useState(initialMatches);
 
   const loadLeaderboard = useCallback(async (tf = "all") => {
     setLbLoading(true);
@@ -266,7 +316,7 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
   }, []);
 
   const loadData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && matches.length === 0) setLoading(true);
     try {
       const authRes = await getAuthStatus().catch(() => ({ authenticated: false }));
       setAuth(Boolean(authRes.authenticated));
@@ -279,8 +329,16 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
         fetchFastFootballMatches({ date: tomorrow }).catch(() => ({ matches: [] })),
       ]);
 
-      const all = [...(todayMatches.matches || []), ...(tomorrowMatches.matches || [])];
-      setMatches(all);
+      const seen = new Set();
+      const all = [...(todayMatches.matches || []), ...(tomorrowMatches.matches || [])].filter((m) => {
+        if (!m?.id || seen.has(String(m.id))) return false;
+        seen.add(String(m.id));
+        return true;
+      });
+
+      if (all.length) {
+        setMatches(all);
+      }
 
       if (authRes.authenticated) {
         const preds = await getAccountPredictions().catch(() => []);
@@ -294,7 +352,7 @@ export default function PredictionScreenV2({ onOpenMatch, language = "my" }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [lbTimeframe, loadLeaderboard]);
+  }, [lbTimeframe, loadLeaderboard, matches.length]);
 
   useEffect(() => {
     loadData();
@@ -686,10 +744,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   title: { fontSize: 18, fontWeight: "900" },
-  sub: { fontSize: 10, marginTop: 2 },
-  tabStrip: { borderBottomWidth: 1, paddingVertical: 8 },
-  tabStripContent: { flexDirection: "row", paddingHorizontal: 12, gap: 6 },
-  tabItem: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, flexShrink: 0 },
+  tabStrip: { flexGrow: 0, height: 48, borderBottomWidth: 1, paddingVertical: 6 },
+  tabStripContent: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 6 },
+  tabItem: { paddingHorizontal: 12, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   tabItemText: { fontSize: 11, fontWeight: "800" },
   content: { padding: 12, paddingBottom: 40, gap: 12 },
   authCard: { padding: 14, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 10 },

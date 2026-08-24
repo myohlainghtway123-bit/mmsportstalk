@@ -402,6 +402,481 @@ function CreditPanel({ me, packages, authenticated, openAccount, my, onClaimRefe
   );
 }
 
+function TipsterPanel({
+  me,
+  authenticated,
+  openAccount,
+  my,
+  matches,
+  onStartQualification,
+  onSubmitQualificationPick,
+  onPublishTip,
+  onRequestPayout,
+  busy,
+  colors,
+}) {
+  const tipster = me?.tipster || {};
+  const qualification = me?.qualification || {};
+  const isApproved = tipster?.status === "approved";
+  const isQualifying = qualification?.status === "active";
+  const canStart = qualification?.status === "not_started" || qualification?.canStart || !qualification?.status;
+
+  const [selectedMatch, setSelectedMatch] = useState(matches[0]?.id || "");
+  const [market, setMarket] = useState("1x2");
+  const [selection, setSelection] = useState("home");
+  const [confidence, setConfidence] = useState(7);
+  const [priceCredits, setPriceCredits] = useState(10);
+  const [analysis, setAnalysis] = useState("");
+
+  const currentMatch = matches.find((m) => String(m.id) === String(selectedMatch)) || matches[0];
+
+  return (
+    <>
+      {/* 1. TIPSTER STATUS HERO */}
+      <View style={[s.marketHero, { backgroundColor: colors.card, borderColor: isApproved ? colors.green : colors.red }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.eyebrow, { color: isApproved ? colors.green : colors.red }]}>
+            {isApproved ? "VERIFIED TIPSTER PROFILE" : "TIPSTER QUALIFICATION GATE"}
+          </Text>
+          <Text style={[s.marketHeroTitle, { color: colors.text }]}>
+            {isApproved
+              ? `Level ${tipster.level || 1} · ${levelName(Number(tipster.level || 1), me)}`
+              : tx(my, "Prove 70% win rate to publish tips", "၇၀% အနိုင်ရလဒ်ပြသပြီး Tipster အဖြစ်တင်ပါ")}
+          </Text>
+          <Text style={[s.marketHeroSub, { color: colors.muted }]}>
+            {isApproved
+              ? `${tipster.wins || 0}W · ${tipster.losses || 0}L (${Number(tipster.winRate || 0).toFixed(1)}% Win Rate)`
+              : tx(my, "10 real match picks · 7 wins required · Anti-fraud verification", "ပွဲ ၁၀ ပွဲရွေးချယ်မှုမှ ၇ ပွဲနိုင်ရမည်")}
+          </Text>
+        </View>
+        <Ionicons
+          name={isApproved ? "shield-checkmark" : "ribbon-outline"}
+          size={36}
+          color={isApproved ? colors.green : colors.red}
+        />
+      </View>
+
+      {!authenticated ? (
+        <Pressable style={[s.primary, { backgroundColor: colors.red }]} onPress={openAccount}>
+          <Text style={s.primaryText}>{tx(my, "SIGN IN TO BECOME A TIPSTER", "TIPSTER အကောင့်ဖွင့်ရန် အကောင့်ဝင်ပါ")}</Text>
+        </Pressable>
+      ) : null}
+
+      {/* 2. QUALIFICATION SECTION (When not approved) */}
+      {authenticated && !isApproved ? (
+        <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[s.formTitle, { color: colors.text }]}>
+            {tx(my, "Qualification Progress", "Tipster အရည်အချင်းစစ်ဆေးမှု")}
+          </Text>
+          <Text style={[s.formSub, { color: colors.muted }]}>
+            {tx(
+              my,
+              "Submit 10 match picks. Reach at least 7 verified wins to gain permanent publishing rights and earn MST Credits.",
+              "ပွဲ ၁၀ ပွဲ ခန့်မှန်းရွေးချယ်ပါ။ ၇ ပွဲအနိုင်ရရှိပါက Tips ရောင်းချခွင့် ရရှိပါမည်။",
+            )}
+          </Text>
+
+          {isQualifying ? (
+            <View style={{ marginBottom: 12 }}>
+              <View style={[s.tipMeta, { marginBottom: 6 }]}>
+                <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                  <Text style={[s.metaLabel, { color: colors.muted }]}>SUBMITTED</Text>
+                  <Text style={[s.metaValue, { color: colors.text }]}>{qualification.submitted || 0}/10</Text>
+                </View>
+                <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                  <Text style={[s.metaLabel, { color: colors.muted }]}>WINS</Text>
+                  <Text style={[s.metaValue, { color: colors.green }]}>{qualification.wins || 0}W</Text>
+                </View>
+                <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                  <Text style={[s.metaLabel, { color: colors.muted }]}>LOSSES</Text>
+                  <Text style={[s.metaValue, { color: colors.red }]}>{qualification.losses || 0}L</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {canStart && !isQualifying ? (
+            <Pressable
+              disabled={busy === "startQual"}
+              style={[s.primary, { backgroundColor: colors.red }, busy === "startQual" && s.disabled]}
+              onPress={onStartQualification}
+            >
+              {busy === "startQual" ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={s.primaryText}>{tx(my, "START 10-MATCH QUALIFICATION", "အရည်အချင်းစစ်ဆေးမှု စတင်မည်")}</Text>
+              )}
+            </Pressable>
+          ) : null}
+
+          {/* Qualification Pick Form */}
+          {isQualifying && matches.length > 0 ? (
+            <View style={{ marginTop: 10 }}>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Select Upcoming Match", "ပွဲ ရွေးချယ်ပါ")}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                {matches.slice(0, 10).map((m) => {
+                  const isSel = String(m.id) === String(selectedMatch);
+                  return (
+                    <Pressable
+                      key={m.id}
+                      style={[
+                        s.metaItem,
+                        { backgroundColor: isSel ? colors.redSoft : colors.panel, marginRight: 8, minWidth: 140 },
+                        isSel && { borderColor: colors.red, borderWidth: 1 },
+                      ]}
+                      onPress={() => setSelectedMatch(m.id)}
+                    >
+                      <Text numberOfLines={1} style={[s.metaLabel, { color: isSel ? colors.red : colors.muted }]}>
+                        {m.competition || "Match"}
+                      </Text>
+                      <Text numberOfLines={1} style={[s.metaValue, { color: colors.text, fontSize: 9.5 }]}>
+                        {m.home?.name} v {m.away?.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Market Choices */}
+              <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Select Market & Pick", "Market နှင့် ရွေးချယ်မှု")}</Text>
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+                {Object.keys(MARKETS).map((mk) => (
+                  <Pressable
+                    key={mk}
+                    style={[
+                      s.tab,
+                      { paddingVertical: 6, backgroundColor: market === mk ? colors.redSoft : colors.panel },
+                      market === mk && { borderColor: colors.red, borderWidth: 1 },
+                    ]}
+                    onPress={() => {
+                      setMarket(mk);
+                      setSelection(MARKETS[mk].selections[0][0]);
+                    }}
+                  >
+                    <Text style={[s.tabText, { color: market === mk ? colors.red : colors.muted }]}>{MARKETS[mk].label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Selections */}
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 10 }}>
+                {MARKETS[market]?.selections?.map(([val, label]) => (
+                  <Pressable
+                    key={val}
+                    style={[
+                      s.tab,
+                      { paddingVertical: 8, backgroundColor: selection === val ? colors.red : colors.card2 },
+                    ]}
+                    onPress={() => setSelection(val)}
+                  >
+                    <Text style={[s.tabText, { color: selection === val ? "#FFFFFF" : colors.text }]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Analysis */}
+              <TextInput
+                value={analysis}
+                onChangeText={setAnalysis}
+                placeholder={my ? "သုံးသပ်ချက် အကျဉ်း ရေးသားပါ (အနည်းဆုံး စကားလုံး ၅ လုံး)..." : "Write brief tipster analysis..."}
+                placeholderTextColor={colors.muted2}
+                multiline
+                numberOfLines={3}
+                style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text, height: 70, textAlignVertical: "top", paddingTop: 8 }]}
+              />
+
+              <Pressable
+                disabled={busy === "submitQual" || !analysis.trim()}
+                style={[s.primary, { backgroundColor: colors.red }, (busy === "submitQual" || !analysis.trim()) && s.disabled]}
+                onPress={() =>
+                  onSubmitQualificationPick?.({
+                    matchId: currentMatch?.id,
+                    competition: currentMatch?.competition,
+                    homeTeam: currentMatch?.home?.name,
+                    awayTeam: currentMatch?.away?.name,
+                    kickoff: currentMatch?.kickoff,
+                    market,
+                    selection,
+                    analysis,
+                  })
+                }
+              >
+                {busy === "submitQual" ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={s.primaryText}>{tx(my, "SUBMIT QUALIFICATION PICK", "အရည်အချင်းစစ် ပွဲတင်မည်")}</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* 3. APPROVED TIPSTER HUB (Publish Tips & Payouts) */}
+      {authenticated && isApproved ? (
+        <>
+          <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.formTitle, { color: colors.text }]}>{tx(my, "Publish Premium Tip", "Premium Tip အသစ်တင်မည်")}</Text>
+            <Text style={[s.formSub, { color: colors.muted }]}>
+              {tx(my, "Select an upcoming match, choose your market, and set credit price.", "လာမည့်ပွဲ ရွေးချယ်ပြီး Credit ဈေးနှုန်း သတ်မှတ်ပါ။")}
+            </Text>
+
+            {matches.length > 0 ? (
+              <>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                  {matches.slice(0, 10).map((m) => {
+                    const isSel = String(m.id) === String(selectedMatch);
+                    return (
+                      <Pressable
+                        key={m.id}
+                        style={[
+                          s.metaItem,
+                          { backgroundColor: isSel ? colors.redSoft : colors.panel, marginRight: 8, minWidth: 140 },
+                          isSel && { borderColor: colors.red, borderWidth: 1 },
+                        ]}
+                        onPress={() => setSelectedMatch(m.id)}
+                      >
+                        <Text numberOfLines={1} style={[s.metaLabel, { color: isSel ? colors.red : colors.muted }]}>
+                          {m.competition || "Match"}
+                        </Text>
+                        <Text numberOfLines={1} style={[s.metaValue, { color: colors.text, fontSize: 9.5 }]}>
+                          {m.home?.name} v {m.away?.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Market & Selection */}
+                <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+                  {Object.keys(MARKETS).map((mk) => (
+                    <Pressable
+                      key={mk}
+                      style={[
+                        s.tab,
+                        { paddingVertical: 6, backgroundColor: market === mk ? colors.redSoft : colors.panel },
+                        market === mk && { borderColor: colors.red, borderWidth: 1 },
+                      ]}
+                      onPress={() => {
+                        setMarket(mk);
+                        setSelection(MARKETS[mk].selections[0][0]);
+                      }}
+                    >
+                      <Text style={[s.tabText, { color: market === mk ? colors.red : colors.muted }]}>{MARKETS[mk].label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <View style={{ flexDirection: "row", gap: 6, marginBottom: 10 }}>
+                  {MARKETS[market]?.selections?.map(([val, label]) => (
+                    <Pressable
+                      key={val}
+                      style={[
+                        s.tab,
+                        { paddingVertical: 8, backgroundColor: selection === val ? colors.red : colors.card2 },
+                      ]}
+                      onPress={() => setSelection(val)}
+                    >
+                      <Text style={[s.tabText, { color: selection === val ? "#FFFFFF" : colors.text }]}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Price Picker */}
+                <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Set Credit Price", "Credit ဈေးနှုန်း သတ်မှတ်ပါ")}</Text>
+                <View style={{ flexDirection: "row", gap: 6, marginBottom: 10 }}>
+                  {TIP_PRICES.map((p) => (
+                    <Pressable
+                      key={p}
+                      style={[
+                        s.tab,
+                        { paddingVertical: 6, backgroundColor: priceCredits === p ? colors.gold : colors.panel },
+                      ]}
+                      onPress={() => setPriceCredits(p)}
+                    >
+                      <Text style={[s.tabText, { color: priceCredits === p ? "#000000" : colors.text }]}>{p} CR</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Analysis */}
+                <TextInput
+                  value={analysis}
+                  onChangeText={setAnalysis}
+                  placeholder={my ? "အပြည့်အစုံ သုံးသပ်ချက် ရေးသားပါ..." : "Write detailed match analysis..."}
+                  placeholderTextColor={colors.muted2}
+                  multiline
+                  numberOfLines={4}
+                  style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text, height: 80, textAlignVertical: "top", paddingTop: 8 }]}
+                />
+
+                <Pressable
+                  disabled={busy === "publishTip" || !analysis.trim()}
+                  style={[s.primary, { backgroundColor: colors.red }, (busy === "publishTip" || !analysis.trim()) && s.disabled]}
+                  onPress={() =>
+                    onPublishTip?.({
+                      matchId: currentMatch?.id,
+                      competition: currentMatch?.competition,
+                      homeTeam: currentMatch?.home?.name,
+                      awayTeam: currentMatch?.away?.name,
+                      kickoff: currentMatch?.kickoff,
+                      market,
+                      selection,
+                      confidence,
+                      priceCredits,
+                      analysis,
+                    })
+                  }
+                >
+                  {busy === "publishTip" ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={s.primaryText}>{tx(my, "PUBLISH TIP FOR SALE", "TIP ရောင်းချမည်")}</Text>
+                  )}
+                </Pressable>
+              </>
+            ) : (
+              <Text style={[s.empty, { color: colors.muted }]}>Loading upcoming match fixtures...</Text>
+            )}
+          </View>
+
+          {/* Earnings & Payout Card */}
+          <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.formTitle, { color: colors.text }]}>{tx(my, "Tipster Earnings & Payout", "ဝင်ငွေနှင့် ငွေထုတ်ယူမှု")}</Text>
+            <View style={[s.walletHero, { backgroundColor: colors.panel, borderColor: colors.gold, minHeight: 90, marginVertical: 8 }]}>
+              <View>
+                <Text style={[s.eyebrow, { color: colors.gold }]}>AVAILABLE EARNINGS</Text>
+                <Text style={[s.walletNumber, { color: colors.text, fontSize: 26 }]}>
+                  {Number(me?.wallet?.earnings || tipster.earnings || 0).toLocaleString()} CR
+                </Text>
+              </View>
+              <Pressable
+                style={[s.smallAction, { backgroundColor: colors.green, width: 110 }]}
+                onPress={() => onRequestPayout?.({ credits: me?.wallet?.earnings || 100, currency: "THB" })}
+              >
+                <Text style={s.smallActionText}>{tx(my, "PAYOUT", "ငွေထုတ်မည်")}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function PartnerPanel({ me, authenticated, openAccount, my, onClaimReferral, onApplyPartner, busy, colors }) {
+  const partner = me?.partner || {};
+  const referralCode = partner?.referralCode || `MST${me?.userId || me?.id || "VIP"}`;
+  const referralLink = `https://myanmarsportstalk.com/ref/${referralCode}`;
+  const isPartner = partner?.status === "active" || Boolean(partner?.referralCode);
+  const [claimInput, setClaimInput] = useState("");
+
+  return (
+    <>
+      {/* 1. PARTNER HERO */}
+      <View style={[s.walletHero, { backgroundColor: colors.card, borderColor: colors.gold }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.eyebrow, { color: colors.gold }]}>MST AFFILIATE PARTNER</Text>
+          <Text style={[s.walletNumber, { color: colors.text, fontSize: 28 }]}>
+            {partner.commissionPercent || 15}%
+          </Text>
+          <Text style={[s.walletSub, { color: colors.muted }]}>
+            {tx(my, "Lifetime Revenue Share on Credit Unlocks", "တစ်သက်တာ ကော်မရှင် ခံစားခွင့်")}
+          </Text>
+        </View>
+        <Ionicons name="people-circle" size={48} color={colors.gold} />
+      </View>
+
+      {!authenticated ? (
+        <Pressable style={[s.primary, { backgroundColor: colors.red }]} onPress={openAccount}>
+          <Text style={s.primaryText}>{tx(my, "SIGN IN TO JOIN PARTNER PROGRAM", "PARTNER အကောင့်ဝင်မည်")}</Text>
+        </Pressable>
+      ) : null}
+
+      {authenticated ? (
+        <>
+          {/* 2. REFERRAL CODE & LINK */}
+          <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.formTitle, { color: colors.text }]}>{tx(my, "Your Referral Code", "သင့် Referral Code")}</Text>
+            <Text style={[s.formSub, { color: colors.muted }]}>
+              {tx(
+                my,
+                "Share your referral code or link with your audience. When they purchase MST Credits, you earn automatic commission.",
+                "သင့် ပရိတ်သတ်နှင့် မိတ်ဆွေများအား မျှဝေပါ။ Credits ဝယ်ယူတိုင်း ကော်မရှင် အလိုအလျောက် ရရှိပါမည်။",
+              )}
+            </Text>
+            <View style={[s.payoutRow, { alignItems: "center" }]}>
+              <View style={[s.input, { backgroundColor: colors.panel, borderColor: colors.gold, flex: 1, justifyContent: "center", marginBottom: 0 }]}>
+                <Text style={{ color: colors.gold, fontWeight: "900", fontSize: 14 }}>{referralCode}</Text>
+              </View>
+            </View>
+            <Text style={[s.metaLabel, { color: colors.muted, marginTop: 8 }]}>REFERRAL LINK: {referralLink}</Text>
+          </View>
+
+          {/* 3. PARTNER ANALYTICS */}
+          <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.formTitle, { color: colors.text }]}>{tx(my, "Performance Analytics", "ကော်မရှင် ရလဒ်များ")}</Text>
+            <View style={s.tipMeta}>
+              <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                <Text style={[s.metaLabel, { color: colors.muted }]}>REFERRALS</Text>
+                <Text style={[s.metaValue, { color: colors.text }]}>{partner.totalReferrals || 0}</Text>
+              </View>
+              <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                <Text style={[s.metaLabel, { color: colors.muted }]}>UNLOCKS</Text>
+                <Text style={[s.metaValue, { color: colors.text }]}>{partner.totalUnlocks || 0}</Text>
+              </View>
+              <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                <Text style={[s.metaLabel, { color: colors.muted }]}>EARNED</Text>
+                <Text style={[s.metaValue, { color: colors.green }]}>
+                  {Number(partner.lifetimeEarnings || 0).toLocaleString()} CR
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 4. CLAIM REFERRAL CODE */}
+          <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.formTitle, { color: colors.text }]}>{tx(my, "Claim Inviter Code", "ဖိတ်ကြားသူ Code ထည့်မည်")}</Text>
+            <Text style={[s.formSub, { color: colors.muted }]}>
+              {tx(my, "Enter a partner's code to bind your account.", "သင့်အား ဖိတ်ကြားသော Partner ၏ code ကို ထည့်ပါ။")}
+            </Text>
+            <View style={s.payoutRow}>
+              <TextInput
+                value={claimInput}
+                onChangeText={(v) => setClaimInput(v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 24))}
+                placeholder="MSTXXXXX"
+                placeholderTextColor={colors.muted2}
+                style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text, flex: 1, marginBottom: 0 }]}
+              />
+              <Pressable
+                disabled={busy === "claimReferral" || claimInput.length < 4}
+                style={[s.smallAction, { backgroundColor: colors.red }, (busy === "claimReferral" || claimInput.length < 4) && s.disabled]}
+                onPress={() => onClaimReferral?.(claimInput)}
+              >
+                {busy === "claimReferral" ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={s.smallActionText}>CLAIM</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+
+          {/* 5. TIER BREAKDOWN */}
+          <View style={[s.infoCard, { backgroundColor: colors.panel, borderColor: colors.border }]}>
+            <Text style={[s.infoTitle, { color: colors.gold }]}>PARTNER TIERS & COMMISSION</Text>
+            <Text style={[s.infoText, { color: colors.text2 }]}>
+              • Tier 1 (1–20 Referrals): 10% Revenue Share{"\n"}
+              • Tier 2 (21–100 Referrals): 15% Revenue Share{"\n"}
+              • VIP Tier (100+ Referrals): 25% Lifetime Revenue Share
+            </Text>
+          </View>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 export default function TipsScreen({ language = "my", openAccount }) {
   const { colors } = useTheme();
   const my = language !== "en";
@@ -459,6 +934,8 @@ export default function TipsScreen({ language = "my", openAccount }) {
         setTipsters(Array.isArray(tipsterData) ? tipsterData : []);
         setMe(meData);
         setCreditPackages(Array.isArray(packageData) ? packageData : []);
+        // Pre-load upcoming matches only when this signed-in account can use
+        // tip submission or qualification. Public Tips browsing stays fast.
         const needsMatches = Boolean(
           a.authenticated &&
             (meData?.tipster?.status === "approved" ||
@@ -516,6 +993,54 @@ export default function TipsScreen({ language = "my", openAccount }) {
         return result;
       },
       `Purchased Credits successfully · Balance updated.`,
+    );
+  };
+
+  const doStartQualification = () => {
+    return action(
+      "startQual",
+      () => startTipsterQualification(),
+      "Qualification started! Submit 10 match picks with at least 7 wins.",
+    );
+  };
+
+  const doSubmitQualificationPick = (input) => {
+    return action(
+      "submitQual",
+      () => submitQualificationTip(input),
+      "Qualification pick submitted successfully!",
+    );
+  };
+
+  const doPublishTip = (input) => {
+    return action(
+      "publishTip",
+      () => publishTip(input),
+      "Premium Tip published successfully for sale in Marketplace!",
+    );
+  };
+
+  const doRequestPayout = ({ credits, currency }) => {
+    return action(
+      "payout",
+      () => requestTipsterPayout({ credits, currency }),
+      "Payout request submitted successfully!",
+    );
+  };
+
+  const doClaimReferral = (code) => {
+    return action(
+      "claimReferral",
+      () => claimPartnerReferral(code),
+      `Successfully linked to Partner code ${code}!`,
+    );
+  };
+
+  const doApplyPartner = (input) => {
+    return action(
+      "applyPartner",
+      () => applyTipsterPartner(input),
+      "Partner application submitted!",
     );
   };
 
@@ -621,9 +1146,39 @@ export default function TipsScreen({ language = "my", openAccount }) {
             authenticated={auth}
             openAccount={openAccount}
             my={my}
+            onClaimReferral={doClaimReferral}
             onBuyPack={doBuyPack}
-            loading={busy === "referral"}
+            loading={busy === "claimReferral"}
             buyingPack={busy.startsWith("pack:") ? busy.slice(5) : ""}
+            colors={colors}
+          />
+        ) : null}
+
+        {tab === "TIPSTER" ? (
+          <TipsterPanel
+            me={me}
+            authenticated={auth}
+            openAccount={openAccount}
+            my={my}
+            matches={matches}
+            onStartQualification={doStartQualification}
+            onSubmitQualificationPick={doSubmitQualificationPick}
+            onPublishTip={doPublishTip}
+            onRequestPayout={doRequestPayout}
+            busy={busy}
+            colors={colors}
+          />
+        ) : null}
+
+        {tab === "PARTNER" ? (
+          <PartnerPanel
+            me={me}
+            authenticated={auth}
+            openAccount={openAccount}
+            my={my}
+            onClaimReferral={doClaimReferral}
+            onApplyPartner={doApplyPartner}
+            busy={busy}
             colors={colors}
           />
         ) : null}

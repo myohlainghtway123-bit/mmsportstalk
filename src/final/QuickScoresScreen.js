@@ -137,6 +137,12 @@ export default function QuickScoresScreen({ openMatch }) {
   }, [tab, api.silentRefresh]);
 
   const matches = useMemo(() => [...api.matches].sort((a, b) => {
+    // 1. England Premier League ALWAYS FIRST
+    const aIsEpl = isPremierLeagueEngland(a);
+    const bIsEpl = isPremierLeagueEngland(b);
+    if (aIsEpl !== bIsEpl) return aIsEpl ? -1 : 1;
+
+    // 2. Then follow POPULAR array or status/kickoff
     const ai = POPULAR.findIndex((name) => String(a.competition || "").includes(name));
     const bi = POPULAR.findIndex((name) => String(b.competition || "").includes(name));
     const ap = ai === -1 ? 999 : ai;
@@ -147,6 +153,7 @@ export default function QuickScoresScreen({ openMatch }) {
     const bt = b.kickoff ? new Date(b.kickoff).getTime() : Number.MAX_SAFE_INTEGER;
     return (Number.isFinite(at) ? at : Number.MAX_SAFE_INTEGER) - (Number.isFinite(bt) ? bt : Number.MAX_SAFE_INTEGER);
   }), [api.matches]);
+
 
   const renderMatch = useCallback(({ item }) => <MatchCard match={item} onOpen={openMatch} />, [openMatch]);
   const keyExtractor = useCallback((item) => `${date}-${item.id}`, [date]);

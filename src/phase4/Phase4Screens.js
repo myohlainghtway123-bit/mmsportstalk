@@ -207,7 +207,7 @@ export function SettingsScreen({ goBack, openNotifications, openAccount, openFav
         </View>
         <View style={s.settingsRow}>
           <View style={s.rowIcon}><Ionicons name="phone-portrait-outline" size={21} color={C.red}/></View>
-          <View style={{flex:1}}><Text style={s.rowTitle}>MST Score</Text><Text style={s.rowSub}>Version 1.5.1 · Android Build 11</Text></View>
+          <View style={{flex:1}}><Text style={s.rowTitle}>MST Score</Text><Text style={s.rowSub}>Version 1.5.2 · Android Build 12 (Closed Beta)</Text></View>
         </View>
       </View>
     </ScrollView>
@@ -215,12 +215,12 @@ export function SettingsScreen({ goBack, openNotifications, openAccount, openFav
 }
 
 export function AboutScreen({ goBack }) {
-  return <View style={s.screen}><Header title="About MST Score" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MST SCORE · VERSION 1.5.1</Text><Text style={s.aboutText}>Myanmar Sports Talk's premier football application for live scores, in-depth match stats, verified news, transfer updates, score predictions, and qualified Tipsters.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
+  return <View style={s.screen}><Header title="About MST Score" subtitle="Myanmar Sports Talk" goBack={goBack}/><ScrollView contentContainerStyle={s.content}><View style={s.aboutHero}><Text style={s.mst}>MST</Text><Text style={s.aboutTitle}>MST SCORE · VERSION 1.5.2 (CLOSED BETA)</Text><Text style={s.aboutText}>Myanmar Sports Talk's premier football application for live scores, in-depth match stats, verified news, transfer updates, score predictions, and qualified Tipsters.</Text></View><Pressable style={s.redButton} onPress={() => Linking.openURL(MST_SITE_URL)}><Text style={s.redButtonText}>OPEN MYANMARSPORTSTALK.COM</Text></Pressable></ScrollView></View>;
 }
 
 const s = StyleSheet.create({
-  screen:{flex:1,backgroundColor:C.bg},content:{paddingHorizontal:16,paddingTop:12,paddingBottom:40},
-  header:{minHeight:66,paddingHorizontal:16,flexDirection:"row",alignItems:"center",borderBottomWidth:1,borderBottomColor:C.border2},title:{fontSize:17,fontWeight:"800",color:C.text},subtitle:{fontSize:10.5,color:C.muted,marginTop:2},
+  screen:{flex:1,backgroundColor:C.bg},content:{paddingHorizontal:14,paddingTop:8,paddingBottom:36},
+  header:{minHeight:48,paddingHorizontal:12,flexDirection:"row",alignItems:"center",borderBottomWidth:1,borderBottomColor:C.border2},title:{fontSize:16,fontWeight:"800",color:C.text},subtitle:{fontSize:10,color:C.muted,marginTop:1},
   section:{fontSize:11,fontWeight:"900",color:C.text2,marginTop:13,marginBottom:8},sectionRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginTop:13,marginBottom:8},sectionInline:{fontSize:11,fontWeight:"900",color:C.text2},actionLink:{fontSize:11,fontWeight:"800",color:C.red},card:{backgroundColor:C.card,borderWidth:1,borderColor:C.border2,borderRadius:12,overflow:"hidden",marginBottom:8},divider:{borderBottomWidth:1,borderBottomColor:C.border2},
   row:{minHeight:64,paddingHorizontal:12,paddingVertical:9,flexDirection:"row",alignItems:"center",gap:10},settingsRow:{minHeight:62,paddingHorizontal:12,paddingVertical:9,flexDirection:"row",alignItems:"center",gap:10},rowIcon:{width:35,height:35,borderRadius:9,backgroundColor:C.card2,alignItems:"center",justifyContent:"center"},rowTitle:{fontSize:13,fontWeight:"700",color:C.text2},rowSub:{fontSize:9.5,color:C.muted,marginTop:3,lineHeight:13},
   toggle:{width:42,height:24,borderRadius:12,backgroundColor:C.border,justifyContent:"center",paddingHorizontal:3},toggleOn:{backgroundColor:C.red},toggleKnob:{width:18,height:18,borderRadius:9,backgroundColor:C.text},toggleKnobOn:{alignSelf:"flex-end"},
