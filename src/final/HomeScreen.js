@@ -33,156 +33,14 @@ import {
 } from "../services/accountApi";
 import { loadOnboardingPreferences } from "../services/onboardingStore";
 
-const DATE_OFFSETS = Array.from({ length: 15 }, (_, i) => i - 7);
-
-// -------------------------------------------------------------
-// WORLD LEAGUE & EUROPEAN COMPETITIONS PRIORITY RANKING (1st, 1st SHOW)
-// -------------------------------------------------------------
-const MAJOR_COMPETITIONS = [
-  // 1. Top Tier European & Global Championships (1000 - 900)
-  [/\b(champions\s*league|ucl)\b/i, 1000],
-  [/\b(fifa\s*world\s*cup|world\s*cup)\b/i, 980],
-  [/\b(uefa\s*euro|euro\s*championship)\b/i, 960],
-  [/\b(europa\s*league|uel)\b/i, 950],
-  [/\b(copa\s*america)\b/i, 920],
-  [/\b(conference\s*league|uecl|uefa\s*super\s*cup|club\s*world\s*cup)\b/i, 900],
-  [/\b(afc\s*asian\s*cup|africa\s*cup\s*of\s*nations|afcon)\b/i, 880],
-
-  // 2. The Big 5 European Men's Leagues (850 - 770)
-  [/\b(premier\s*league|epl|english\s*premier\s*league)\b/i, 850],
-  [/\b(la\s*liga|laliga|primera\s*division)\b/i, 830],
-  [/\b(serie\s*a|calcio)\b/i, 810],
-  [/\b(bundesliga|1\.\s*bundesliga)\b/i, 790],
-  [/\b(ligue\s*1|french\s*ligue\s*1)\b/i, 770],
-
-  // 3. Top Domestic Cups of the Big 5 Leagues (750 - 700)
-  [/\b(fa\s*cup)\b/i, 750],
-  [/\b(copa\s*del\s*rey)\b/i, 740],
-  [/\b(coppa\s*italia)\b/i, 730],
-  [/\b(dfb\s*pokal)\b/i, 720],
-  [/\b(coupe\s*de\s*france)\b/i, 710],
-  [/\b(carabao\s*cup|efl\s*cup)\b/i, 700],
-
-  // 4. Major Secondary European & Top World Leagues (680 - 580)
-  [/\b(primeira\s*liga|liga\s*portugal)\b/i, 680],
-  [/\b(eredivisie)\b/i, 670],
-  [/\b(uefa\s*nations\s*league|nations\s*league)\b/i, 660],
-  [/\b(saudi\s*pro\s*league|roshn\s*saudi)\b/i, 650],
-  [/\b(super\s*lig|s\u00fcper\s*lig)\b/i, 640],
-  [/\b(brasileir\u00e3o|serie\s*a\s*brazil|brasileirao)\b/i, 630],
-  [/\b(primera\s*division\s*argentina|liga\s*profesional)\b/i, 620],
-  [/\b(major\s*league\s*soccer|mls)\b/i, 600],
-  [/\b(championship|efl\s*championship)\b/i, 580],
-];
-
-const BIG_TEAMS = [
-  "real madrid", "barcelona", "atletico madrid", "manchester united", "man utd",
-  "manchester city", "man city", "liverpool", "arsenal", "chelsea",
-  "tottenham", "bayern munich", "bayern", "paris saint-germain", "psg",
-  "juventus", "inter", "inter milan", "ac milan",
-];
-
-const ELITE_TEAMS = [
-  "borussia dortmund", "dortmund", "bayer leverkusen", "leverkusen", "napoli",
-  "roma", "as roma", "aston villa", "newcastle", "newcastle united",
-  "sporting cp", "benfica", "porto", "fc porto", "ajax", "al hilal", "al nassr", "inter miami",
-];
-
-const YOUTH_OBSCURE_REGEX = /\b(u17|u18|u19|u20|u21|u23|youth|juniors|reserve|reserves|primavera|oberliga|regionalliga|tercera|sub-19|sub-20|sub-21|sub-23)\b/i;
-const WOMEN_REGEX = /\b(women|woman|feminine|femmes|frauen|w league|nwsl|femenina|damallsvenskan|wsl|uwcl|\(w\))\b/i;
-const ASEAN_LEAGUE_REGEX = /(thai league|liga 1|v\.league|malaysia super league|singapore premier|philippines football league|cambodian premier|lao league)/i;
-const ASEAN_TOURNAMENT_REGEX = /(asean|aff |sea games|shopee cup|mitsubishi electric cup|suzukicup)/i;
-
-function containsTeam(name, list) {
-  if (!name) return false;
-  const n = String(name).trim().toLowerCase();
-  return list.some((item) => n.includes(item));
-}
-
-function competitionWeight(title) {
-  if (!title) return 10;
-  for (const [regex, weight] of MAJOR_COMPETITIONS) {
-    if (regex.test(title)) return weight;
-  }
-  if (ASEAN_TOURNAMENT_REGEX.test(title)) return 400;
-  if (ASEAN_LEAGUE_REGEX.test(title)) return 300;
-  return 20;
-}
-
-function isYouthMatch(match) {
-  const comp = String(match?.competition || "");
-  const home = String(match?.home?.name || "");
-  const away = String(match?.away?.name || "");
-  return YOUTH_OBSCURE_REGEX.test(comp) || YOUTH_OBSCURE_REGEX.test(home) || YOUTH_OBSCURE_REGEX.test(away);
-}
-
-function isWomenMatch(match) {
-  const comp = String(match?.competition || "");
-  const country = String(match?.country || "");
-  const home = String(match?.home?.name || "");
-  const away = String(match?.away?.name || "");
-  return WOMEN_REGEX.test(comp) || WOMEN_REGEX.test(country) || WOMEN_REGEX.test(home) || WOMEN_REGEX.test(away);
-}
-
-function matchPriorityScore(match, favorites = {}) {
-  let score = competitionWeight(match?.competition);
-  const home = match?.home?.name, away = match?.away?.name;
-  const homeId = String(match?.home?.id ?? "");
-  const awayId = String(match?.away?.id ?? "");
-  const compId = String(match?.competitionId ?? "");
-  const compName = String(match?.competition || "").toLowerCase();
-
-  // 1. User Favorites Priority
-  const favTeamIds = favorites.teamIds || [];
-  const favTeamNames = favorites.teamNames || [];
-  const favCompIds = favorites.compIds || [];
-  const favCompNames = favorites.compNames || [];
-
-  const isHomeFav = favTeamIds.includes(homeId) || (home && favTeamNames.some((t) => home.toLowerCase().includes(t)));
-  const isAwayFav = favTeamIds.includes(awayId) || (away && favTeamNames.some((t) => away.toLowerCase().includes(t)));
-  const isCompFav = favCompIds.includes(compId) || (compName && favCompNames.some((c) => compName.includes(c)));
-
-  if (isHomeFav || isAwayFav) score += 700;
-  if (isCompFav) score += 500;
-
-  // 2. Regional Priority (Myanmar & ASEAN)
-  const regionalHome = regionalNationalTeamPriority(home);
-  const regionalAway = regionalNationalTeamPriority(away);
-  const regionalPriority = Math.max(regionalHome, regionalAway);
-
-  if (regionalPriority === 2) {
-    score += 600; // Myanmar Senior National Team
-  } else if (/myanmar/i.test(match?.country || match?.competition || "")) {
-    score += 450; // Myanmar domestic football
-  } else if (regionalPriority === 1) {
-    score += 320; // ASEAN National Team
-  } else if (ASEAN_TOURNAMENT_REGEX.test(match?.competition || "")) {
-    score += 290; // ASEAN Tournaments
-  } else if (ASEAN_LEAGUE_REGEX.test(match?.competition || "")) {
-    score += 200; // ASEAN Leagues
-  }
-
-  // 3. Big Clubs & Blockbuster clashes
-  const homeBig = containsTeam(home, BIG_TEAMS);
-  const awayBig = containsTeam(away, BIG_TEAMS);
-  if (homeBig && awayBig) score += 160;
-  else if (homeBig || awayBig) score += 65;
-
-  const homeElite = containsTeam(home, ELITE_TEAMS);
-  const awayElite = containsTeam(away, ELITE_TEAMS);
-  if (homeElite && awayElite) score += 70;
-  else if (homeElite || awayElite) score += 30;
-
-  // 4. Demote Youth & obscure matches unless regional or favorite
-  if (isYouthMatch(match) && !isHomeFav && !isAwayFav && regionalPriority === 0) {
-    score -= 300;
-  }
-
-  // 5. Live match bonus
-  if (isLiveMatch(match)) score += 40;
-
-  return score;
-}
+import {
+  calculateFactualMatchPriority,
+  getFactualCompetitionKey,
+  getFactualCompetitionWeight,
+  isFactualWomenMatch,
+  isFactualYouthMatch,
+  isPremierLeagueEngland,
+} from "../services/footballClassification";
 
 function kickoffTime(match) {
   const t = match?.kickoff ? new Date(match.kickoff).getTime() : 0;
@@ -195,8 +53,8 @@ function importantMatchSort(a, b, favorites = {}) {
   if (aLive !== bLive) return aLive ? -1 : 1;
 
   // 2. Priority score (Big matches, favorites, regional, top leagues)
-  const aScore = matchPriorityScore(a, favorites);
-  const bScore = matchPriorityScore(b, favorites);
+  const aScore = calculateFactualMatchPriority(a, favorites, regionalNationalTeamPriority);
+  const bScore = calculateFactualMatchPriority(b, favorites, regionalNationalTeamPriority);
   if (aScore !== bScore) return bScore - aScore;
 
   // 3. Kickoff chronological order
@@ -594,9 +452,9 @@ export default function HomeScreen({
   const filteredMatches = useMemo(() => {
     return state.matches.filter((m) => {
       if (typeFilter === "LIVE" && !isLiveMatch(m)) return false;
-      if (typeFilter === "MEN" && (isWomenMatch(m) || isYouthMatch(m))) return false;
-      if (typeFilter === "WOMEN" && !isWomenMatch(m)) return false;
-      if (typeFilter === "YOUTH" && !isYouthMatch(m)) return false;
+      if (typeFilter === "MEN" && (isFactualWomenMatch(m) || isFactualYouthMatch(m))) return false;
+      if (typeFilter === "WOMEN" && !isFactualWomenMatch(m)) return false;
+      if (typeFilter === "YOUTH" && !isFactualYouthMatch(m)) return false;
       if (competitionFilter !== "ALL" && m.competition !== competitionFilter) return false;
       return true;
     });
@@ -606,23 +464,28 @@ export default function HomeScreen({
   const sections = useMemo(() => {
     const map = new Map();
     for (const match of filteredMatches) {
-      const key = match.competition || "Other";
+      const key = getFactualCompetitionKey(match);
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(match);
     }
 
-    const rows = [...map.entries()].map(([title, data]) => {
+    const rows = [...map.entries()].map(([groupKey, data]) => {
       // Sort matches within each competition by Big Match Priority
       const ordered = [...data].sort((a, b) => importantMatchSort(a, b, favorites));
       // Max match priority in this league
-      const maxScore = ordered.reduce((max, m) => Math.max(max, matchPriorityScore(m, favorites)), 0);
+      const maxScore = ordered.reduce(
+        (max, m) => Math.max(max, calculateFactualMatchPriority(m, favorites, regionalNationalTeamPriority)),
+        0
+      );
       const hasLiveInLeague = ordered.some(isLiveMatch);
+      const first = ordered[0];
 
       return {
-        title,
+        groupKey,
+        title: first?.competition || groupKey,
         data: ordered,
-        logo: ordered[0]?.competitionLogo,
-        country: ordered[0]?.country,
+        logo: first?.competitionLogo,
+        country: first?.country,
         priority: maxScore + (hasLiveInLeague ? 100 : 0),
       };
     });
@@ -631,14 +494,14 @@ export default function HomeScreen({
     rows.sort(
       (a, b) =>
         b.priority - a.priority ||
-        competitionWeight(b.title) - competitionWeight(a.title) ||
+        getFactualCompetitionWeight(b.data[0]) - getFactualCompetitionWeight(a.data[0]) ||
         a.title.localeCompare(b.title),
     );
 
     return rows.map((sec) => ({
       ...sec,
-      isExpanded: expandedLeagues.has(sec.title),
-      data: expandedLeagues.has(sec.title) ? sec.data : [],
+      isExpanded: expandedLeagues.has(sec.title) || expandedLeagues.has(sec.groupKey),
+      data: expandedLeagues.has(sec.title) || expandedLeagues.has(sec.groupKey) ? sec.data : [],
       totalCount: sec.data.length,
     }));
   }, [filteredMatches, favorites, expandedLeagues]);

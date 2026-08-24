@@ -234,13 +234,84 @@ export async function fetchMatchBundle(id){return settleBundle({detail:()=>fetch
 export const fetchCompetitionCatalog=(options)=>apiGet(`/competitions/catalog`,options);
 export const fetchCompetitionSeasons=(id,options)=>apiGetCached(`/competitions/${encodeURIComponent(id)}/seasons`,6*60*60_000,options);
 function seasonsFromPayload(payload){return extractArray(payload).map((value)=>Number(typeof value==="object"?(value?.year??value?.season):value)).filter((value)=>Number.isInteger(value)&&value>=1900&&value<=2200).sort((a,b)=>b-a);}
-async function resolveCompetitionSeason(id,preferred,options){const explicit=Number(preferred);if(Number.isInteger(explicit)&&explicit>=1900&&explicit<=2200)return explicit;const cached=competitionSeasonCache.get(String(id));if(cached?.season&&Date.now()-cached.fetchedAt<6*60*60_000)return cached.season;const seasonsPayload=await fetchCompetitionSeasons(id,options),season=seasonsFromPayload(seasonsPayload)[0];if(!season)throw new Error("Competition season is unavailable.");competitionSeasonCache.set(String(id),{season,fetchedAt:Date.now()});return season;}
-function seasonOptions(options={}){return{season:options?.season??options?.currentSeason??options?.latestSeason,signal:options?.signal};}
-export async function fetchCompetitionProfile(id,options={}){const o=seasonOptions(options),season=await resolveCompetitionSeason(id,o.season,{signal:o.signal});return apiGet(`/competitions/${encodeURIComponent(id)}/profile?season=${encodeURIComponent(season)}`,{signal:o.signal});}
-export async function fetchCompetitionMatches(id,options={}){const o=seasonOptions(options),season=await resolveCompetitionSeason(id,o.season,{signal:o.signal});return apiGet(`/competitions/${encodeURIComponent(id)}/matches?season=${encodeURIComponent(season)}`,{signal:o.signal});}
-export async function fetchCompetitionStandings(id,options={}){const o=seasonOptions(options),season=await resolveCompetitionSeason(id,o.season,{signal:o.signal});return apiGet(`/competitions/${encodeURIComponent(id)}/standings?season=${encodeURIComponent(season)}`,{signal:o.signal});}
-export async function fetchCompetitionTeams(id,options={}){const o=seasonOptions(options),season=await resolveCompetitionSeason(id,o.season,{signal:o.signal});return apiGet(`/competitions/${encodeURIComponent(id)}/teams?season=${encodeURIComponent(season)}`,{signal:o.signal});}
-export async function fetchCompetitionScorers(id,options={}){const o=seasonOptions(options),season=await resolveCompetitionSeason(id,o.season,{signal:o.signal});return apiGet(`/competitions/${encodeURIComponent(id)}/scorers?season=${encodeURIComponent(season)}`,{signal:o.signal});}
+async function resolveCompetitionSeason(id, preferred, options) {
+  const explicit = Number(preferred);
+  if (Number.isInteger(explicit) && explicit >= 1900 && explicit <= 2200) return explicit;
+  const cached = competitionSeasonCache.get(String(id));
+  if (cached?.season && Date.now() - cached.fetchedAt < 6 * 60 * 60_000) return cached.season;
+  const seasonsPayload = await fetchCompetitionSeasons(id, options).catch(() => null);
+  const seasons = seasonsFromPayload(seasonsPayload);
+  const season = seasons[0] || 2024;
+  competitionSeasonCache.set(String(id), { season, fetchedAt: Date.now() });
+  return season;
+}
+
+function seasonOptions(options = {}) {
+  return { season: options?.season ?? options?.currentSeason ?? options?.latestSeason, signal: options?.signal };
+}
+
+export async function fetchCompetitionProfile(id, options = {}) {
+  const o = seasonOptions(options);
+  const season = await resolveCompetitionSeason(id, o.season, { signal: o.signal });
+  return apiGet(`/competitions/${encodeURIComponent(id)}/profile?season=${encodeURIComponent(season)}`, { signal: o.signal });
+}
+
+export async function fetchCompetitionMatches(id, options = {}) {
+  const o = seasonOptions(options);
+  const season = await resolveCompetitionSeason(id, o.season, { signal: o.signal });
+  return apiGet(`/competitions/${encodeURIComponent(id)}/matches?season=${encodeURIComponent(season)}`, { signal: o.signal });
+}
+
+export async function fetchCompetitionStandings(id, options = {}) {
+  const o = seasonOptions(options);
+  if (o.season) {
+    return apiGet(`/competitions/${encodeURIComponent(id)}/standings?season=${encodeURIComponent(o.season)}`, { signal: o.signal });
+  }
+  const seasonsPayload = await fetchCompetitionSeasons(id, options).catch(() => null);
+  const seasons = seasonsFromPayload(seasonsPayload);
+  const candidates = seasons.length ? seasons.slice(0, 4) : [2026, 2025, 2024];
+
+  for (const s of candidates) {
+    try {
+      const res = await apiGet(`/competitions/${encodeURIComponent(id)}/standings?season=${encodeURIComponent(s)}`, { signal: o.signal });
+      const rows = normalizeStandings(res);
+      if (rows && rows.length > 0) {
+        competitionSeasonCache.set(String(id), { season: s, fetchedAt: Date.now() });
+        return res;
+      }
+    } catch (_) {}
+  }
+  const fallback = seasons[0] || 2024;
+  return apiGet(`/competitions/${encodeURIComponent(id)}/standings?season=${encodeURIComponent(fallback)}`, { signal: o.signal });
+}
+
+export async function fetchCompetitionTeams(id, options = {}) {
+  const o = seasonOptions(options);
+  if (o.season) {
+    return apiGet(`/competitions/${encodeURIComponent(id)}/teams?season=${encodeURIComponent(o.season)}`, { signal: o.signal });
+  }
+  const seasonsPayload = await fetchCompetitionSeasons(id, options).catch(() => null);
+  const seasons = seasonsFromPayload(seasonsPayload);
+  const candidates = seasons.length ? seasons.slice(0, 4) : [2026, 2025, 2024];
+
+  for (const s of candidates) {
+    try {
+      const res = await apiGet(`/competitions/${encodeURIComponent(id)}/teams?season=${encodeURIComponent(s)}`, { signal: o.signal });
+      const rows = normalizeTeams(res);
+      if (rows && rows.length > 0) {
+        return res;
+      }
+    } catch (_) {}
+  }
+  const fallback = seasons[0] || 2024;
+  return apiGet(`/competitions/${encodeURIComponent(id)}/teams?season=${encodeURIComponent(fallback)}`, { signal: o.signal });
+}
+
+export async function fetchCompetitionScorers(id, options = {}) {
+  const o = seasonOptions(options);
+  const season = await resolveCompetitionSeason(id, o.season, { signal: o.signal });
+  return apiGet(`/competitions/${encodeURIComponent(id)}/scorers?season=${encodeURIComponent(season)}`, { signal: o.signal });
+}
 
 export async function fetchCompetitionBundle(league){const id=resolveCompetitionId(league);if(!id)throw new Error("Competition ID is unavailable.");const seasons=await fetchCompetitionSeasons(id),season=await resolveCompetitionSeason(id,pick(league?.season,league?.currentSeason,league?.latestSeason));return settleBundle({profile:()=>fetchCompetitionProfile(id,{season}),standings:()=>fetchCompetitionStandings(id,{season}),matches:()=>fetchCompetitionMatches(id,{season}),teams:()=>fetchCompetitionTeams(id,{season}),scorers:()=>fetchCompetitionScorers(id,{season})},{id,season,seasons});}
 

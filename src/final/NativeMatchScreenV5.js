@@ -17,6 +17,13 @@ import {
   extractArray,
   fetchCompetitionStandings,
   fetchMatchBundle,
+  fetchMatchDetail,
+  fetchMatchEvents,
+  fetchMatchH2H,
+  fetchMatchInjuries,
+  fetchMatchLineups,
+  fetchMatchPlayers,
+  fetchMatchStatistics,
   fetchTeamMatches,
   isLiveMatch,
   normalizeFootballMatch,
@@ -1475,58 +1482,116 @@ export default function NativeMatchScreenV5({ match, goBack, language = "my" }) 
   const my = language !== "en";
   const [tab, setTab] = useState("FACTS");
   const [showAlerts, setShowAlerts] = useState(false);
-  const [state, setState] = useState({
-    loading: true,
-    data: null,
+  const [state, setState] = useState(() => ({
+    loading: false,
+    data: { detail: { match } },
     homeMatches: [],
     awayMatches: [],
     error: "",
-  });
+  }));
 
-  const load = useCallback(async () => {
+  const loadedTabsRef = useRef(new Set(["FACTS"]));
+
+  // 1. Primary match data (Score, Status, Minute, Timeline Events)
+  const loadPrimary = useCallback(async () => {
     if (!match?.id) return;
     try {
-      const bundle = await fetchMatchBundle(match.id);
-      const current = bundle?.detail?.match || match;
-      const [h, a] = await Promise.all([
-        current?.home?.id ? fetchTeamMatches(current.home.id).catch(() => null) : null,
-        current?.away?.id ? fetchTeamMatches(current.away.id).catch(() => null) : null,
+      const [detailRes, eventsRes] = await Promise.all([
+        fetchMatchDetail(match.id).catch(() => null),
+        fetchMatchEvents(match.id).catch(() => null),
       ]);
-
-      const cachedHome = current?.home ? findTeamMatchesFromFastCache(current.home) : [];
-      const cachedAway = current?.away ? findTeamMatchesFromFastCache(current.away) : [];
-
-      const mergeMatches = (remoteList, localList) => {
-        const seen = new Set();
-        const res = [];
-        for (const m of [...(remoteList || []), ...(localList || [])]) {
-          if (!m?.id || seen.has(String(m.id))) continue;
-          seen.add(String(m.id));
-          res.push(m);
-        }
-        return res;
-      };
-
-      const homeMatches = mergeMatches(normalizeTeamMatches(h), cachedHome);
-      const awayMatches = mergeMatches(normalizeTeamMatches(a), cachedAway);
-
-      setState({
-        loading: false,
-        data: bundle,
-        homeMatches,
-        awayMatches,
-        error: "",
+      setState((prev) => {
+        const freshDetail = detailRes?.match ? detailRes : prev.data?.detail || { match };
+        return {
+          ...prev,
+          data: {
+            ...(prev.data || {}),
+            detail: freshDetail,
+            events: eventsRes || prev.data?.events,
+          },
+        };
       });
-    } catch (e) {
-      setState((p) => ({ ...p, loading: false, error: e?.message || "Could not load match" }));
-    }
-  }, [match?.id]);
+    } catch (_) {}
+  }, [match?.id, match]);
 
+  // 2. Secondary Tab Data (Loaded ONLY on demand when user opens that tab)
+  const loadSecondaryTab = useCallback(async (targetTab) => {
+    if (!match?.id || loadedTabsRef.current.has(targetTab)) return;
+    loadedTabsRef.current.add(targetTab);
+
+    try {
+      if (targetTab === "LINEUP") {
+        const [lineups, players] = await Promise.all([
+          fetchMatchLineups(match.id).catch(() => null),
+          fetchMatchPlayers(match.id).catch(() => null),
+        ]);
+        setState((prev) => ({
+          ...prev,
+          data: { ...(prev.data || {}), lineups, players },
+        }));
+      } else if (targetTab === "STATS") {
+        const statistics = await fetchMatchStatistics(match.id).catch(() => null);
+        setState((prev) => ({
+          ...prev,
+          data: { ...(prev.data || {}), statistics },
+        }));
+      } else if (targetTab === "H2H") {
+        const current = state.data?.detail?.match || match;
+        const [h2h, h, a] = await Promise.all([
+          fetchMatchH2H(match.id).catch(() => null),
+          current?.home?.id ? fetchTeamMatches(current.home.id).catch(() => null) : null,
+          current?.away?.id ? fetchTeamMatches(current.away.id).catch(() => null) : null,
+        ]);
+
+        const cachedHome = current?.home ? findTeamMatchesFromFastCache(current.home) : [];
+        const cachedAway = current?.away ? findTeamMatchesFromFastCache(current.away) : [];
+
+        const mergeMatches = (remoteList, localList) => {
+          const seen = new Set();
+          const res = [];
+          for (const m of [...(remoteList || []), ...(localList || [])]) {
+            if (!m?.id || seen.has(String(m.id))) continue;
+            seen.add(String(m.id));
+            res.push(m);
+          }
+          return res;
+        };
+
+        const homeMatches = mergeMatches(normalizeTeamMatches(h), cachedHome);
+        const awayMatches = mergeMatches(normalizeTeamMatches(a), cachedAway);
+
+        setState((prev) => ({
+          ...prev,
+          data: { ...(prev.data || {}), h2h },
+          homeMatches,
+          awayMatches,
+        }));
+      }
+    } catch (_) {}
+  }, [match, state.data?.detail?.match]);
+
+  // Initial load: Primary data in background
   useEffect(() => {
-    load();
-    const timer = setInterval(load, 30000);
+    loadPrimary();
+  }, [loadPrimary]);
+
+  // When tab changes, lazy-load that tab's data
+  useEffect(() => {
+    loadSecondaryTab(tab);
+  }, [tab, loadSecondaryTab]);
+
+  // Live polling: Only poll primary live score/events every 30s (Never refetches static H2H)
+  useEffect(() => {
+    const current = state.data?.detail?.match || match;
+    const isLive = isLiveMatch(current);
+    const isToday = !finished(current);
+    if (!isLive && !isToday) return;
+
+    const timer = setInterval(() => {
+      loadPrimary();
+    }, 30000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [loadPrimary, match, state.data?.detail?.match]);
 
   // Tab switching helper with index awareness
   const currentTabIndex = TABS.indexOf(tab);
