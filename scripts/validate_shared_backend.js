@@ -13,6 +13,7 @@ function files(directory) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+const mstApiConfig = read("src/services/mstApiConfig.js");
 const account = read("src/services/accountApi.js");
 const accountScreen = read("src/final/AccountScreenV2.js");
 const predictionScreen = read("src/final/PredictionScreenV2.js");
@@ -28,6 +29,10 @@ const services = files(path.join(root, "src", "services"))
   .map((file) => ({ file, source: fs.readFileSync(file, "utf8") }));
 
 assert.equal(packageJson.dependencies["expo-secure-store"], "~15.0.8");
+assert.match(mstApiConfig, /MST_SITE_ORIGIN\s*=\s*"https:\/\/myanmarsportstalk\.com"/);
+assert.match(mstApiConfig, /MST_API_ORIGIN\s*=\s*"https:\/\/app-api\.myanmarsportstalk\.com"/);
+assert.match(mstApiConfig, /MST_API_BASE\s*=\s*`\$\{MST_API_ORIGIN\}\/api`/);
+assert.doesNotMatch(mstApiConfig, /https:\/\/myanmarsportstalk\.com\/api/);
 assert.match(account, /SecureStore\.getItemAsync\(AUTH_TOKEN_KEY\)/);
 assert.match(account, /LEGACY_AUTH_TOKEN_KEY/);
 assert.match(account, /AUTH_TOKEN_MIGRATION_KEY/);
@@ -70,6 +75,7 @@ assert.match(validationWorkflow, /pull_request:/);
 for (const { file, source } of services) {
   if (file.endsWith("mstApiConfig.js")) continue;
   assert.doesNotMatch(source, /https:\/\/myanmarsportstalk\.com\/api/, `${file} bypasses the canonical API config`);
+  assert.doesNotMatch(source, /https:\/\/app-api\.myanmarsportstalk\.com\/api/, `${file} bypasses the canonical API config`);
 }
 
 const clientSource = files(path.join(root, "src"))
