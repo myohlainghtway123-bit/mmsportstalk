@@ -1,7 +1,9 @@
 # MST Score shared-backend contract
 
-- Production origin: `https://myanmarsportstalk.com`
-- API base: `https://myanmarsportstalk.com/api`
+- Website origin: `https://myanmarsportstalk.com`
+- Mobile API origin: `https://app-api.myanmarsportstalk.com`
+- Mobile API base: `https://app-api.myanmarsportstalk.com/api`
+- The mobile API Worker is a thin gateway to the canonical MST backend through a Cloudflare Service Binding; business logic is not duplicated in the App or gateway.
 - Authentication: revocable MST session in SecureStore, sent by `Authorization: Bearer`; the server resolves the canonical profile UUID.
 - Profile, favorites, follows, predictions, leaderboard, tips, wallet, orders, notification preferences/history and push registrations are server resources. AsyncStorage is not authoritative for them.
 - Football and articles come only from MST endpoints. The App contains no D1 binding, Cloudflare credential or football-provider secret.
