@@ -50,5 +50,14 @@ jobs:
       - name: Validate shared backend boundary
         run: npm run validate:shared-backend
 
+      - name: Verify dedicated app API
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_ORIGIN='https://app-api.myanmarsportstalk.com'
+          health="$(curl -fsS --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$API_ORIGIN/health")"
+          node -e 'const p=JSON.parse(process.argv[1]); process.exit(p.service==="mst-app-api" && p.ok===true && p.upstreamStatus===200 ? 0 : 1)' "$health"
+          curl -fsS --retry 3 --retry-all-errors --retry-delay 2 --max-time 20 "$API_ORIGIN/api/content/articles" >/dev/null
+
       - name: Export Android application
         run: npm run validate:android
