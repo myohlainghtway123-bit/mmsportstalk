@@ -1312,27 +1312,22 @@ function ChatPanel({ matchId, match, my, colors }) {
         )}
       </View>
 
-      <FlatList
-        ref={listRef}
-        style={[styles.chatList, { borderColor: colors.border2 }]}
-        nestedScrollEnabled
-        data={loading ? [] : messages}
-        keyExtractor={(message) => String(message.id)}
-        ListHeaderComponent={hasMore ? (
+      <View style={[styles.chatList, { borderColor: colors.border2 }]}>
+        {hasMore ? (
           <Pressable disabled={loadingOlder} onPress={() => load({ silent: true, before: nextCursor })} style={{ paddingVertical: 10, alignItems: "center" }}>
             {loadingOlder ? <ActivityIndicator size="small" color={colors.red} /> : (
               <Text style={[styles.smallMuted, { color: colors.red }]}>{tx(my, "Load earlier messages", "အစောပိုင်း message များ ကြည့်ရန်")}</Text>
             )}
           </Pressable>
         ) : null}
-        ListEmptyComponent={loading ? (
+        {loading ? (
           <ActivityIndicator style={{ marginVertical: 25 }} color={colors.red} />
-        ) : (
+        ) : !messages.length ? (
           <Text style={[styles.empty, { color: colors.muted }]}>
             {tx(my, "Be the first to discuss this match.", "ဒီပွဲအတွက် ပထမဆုံး ဆွေးနွေးပါ။")}
           </Text>
-        )}
-        renderItem={({ item: m }) => (
+        ) : (
+          messages.map((m) => (
             <View key={m.id} style={[styles.chatMessage, { borderBottomColor: colors.border2 }]}>
               <View style={[styles.chatAvatar, { backgroundColor: colors.card2 }]}>
                 <Text style={[styles.chatInitial, { color: colors.text2 }]}>
@@ -1362,8 +1357,9 @@ function ChatPanel({ matchId, match, my, colors }) {
                 <Ionicons name="flag-outline" size={14} color={colors.muted2} />
               </Pressable>}
             </View>
+          ))
         )}
-      />
+      </View>
 
       {error ? <Text style={[styles.chatError, { color: colors.red }]}>{error}</Text> : null}
 
