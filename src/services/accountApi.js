@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import { persistAppLanguage, syncStoredOnboardingFavorites } from "./onboardingStore";
+import { syncStoredOnboardingFavorites } from "./onboardingStore";
 import { favoriteMetadata } from "./favoriteCatalog";
-import { MST_API_BASE, MST_SITE_ORIGIN } from "./mstApiConfig";
 import { getStoredDevicePushToken, setStoredDevicePushToken } from "./pushTokenStore";
 
+const API_BASE = "https://myanmarsportstalk.com/api";
 const AUTH_TOKEN_KEY = "mst.session.v1";
 const LEGACY_AUTH_TOKEN_KEY = "@mst_session_token";
 const AUTH_TOKEN_MIGRATION_KEY = "@mst_session_secure_store_migrated_v1";
@@ -77,49 +77,21 @@ async function api(path, { method = "GET", body, signal } = {}) {
     ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     ...(token ? {
       Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
     } : {}),
   };
 
-  const canRetry = method === "GET" || method === "HEAD";
-  for (let attempt = 0; attempt <= (canRetry ? 1 : 0); attempt += 1) {
-    const controller = new AbortController();
-    const abort = () => controller.abort();
-    if (signal?.aborted) controller.abort();
-    else signal?.addEventListener?.("abort", abort, { once: true });
-    const timeout = setTimeout(abort, 15000);
-    try {
-      const response = await fetch(`${MST_API_BASE}${path}`, {
-        method,
-        credentials: "include",
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-      const payload = await decodeResponse(response);
-      if (!response.ok) {
-        if (attempt === 0 && [408, 429, 502, 503].includes(response.status)) {
-          const retryAfter = Number(response.headers.get("Retry-After"));
-          const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 3000) : 500;
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-        throw new MstApiError(errorMessage(payload, `MST API request failed (${response.status})`), response.status, payload);
-      }
-      return payload;
-    } catch (error) {
-      if (error instanceof MstApiError) throw error;
-      if (attempt === 0 && canRetry && !signal?.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        continue;
-      }
-      if (controller.signal.aborted && !signal?.aborted) throw new MstApiError("MST request timed out. Try again.", 408);
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-      signal?.removeEventListener?.("abort", abort);
-    }
-  }
-  throw new MstApiError("MST request could not be completed.");
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    credentials: "include",
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
+  });
+  const payload = await decodeResponse(response);
+  if (!response.ok) throw new MstApiError(errorMessage(payload, `MST API request failed (${response.status})`), response.status, payload);
+  return payload;
 }
 
 export function normalizeAvatarUrl(url) {
@@ -127,8 +99,8 @@ export function normalizeAvatarUrl(url) {
   const clean = url.trim();
   if (!clean) return null;
   if (clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("data:")) return clean;
-  if (clean.startsWith("/")) return `${MST_SITE_ORIGIN}${clean}`;
-  return `${MST_SITE_ORIGIN}/${clean}`;
+  if (clean.startsWith("/")) return `${MST_SITE_URL}${clean}`;
+  return `${MST_SITE_URL}/${clean}`;
 }
 
 export function extractUser(payload) {
@@ -160,13 +132,12 @@ export function extractUser(payload) {
   return {
     ...raw,
     id: raw.id || raw.userId || raw._id,
-    username: raw.username || raw.displayName || raw.name || "",
     name: raw.name || raw.displayName || raw.username || (raw.email ? raw.email.split("@")[0] : "MST User"),
     displayName: raw.displayName || raw.name || raw.username || (raw.email ? raw.email.split("@")[0] : "MST User"),
     email: raw.email || "",
     avatar,
     avatarUrl: avatar,
-    points: raw.points ?? raw.predictionPoints ?? raw.score ?? null,
+    points: raw.points ?? raw.predictionPoints ?? raw.score ?? 0,
     role: raw.role || "user",
   };
 }
@@ -182,20 +153,11 @@ export async function getAuthStatus(options) {
   try {
     const payload = await api("/auth/status", options);
     const result = { authenticated: isAuthenticatedPayload(payload), user: extractUser(payload), payload };
-    if (result.authenticated) {
-      if (result.user?.preferredLanguage !== "my" && result.user?.preferredLanguage !== "en") {
-        const profilePayload = await api("/account/profile").catch(() => null);
-        result.user = extractUser(profilePayload) || result.user;
-      }
-      if (result.user?.preferredLanguage === "my" || result.user?.preferredLanguage === "en") {
-        persistAppLanguage(result.user.preferredLanguage).catch(() => {});
-      }
-      syncStoredOnboardingFavorites(setFavorite).catch(() => false);
-    }
+    if (result.authenticated) syncStoredOnboardingFavorites(setFavorite).catch(() => false);
     return result;
   } catch (error) {
     if (error instanceof MstApiError && error.status === 401) {
-      await setSessionToken(null).catch(() => {});
+      await setSessionToken(null);
       return { authenticated: false, user: null, payload: error.payload };
     }
     throw error;
@@ -223,6 +185,37 @@ export async function verifyEmailLogin(email, code) {
   return { payload, status };
 }
 
+export async function loginWithPassword(email, password) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const payload = await api("/auth/password/login", {
+    method: "POST",
+    body: { email: normalizedEmail, password: String(password || "") },
+  });
+  if (payload?.token) {
+    await setSessionToken(payload.token);
+  }
+  const status = await getAuthStatus().catch(() => null);
+  return { payload, status };
+}
+
+export async function getPasswordStatus() {
+  try {
+    return await api("/account/password", { method: "GET" });
+  } catch {
+    return { ok: false, hasPassword: false };
+  }
+}
+
+export async function setUserPassword({ newPassword, currentPassword }) {
+  return api("/account/password", {
+    method: "POST",
+    body: {
+      newPassword: String(newPassword || ""),
+      currentPassword: currentPassword ? String(currentPassword) : undefined,
+    },
+  });
+}
+
 export async function logout() {
   const pushToken = await getStoredDevicePushToken().catch(() => null);
   if (pushToken) {
@@ -230,8 +223,7 @@ export async function logout() {
       await api("/account/push-token", { method: "DELETE", body: { token: pushToken } });
       await setStoredDevicePushToken(null);
     } catch {
-      // The session logout remains authoritative; failed push tokens are also
-      // retired by the backend when the delivery provider rejects them.
+      // Session logout remains authoritative if push-token cleanup is unavailable.
     }
   }
 
@@ -248,15 +240,14 @@ export async function logout() {
 }
 
 export const getProfile = (options) => api("/account/profile", options);
-export const updateProfile = ({ username, displayName, preferredLanguage } = {}, options = {}) =>
+export const updateProfile = ({ displayName, preferredLanguage }, options) =>
   api("/account/profile", {
-    ...options,
     method: "PATCH",
     body: {
-      username: typeof username === "string" ? username.trim() : undefined,
       displayName: typeof displayName === "string" ? displayName.trim() : undefined,
       preferredLanguage: preferredLanguage || undefined,
     },
+    ...options,
   });
 export const getFavorites = (options) => api("/account/favorites", options);
 export const getAccountPredictions = (options) => api("/account/predictions", options);
@@ -266,46 +257,52 @@ export const getLeaderboard = (timeframe = "all", options) => {
   return api(`/predictions/leaderboard?timeframe=${encodeURIComponent(tf)}`, opts);
 };
 
-export async function uploadAvatar(input, { onProgress, signal } = {}) {
+export async function uploadAvatar(input) {
   const token = await getSessionToken();
-  if (!input?.uri) throw new MstApiError("Invalid image selection.");
-  const formData = new FormData();
-  formData.append("avatar", {
-    uri: input.uri,
-    name: input.name || "avatar.jpg",
-    type: input.contentType || input.mimeType || "image/jpeg",
-  });
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(token ? {
+      Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
+    } : {}),
+  };
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const abort = () => xhr.abort();
-    const cleanup = () => signal?.removeEventListener?.("abort", abort);
-    xhr.open("POST", `${MST_API_BASE}/account/avatar`);
-    xhr.timeout = 30000;
-    xhr.setRequestHeader("Accept", "application/json");
-    xhr.setRequestHeader("x-mst-client", "mobile-app");
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(Math.min(1, event.loaded / event.total));
-    };
-    xhr.onerror = () => { cleanup(); reject(new MstApiError("Avatar upload failed. Check your connection.")); };
-    xhr.ontimeout = () => { cleanup(); reject(new MstApiError("Avatar upload timed out. Try again.")); };
-    xhr.onabort = () => { cleanup(); reject(new MstApiError("Avatar upload cancelled.")); };
-    xhr.onload = () => {
-      cleanup();
-      let payload = null;
-      try { payload = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (_) { payload = { message: xhr.responseText }; }
-      if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new MstApiError(errorMessage(payload, `Avatar upload failed (${xhr.status})`), xhr.status, payload));
-        return;
-      }
-      const rawUrl = payload?.data?.avatarUrl || payload?.avatarUrl;
-      resolve({ ok: true, avatarUrl: normalizeAvatarUrl(rawUrl), payload });
-    };
-    if (signal?.aborted) return abort();
-    signal?.addEventListener?.("abort", abort, { once: true });
-    xhr.send(formData);
+  let body;
+  if (input?.base64) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({
+      base64: input.base64,
+      contentType: input.contentType || input.mimeType || "image/jpeg",
+    });
+  } else if (input?.uri) {
+    const formData = new FormData();
+    const uri = input.uri;
+    const name = uri.split("/").pop() || "avatar.jpg";
+    const match = /\.(\w+)$/.exec(name);
+    const type = input.contentType || (match ? `image/${match[1]}` : "image/jpeg");
+    formData.append("avatar", { uri, name, type });
+    body = formData;
+  } else {
+    throw new MstApiError("Invalid image selection.");
+  }
+
+  const response = await fetch(`${API_BASE}/account/avatar`, {
+    method: "POST",
+    headers,
+    body,
   });
+  const payload = await decodeResponse(response);
+  if (!response.ok) {
+    throw new MstApiError(errorMessage(payload, `Avatar upload failed (${response.status})`), response.status, payload);
+  }
+  const rawUrl = payload?.data?.avatarUrl || payload?.avatarUrl;
+  return {
+    ok: true,
+    avatarUrl: normalizeAvatarUrl(rawUrl),
+    payload,
+  };
 }
 
 export async function deleteAvatar() {
@@ -315,10 +312,12 @@ export async function deleteAvatar() {
     "x-mst-client": "mobile-app",
     ...(token ? {
       Authorization: `Bearer ${token}`,
+      "x-mst-session": token,
+      Cookie: `mst_user_session=${token}`,
     } : {}),
   };
 
-  const response = await fetch(`${MST_API_BASE}/account/avatar`, {
+  const response = await fetch(`${API_BASE}/account/avatar`, {
     method: "DELETE",
     headers,
   });
@@ -514,7 +513,7 @@ export function normalizeLeaderboard(payload) {
 }
 
 export const PREDICTION_SCORING = { exact: 3, correctOutcome: 1, wrong: 0 };
-export const MST_SITE_URL = MST_SITE_ORIGIN;
+export const MST_SITE_URL = "https://myanmarsportstalk.com";
 
 export async function submitSupportReport({ category, message, deviceInfo, matchId, email }) {
   return api("/account/support/report", {

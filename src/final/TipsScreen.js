@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,8 +19,8 @@ import {
   prefetchFastFootballMatches,
 } from "../services/fastFootballApi";
 import { getCreditPackages, purchaseCredits } from "../services/billingService";
-import { MST_SITE_ORIGIN } from "../services/mstApiConfig";
 import {
+  applyTipster,
   applyTipsterPartner,
   claimPartnerReferral,
   CREDIT_REFERENCE,
@@ -30,7 +29,10 @@ import {
   getTipsters,
   PARTNER_DEFAULTS,
   publishTip,
+  QUALIFICATION_RULES,
   requestTipsterPayout,
+  startTipsterQualification,
+  submitQualificationTip,
   TIP_PRICES,
   TIPSTER_LEVEL_FALLBACK,
   unlockTip,
@@ -406,6 +408,8 @@ function TipsterPanel({
   openAccount,
   my,
   matches,
+  onStartQualification,
+  onSubmitQualificationPick,
   onPublishTip,
   onRequestPayout,
   busy,
@@ -414,18 +418,8 @@ function TipsterPanel({
   const tipster = me?.tipster || {};
   const qualification = me?.qualification || {};
   const isApproved = tipster?.status === "approved";
-  // Tipster applications and confidential documents belong to the official
-  // website workflow. Legacy qualification data remains readable but the app
-  // never starts or submits an application.
-  const applicationStatus = tipster?.status === "submitted"
-    ? "SUBMITTED"
-    : tipster?.status === "pending" || tipster?.status === "under_review"
-    ? "UNDER REVIEW"
-    : tipster?.status === "rejected" || tipster?.status === "more_info"
-    ? "REJECTED / MORE INFORMATION REQUIRED"
-    : qualification?.status === "passed"
-    ? "SUBMITTED"
-    : "NOT APPLIED";
+  const isQualifying = qualification?.status === "active";
+  const canStart = qualification?.status === "not_started" || qualification?.canStart || !qualification?.status;
 
   const [selectedMatch, setSelectedMatch] = useState(matches[0]?.id || "");
   const [market, setMarket] = useState("1x2");
@@ -442,17 +436,17 @@ function TipsterPanel({
       <View style={[s.marketHero, { backgroundColor: colors.card, borderColor: isApproved ? colors.green : colors.red }]}>
         <View style={{ flex: 1 }}>
           <Text style={[s.eyebrow, { color: isApproved ? colors.green : colors.red }]}>
-            {isApproved ? "VERIFIED TIPSTER PROFILE" : `TIPSTER STATUS · ${applicationStatus}`}
+            {isApproved ? "VERIFIED TIPSTER PROFILE" : "TIPSTER QUALIFICATION GATE"}
           </Text>
           <Text style={[s.marketHeroTitle, { color: colors.text }]}>
             {isApproved
               ? `Level ${tipster.level || 1} · ${levelName(Number(tipster.level || 1), me)}`
-              : tx(my, "Apply through the official MST website", "Official MST Website မှ လျှောက်ထားပါ")}
+              : tx(my, "Prove 70% win rate to publish tips", "၇၀% အနိုင်ရလဒ်ပြသပြီး Tipster အဖြစ်တင်ပါ")}
           </Text>
           <Text style={[s.marketHeroSub, { color: colors.muted }]}>
             {isApproved
               ? `${tipster.wins || 0}W · ${tipster.losses || 0}L (${Number(tipster.winRate || 0).toFixed(1)}% Win Rate)`
-              : tx(my, "MST reviews applications and confidential documents securely on the website.", "လျှောက်လွှာနှင့် လျှို့ဝှက်စာရွက်စာတမ်းများကို Website တွင်သာ လုံခြုံစွာ စစ်ဆေးပါသည်။")}
+              : tx(my, "10 real match picks · 7 wins required · Anti-fraud verification", "ပွဲ ၁၀ ပွဲရွေးချယ်မှုမှ ၇ ပွဲနိုင်ရမည်")}
           </Text>
         </View>
         <Ionicons
@@ -472,22 +466,149 @@ function TipsterPanel({
       {authenticated && !isApproved ? (
         <View style={[s.formCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[s.formTitle, { color: colors.text }]}>
-            {tx(my, `Application Status: ${applicationStatus}`, `လျှောက်လွှာအခြေအနေ: ${applicationStatus}`)}
+            {tx(my, "Qualification Progress", "Tipster အရည်အချင်းစစ်ဆေးမှု")}
           </Text>
           <Text style={[s.formSub, { color: colors.muted }]}>
             {tx(
               my,
-              "Application and confidential document upload stay on the official website. Approval is granted only by the MST backend.",
-              "လျှောက်လွှာနှင့် လျှို့ဝှက်စာရွက်စာတမ်းများကို Official Website တွင်သာ တင်ပါ။ MST Backend မှသာ အတည်ပြုနိုင်သည်။",
+              "Submit 10 match picks. Reach at least 7 verified wins to gain permanent publishing rights and earn MST Credits.",
+              "ပွဲ ၁၀ ပွဲ ခန့်မှန်းရွေးချယ်ပါ။ ၇ ပွဲအနိုင်ရရှိပါက Tips ရောင်းချခွင့် ရရှိပါမည်။",
             )}
           </Text>
 
-          <Pressable
-            style={[s.primary, { backgroundColor: colors.red }]}
-            onPress={() => Linking.openURL(`${MST_SITE_ORIGIN}/tipsters/apply`).catch(() => {})}
-          >
-            <Text style={s.primaryText}>{tx(my, "APPLY TO BECOME AN MST TIPSTER", "MST TIPSTER ဖြစ်ရန် လျှောက်ထားမည်")}</Text>
-          </Pressable>
+          {isQualifying ? (
+            <View style={{ marginBottom: 12 }}>
+              <View style={[s.tipMeta, { marginBottom: 6 }]}>
+                <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                  <Text style={[s.metaLabel, { color: colors.muted }]}>SUBMITTED</Text>
+                  <Text style={[s.metaValue, { color: colors.text }]}>{qualification.submitted || 0}/10</Text>
+                </View>
+                <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                  <Text style={[s.metaLabel, { color: colors.muted }]}>WINS</Text>
+                  <Text style={[s.metaValue, { color: colors.green }]}>{qualification.wins || 0}W</Text>
+                </View>
+                <View style={[s.metaItem, { backgroundColor: colors.panel }]}>
+                  <Text style={[s.metaLabel, { color: colors.muted }]}>LOSSES</Text>
+                  <Text style={[s.metaValue, { color: colors.red }]}>{qualification.losses || 0}L</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {canStart && !isQualifying ? (
+            <Pressable
+              disabled={busy === "startQual"}
+              style={[s.primary, { backgroundColor: colors.red }, busy === "startQual" && s.disabled]}
+              onPress={onStartQualification}
+            >
+              {busy === "startQual" ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={s.primaryText}>{tx(my, "START 10-MATCH QUALIFICATION", "အရည်အချင်းစစ်ဆေးမှု စတင်မည်")}</Text>
+              )}
+            </Pressable>
+          ) : null}
+
+          {/* Qualification Pick Form */}
+          {isQualifying && matches.length > 0 ? (
+            <View style={{ marginTop: 10 }}>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Select Upcoming Match", "ပွဲ ရွေးချယ်ပါ")}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                {matches.slice(0, 10).map((m) => {
+                  const isSel = String(m.id) === String(selectedMatch);
+                  return (
+                    <Pressable
+                      key={m.id}
+                      style={[
+                        s.metaItem,
+                        { backgroundColor: isSel ? colors.redSoft : colors.panel, marginRight: 8, minWidth: 140 },
+                        isSel && { borderColor: colors.red, borderWidth: 1 },
+                      ]}
+                      onPress={() => setSelectedMatch(m.id)}
+                    >
+                      <Text numberOfLines={1} style={[s.metaLabel, { color: isSel ? colors.red : colors.muted }]}>
+                        {m.competition || "Match"}
+                      </Text>
+                      <Text numberOfLines={1} style={[s.metaValue, { color: colors.text, fontSize: 9.5 }]}>
+                        {m.home?.name} v {m.away?.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Market Choices */}
+              <Text style={[s.sectionTitle, { color: colors.text }]}>{tx(my, "Select Market & Pick", "Market နှင့် ရွေးချယ်မှု")}</Text>
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+                {Object.keys(MARKETS).map((mk) => (
+                  <Pressable
+                    key={mk}
+                    style={[
+                      s.tab,
+                      { paddingVertical: 6, backgroundColor: market === mk ? colors.redSoft : colors.panel },
+                      market === mk && { borderColor: colors.red, borderWidth: 1 },
+                    ]}
+                    onPress={() => {
+                      setMarket(mk);
+                      setSelection(MARKETS[mk].selections[0][0]);
+                    }}
+                  >
+                    <Text style={[s.tabText, { color: market === mk ? colors.red : colors.muted }]}>{MARKETS[mk].label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Selections */}
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 10 }}>
+                {MARKETS[market]?.selections?.map(([val, label]) => (
+                  <Pressable
+                    key={val}
+                    style={[
+                      s.tab,
+                      { paddingVertical: 8, backgroundColor: selection === val ? colors.red : colors.card2 },
+                    ]}
+                    onPress={() => setSelection(val)}
+                  >
+                    <Text style={[s.tabText, { color: selection === val ? "#FFFFFF" : colors.text }]}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Analysis */}
+              <TextInput
+                value={analysis}
+                onChangeText={setAnalysis}
+                placeholder={my ? "သုံးသပ်ချက် အကျဉ်း ရေးသားပါ (အနည်းဆုံး စကားလုံး ၅ လုံး)..." : "Write brief tipster analysis..."}
+                placeholderTextColor={colors.muted2}
+                multiline
+                numberOfLines={3}
+                style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text, height: 70, textAlignVertical: "top", paddingTop: 8 }]}
+              />
+
+              <Pressable
+                disabled={busy === "submitQual" || !analysis.trim()}
+                style={[s.primary, { backgroundColor: colors.red }, (busy === "submitQual" || !analysis.trim()) && s.disabled]}
+                onPress={() =>
+                  onSubmitQualificationPick?.({
+                    matchId: currentMatch?.id,
+                    competition: currentMatch?.competition,
+                    homeTeam: currentMatch?.home?.name,
+                    awayTeam: currentMatch?.away?.name,
+                    kickoff: currentMatch?.kickoff,
+                    market,
+                    selection,
+                    analysis,
+                  })
+                }
+              >
+                {busy === "submitQual" ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={s.primaryText}>{tx(my, "SUBMIT QUALIFICATION PICK", "အရည်အချင်းစစ် ပွဲတင်မည်")}</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -813,10 +934,14 @@ export default function TipsScreen({ language = "my", openAccount }) {
         setTipsters(Array.isArray(tipsterData) ? tipsterData : []);
         setMe(meData);
         setCreditPackages(Array.isArray(packageData) ? packageData : []);
-        // Only an approved Tipster needs match data for server-authorized tips.
+        // Public Tips browsing does not need four days of fixtures. Load them
+        // only for signed-in qualification/tipster workflows that consume them.
         const needsMatches = Boolean(
           a.authenticated &&
-            meData?.tipster?.status === "approved",
+            (meData?.tipster?.status === "approved" ||
+              meData?.qualification?.status === "active" ||
+              meData?.qualification?.status === "not_started" ||
+              meData?.qualification?.canStart),
         );
         if (needsMatches) await loadMatches(refresh);
       } catch (e) {
@@ -868,6 +993,22 @@ export default function TipsScreen({ language = "my", openAccount }) {
         return result;
       },
       `Purchased Credits successfully · Balance updated.`,
+    );
+  };
+
+  const doStartQualification = () => {
+    return action(
+      "startQual",
+      () => startTipsterQualification(),
+      "Qualification started! Submit 10 match picks with at least 7 wins.",
+    );
+  };
+
+  const doSubmitQualificationPick = (input) => {
+    return action(
+      "submitQual",
+      () => submitQualificationTip(input),
+      "Qualification pick submitted successfully!",
     );
   };
 
@@ -1020,6 +1161,8 @@ export default function TipsScreen({ language = "my", openAccount }) {
             openAccount={openAccount}
             my={my}
             matches={matches}
+            onStartQualification={doStartQualification}
+            onSubmitQualificationPick={doSubmitQualificationPick}
             onPublishTip={doPublishTip}
             onRequestPayout={doRequestPayout}
             busy={busy}

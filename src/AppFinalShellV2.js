@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "./final/HomeScreen";
@@ -87,6 +87,9 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
   const [returnMode, setReturnMode] = useState("home");
   const [language, setLanguageState] = useState(initialLanguage === "en" ? "en" : "my");
   const historyRef = useRef([]);
+  const modeRef = useRef(mode);
+  const handledNotificationResponsesRef = useRef(new Set());
+  modeRef.current = mode;
 
   const setLanguage = (lang) => {
     setLanguageState(lang);
@@ -98,12 +101,12 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
     return returnMode || "home";
   };
 
-  const goRoot = (next = "home") => {
+  const goRoot = useCallback((next = "home") => {
     historyRef.current = [];
     setSelected(null);
     setReturnMode("home");
     setMode(next || "home");
-  };
+  }, []);
 
   const pushMode = (next, origin) => {
     const from = typeof origin === "string" ? origin : rememberOrigin();
@@ -132,9 +135,9 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
     setMode("entity");
   };
 
-  const openArticle = (article) => {
+  const openArticle = (article, origin) => {
     if (!article) return;
-    const current = rememberOrigin();
+    const current = typeof origin === "string" ? origin : rememberOrigin();
     const from = current.startsWith("content-") ? current : "content-news";
     historyRef.current.push(from);
     setReturnMode(from);
@@ -159,6 +162,26 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
     else goRoot(target);
   };
 
+  // Home stays mounted while subpages are open. Stable callbacks let its memoized
+  // list avoid a broad rerender when only navigation state changes.
+  const openHomeMatch = useCallback((match) => {
+    if (!match) return;
+    historyRef.current.push("home");
+    setReturnMode("home");
+    setSelected(match);
+    setMode("match");
+  }, []);
+  const pushFromHome = useCallback((next) => {
+    historyRef.current.push("home");
+    setReturnMode("home");
+    setMode(next);
+  }, []);
+  const openHomeNotifications = useCallback(() => pushFromHome("notifications"), [pushFromHome]);
+  const openHomeSearch = useCallback(() => pushFromHome("search"), [pushFromHome]);
+  const openHomeAccount = useCallback(() => pushFromHome("account"), [pushFromHome]);
+  const openHomePredictions = useCallback(() => goRoot("prediction"), [goRoot]);
+  const openHomeFavorites = useCallback(() => goRoot("favorites"), [goRoot]);
+
   const isContent = mode.startsWith("content-");
   const contentTab = mode === "content-videos" ? "VIDEOS" : mode === "content-transfers" ? "TRANSFERS" : "NEWS";
   const isSubpage = ["account", "notifications", "settings", "about", "match", "entity", "article", "search"].includes(mode);
@@ -172,12 +195,12 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
       try {
         const matchDeep = url.match(/mst:\/\/(?:match|fixture)\/(\d+)/i) || url.match(/[?&]matchId=(\d+)/i);
         if (matchDeep && matchDeep[1]) {
-          openMatch({ id: String(matchDeep[1]) }, mode);
+          openMatch({ id: String(matchDeep[1]) }, modeRef.current);
           return;
         }
         const articleDeep = url.match(/mst:\/\/article\/([a-zA-Z0-9_-]+)/i);
         if (articleDeep && articleDeep[1]) {
-          openArticle({ slug: articleDeep[1], id: articleDeep[1] });
+          openArticle({ slug: articleDeep[1], id: articleDeep[1] }, modeRef.current);
           return;
         }
       } catch {}
@@ -186,7 +209,7 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
     Linking.getInitialURL().then(handleUrl).catch(() => {});
     const sub = Linking.addEventListener("url", handleUrl);
     return () => sub.remove();
-  }, [mode]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -195,17 +218,27 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
       const data = response?.notification?.request?.content?.data;
       if (!data || typeof data !== "object") return;
       const matchId = data.matchId || data.match_id || data.fixtureId;
+      const articleSlug = data.slug || data.articleSlug || data.articleId;
+      const target = matchId ? `match:${matchId}` : articleSlug ? `article:${articleSlug}` : data.type === "account" ? "account" : "";
+      if (!target) return;
+      const identifier = String(response?.notification?.request?.identifier || "notification");
+      const responseKey = `${identifier}:${target}`;
+      if (handledNotificationResponsesRef.current.has(responseKey)) return;
+      handledNotificationResponsesRef.current.add(responseKey);
+      if (handledNotificationResponsesRef.current.size > 20) {
+        const oldest = handledNotificationResponsesRef.current.values().next().value;
+        handledNotificationResponsesRef.current.delete(oldest);
+      }
       if (matchId) {
-        openMatch({ id: String(matchId) }, mode);
+        openMatch({ id: String(matchId) }, modeRef.current);
         return;
       }
-      const articleSlug = data.slug || data.articleSlug || data.articleId;
       if (articleSlug) {
-        openArticle({ slug: String(articleSlug), id: String(articleSlug) });
+        openArticle({ slug: String(articleSlug), id: String(articleSlug) }, modeRef.current);
         return;
       }
       if (data.type === "account") {
-        openAccount(mode);
+        openAccount(modeRef.current);
       }
     };
 
@@ -223,7 +256,7 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
     } catch {
       return () => { active = false; };
     }
-  }, [mode]);
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
@@ -244,12 +277,19 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
   const [showRatingPrompt, setShowRatingPrompt] = useState(false);
 
   useEffect(() => {
+    let active = true;
+    let timer = null;
     recordAppLaunch().then(() => {
-      setTimeout(async () => {
+      if (!active) return;
+      timer = setTimeout(async () => {
         const should = await shouldShowAppRatingPrompt();
-        if (should) setShowRatingPrompt(true);
+        if (active && should) setShowRatingPrompt(true);
       }, 3500);
     });
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const onRateNowPress = async () => {
@@ -270,7 +310,22 @@ function AppFinalShellV2Inner({ initialLanguage = "my", onLanguageChange } = {})
   return <View style={[s.root, { backgroundColor: colors.bg }]}>
     <StatusBar barStyle={colors.barStyle} backgroundColor={colors.bg}/>
     <View style={[s.body, Platform.OS === "android" ? {paddingTop:androidInset} : null]}>
-      {mode === "home" ? <HomeScreen language={language} openMatch={(x) => openMatch(x, "home")} openNotifications={() => openNotifications("home")} openSearch={() => openSearch("home")} openPredictions={() => goRoot("prediction")} openAccount={() => openAccount("home")} openFavorites={() => goRoot("favorites")}/> : null}
+      <View
+        style={mode === "home" ? s.screen : s.hiddenScreen}
+        pointerEvents={mode === "home" ? "auto" : "none"}
+        accessibilityElementsHidden={mode !== "home"}
+        importantForAccessibility={mode === "home" ? "auto" : "no-hide-descendants"}
+      >
+        <HomeScreen
+          language={language}
+          openMatch={openHomeMatch}
+          openNotifications={openHomeNotifications}
+          openSearch={openHomeSearch}
+          openPredictions={openHomePredictions}
+          openAccount={openHomeAccount}
+          openFavorites={openHomeFavorites}
+        />
+      </View>
       {isContent ? <LazyContent language={language} initialTab={contentTab} onLiveScores={goHome} onOpenArticle={openArticle} onNotifications={() => openNotifications(mode)} onSearch={() => openSearch(mode)}/> : null}
       {mode === "scores" ? <LazyScores language={language} openMatch={(x) => openMatch(x, "scores")}/> : null}
       {mode === "favorites" ? <LazyFavorites language={language} openLeague={(x) => openEntity("competition", x, "favorites")} openTeam={(x) => openEntity("team", x, "favorites")} openPlayer={(x) => openEntity("player", x, "favorites")} openAccount={() => openAccount("favorites")}/> : null}
@@ -335,7 +390,7 @@ export default function AppFinalShellV2(props) {
 }
 
 const s = StyleSheet.create({
-  root:{flex:1},body:{flex:1},screen:{flex:1},
+  root:{flex:1},body:{flex:1},screen:{flex:1},hiddenScreen:{display:"none"},
   bottomNav:{height:66,borderTopWidth:1,flexDirection:"row",paddingTop:5,paddingBottom:4},navItem:{flex:1,alignItems:"center",justifyContent:"center",gap:3,paddingHorizontal:1},navText:{fontSize:8},navTextActive:{fontWeight:"800"},
   header:{minHeight:70,paddingHorizontal:18,flexDirection:"row",alignItems:"center",justifyContent:"space-between",borderBottomWidth:1},title:{fontSize:22,fontWeight:"800"},subtitle:{fontSize:11,marginTop:3},content:{padding:16,paddingBottom:36},
   languageRow:{minHeight:72,borderWidth:1,borderRadius:12,padding:12,marginBottom:12,flexDirection:"row",alignItems:"center",gap:12},languageTitle:{fontSize:13,fontWeight:"800"},languageSub:{fontSize:9.5,marginTop:3,maxWidth:200},langToggle:{marginLeft:"auto",flexDirection:"row",borderRadius:9,padding:3},langButton:{minWidth:50,height:32,borderRadius:7,alignItems:"center",justifyContent:"center",paddingHorizontal:8},langText:{fontSize:10,fontWeight:"900"},

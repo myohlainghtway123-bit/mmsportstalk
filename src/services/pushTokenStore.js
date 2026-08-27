@@ -9,4 +9,3 @@ export async function setStoredDevicePushToken(token) {
   if (clean) await SecureStore.setItemAsync(DEVICE_PUSH_TOKEN_KEY, clean);
   else await SecureStore.deleteItemAsync(DEVICE_PUSH_TOKEN_KEY);
 }
-

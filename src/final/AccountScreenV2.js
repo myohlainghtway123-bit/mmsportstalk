@@ -14,20 +14,21 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { useTheme } from "../theme/ThemeContext";
 import {
   deleteAvatar,
   extractUser,
   getAccountPredictions,
   getAuthStatus,
+  getPasswordStatus,
   getProfile,
+  loginWithPassword,
   logout,
   MST_SITE_URL,
-  normalizePredictionPayload,
   normalizeAvatarUrl,
+  normalizePredictionPayload,
+  setUserPassword,
   startEmailLogin,
-  updateProfile,
   uploadAvatar,
   verifyEmailLogin,
 } from "../services/accountApi";
@@ -38,31 +39,15 @@ function predictionPointsFrom(payload) {
     return Number(summaryPoints);
   }
   if (!payload) return null;
-  return normalizePredictionPayload(payload).reduce((total, prediction) => total + (Number(prediction.points) || 0), 0);
-}
-
-async function prepareAvatar(asset) {
-  if (!asset?.uri || (asset.type && asset.type !== "image")) throw new Error("Choose a valid image.");
-  if (asset.mimeType && !["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType)) {
-    throw new Error("Use a JPG, PNG or WebP image.");
-  }
-  if (Number(asset.fileSize || 0) > 12 * 1024 * 1024) throw new Error("Choose an image smaller than 12 MB.");
-  if (!Number(asset.width) || !Number(asset.height)) throw new Error("The selected image dimensions are invalid.");
-  const context = ImageManipulator.manipulate(asset.uri);
-  if (Math.max(asset.width, asset.height) > 1024) {
-    if (asset.width >= asset.height) context.resize({ width: 1024, height: null });
-    else context.resize({ width: null, height: 1024 });
-  }
-  const rendered = await context.renderAsync();
-  const output = await rendered.saveAsync({ compress: 0.82, format: SaveFormat.JPEG });
-  return { uri: output.uri, name: "avatar.jpg", contentType: "image/jpeg" };
+  return normalizePredictionPayload(payload).reduce(
+    (total, prediction) => total + (Number(prediction.points) || 0),
+    0,
+  );
 }
 
 function profileFrom(payload, user, predictionPoints = null) {
   const parsed = extractUser(payload) || extractUser(user) || {};
   return {
-    id: parsed.id || null,
-    username: parsed.username || parsed.displayName || parsed.name || "MST User",
     name: parsed.name || parsed.displayName || "MST User",
     email: parsed.email || "",
     avatar: parsed.avatar || parsed.avatarUrl || null,
@@ -73,14 +58,16 @@ function profileFrom(payload, user, predictionPoints = null) {
 
 function LoginPanel({ onSignedIn, colors, language = "my" }) {
   const my = language === "my";
+  const [loginMethod, setLoginMethod] = useState("code"); // "code" | "password"
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState("email");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const send = async () => {
+  const sendCode = async () => {
     const clean = email.trim().toLowerCase();
     if (!clean || !clean.includes("@")) {
       setError(my ? "မှန်ကန်သော အီးမေးလ် ထည့်သွင်းပါ" : "Enter a valid email address.");
@@ -101,7 +88,7 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
     }
   };
 
-  const verify = async () => {
+  const verifyCode = async () => {
     if (!code.trim()) {
       setError(my ? "အတည်ပြုကုဒ် ထည့်ပါ" : "Enter the verification code.");
       return;
@@ -123,7 +110,7 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
     }
   };
 
-  const resend = async () => {
+  const resendCode = async () => {
     setBusy(true);
     setError("");
     setMessage("");
@@ -133,6 +120,33 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
       setMessage(my ? "အတည်ပြုကုဒ်အသစ် ပို့ပြီးပါပြီ။ နောက်ဆုံး Email ကို စစ်ဆေးပါ။" : "A new verification code was sent. Use the newest email.");
     } catch (e) {
       setError(e?.message || (my ? "ကုဒ်အသစ်ပို့၍ မရသေးပါ။ ခဏနေ ပြန်စမ်းပါ။" : "Could not send a new code yet. Try again shortly."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePasswordLogin = async () => {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !clean.includes("@")) {
+      setError(my ? "မှန်ကန်သော အီးမေးလ် ထည့်သွင်းပါ" : "Enter a valid email address.");
+      return;
+    }
+    if (!password) {
+      setError(my ? "စကားဝှက် ထည့်သွင်းပါ" : "Enter your password.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await loginWithPassword(clean, password);
+      if (!result?.status?.authenticated && !result?.payload?.token) {
+        throw new Error(my ? "အီးမေးလ် သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်" : "Invalid email or password.");
+      }
+      setMessage(my ? "MST အကောင့်ဝင်ပြီးပါပြီ။" : "Signed in to your MST account.");
+      await onSignedIn?.();
+    } catch (e) {
+      setError(e?.message || (my ? "အီးမေးလ် သို့မဟုတ် စကားဝှက် မှားယွင်းနေပါသည်" : "Invalid email or password."));
     } finally {
       setBusy(false);
     }
@@ -151,17 +165,49 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
           ? "myanmarsportstalk.com တွင်သုံးသော Email ဖြင့် အကောင့်တူတူ သုံးနိုင်ပါသည်။ Favorites နှင့် Predictions အားလုံး ချိတ်ဆက်ပါမည်။"
           : "Use the same email as myanmarsportstalk.com. Your Favorites and Predictions stay in one account."}
       </Text>
+
+      {/* Login Mode Selector Tabs */}
+      <View style={[s.modeToggleWrap, { backgroundColor: colors.panel }]}>
+        <Pressable
+          style={[s.modeToggleBtn, loginMethod === "code" && { backgroundColor: colors.card }]}
+          onPress={() => {
+            setLoginMethod("code");
+            setError("");
+            setMessage("");
+          }}
+        >
+          <Ionicons name="mail-outline" size={14} color={loginMethod === "code" ? colors.red : colors.muted} />
+          <Text style={[s.modeToggleText, { color: loginMethod === "code" ? colors.red : colors.muted }]}>
+            {my ? "အီးမေးလ်ကုဒ် (OTP)" : "Email Code"}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[s.modeToggleBtn, loginMethod === "password" && { backgroundColor: colors.card }]}
+          onPress={() => {
+            setLoginMethod("password");
+            setError("");
+            setMessage("");
+          }}
+        >
+          <Ionicons name="key-outline" size={14} color={loginMethod === "password" ? colors.red : colors.muted} />
+          <Text style={[s.modeToggleText, { color: loginMethod === "password" ? colors.red : colors.muted }]}>
+            {my ? "စကားဝှက် (Password)" : "Password"}
+          </Text>
+        </Pressable>
+      </View>
+
       <TextInput
         value={email}
         onChangeText={setEmail}
-        editable={!busy && step === "email"}
+        editable={!busy && (loginMethod === "password" || step === "email")}
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder={my ? "အီးမေးလ်လိပ်စာ" : "Email address"}
         placeholderTextColor={colors.muted}
         style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
       />
-      {step === "code" ? (
+
+      {loginMethod === "code" && step === "code" ? (
         <TextInput
           value={code}
           onChangeText={setCode}
@@ -173,22 +219,50 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
           style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
         />
       ) : null}
+
+      {loginMethod === "password" ? (
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          editable={!busy}
+          autoCapitalize="none"
+          secureTextEntry
+          placeholder={my ? "စကားဝှက်" : "Password"}
+          placeholderTextColor={colors.muted}
+          style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
+        />
+      ) : null}
+
       {message ? <Text style={[s.success, { color: colors.green }]}>{message}</Text> : null}
       {error ? <Text style={[s.error, { color: colors.red }]}>{error}</Text> : null}
+
       <Pressable
         disabled={busy}
         style={[s.primary, { backgroundColor: colors.red }, busy && { opacity: 0.55 }]}
-        onPress={step === "email" ? send : verify}
+        onPress={() => {
+          if (loginMethod === "password") {
+            handlePasswordLogin();
+          } else {
+            step === "email" ? sendCode() : verifyCode();
+          }
+        }}
       >
         {busy ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
-          <Text style={s.primaryText}>{step === "email" ? (my ? "ကုဒ်ပို့ပါ" : "SEND CODE") : (my ? "အတည်ပြု၍ ဝင်မည်" : "VERIFY & SIGN IN")}</Text>
+          <Text style={s.primaryText}>
+            {loginMethod === "password"
+              ? (my ? "စကားဝှက်ဖြင့် ဝင်မည်" : "SIGN IN WITH PASSWORD")
+              : step === "email"
+              ? (my ? "ကုဒ်ပို့ပါ" : "SEND CODE")
+              : (my ? "အတည်ပြု၍ ဝင်မည်" : "VERIFY & SIGN IN")}
+          </Text>
         )}
       </Pressable>
-      {step === "code" ? (
+
+      {loginMethod === "code" && step === "code" ? (
         <>
-          <Pressable disabled={busy} onPress={resend}>
+          <Pressable disabled={busy} onPress={resendCode}>
             <Text style={[s.textButton, { color: colors.red }]}>
               {my ? "ကုဒ်အသစ် တောင်းမည်" : "REQUEST NEW CODE"}
             </Text>
@@ -208,6 +282,7 @@ function LoginPanel({ onSignedIn, colors, language = "my" }) {
           </Pressable>
         </>
       ) : null}
+
       <Pressable onPress={() => Linking.openURL(`${MST_SITE_URL}/login`).catch(() => {})}>
         <Text style={[s.webLink, { color: colors.muted }]}>
           {my ? "MST ဝဘ်ဆိုက်မှ ဝင်မည်" : "Open MST website login"}
@@ -250,11 +325,16 @@ export default function AccountScreenV2({
   const [signingOut, setSigningOut] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
-  const [avatarProgress, setAvatarProgress] = useState(0);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [username, setUsername] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileError, setProfileError] = useState("");
+
+  // Password Management State
+  const [hasPassword, setHasPassword] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -263,15 +343,18 @@ export default function AccountScreenV2({
       const status = await getAuthStatus();
       setAuth(status);
       if (status.authenticated) {
-        const [payload, predictions] = await Promise.all([
+        const [payload, pwStatus, predictions] = await Promise.all([
           getProfile().catch(() => null),
+          getPasswordStatus().catch(() => ({ hasPassword: false })),
           getAccountPredictions().catch(() => null),
         ]);
         const resolved = profileFrom(payload, status.user, predictionPointsFrom(predictions));
         setProfile(resolved);
+        setHasPassword(Boolean(pwStatus?.hasPassword));
         onProfileUpdated?.(resolved);
       } else {
         setProfile(null);
+        setHasPassword(false);
         onProfileUpdated?.(null);
       }
     } catch (e) {
@@ -302,68 +385,43 @@ export default function AccountScreenV2({
     }
   };
 
-  const openProfileEditor = () => {
-    setUsername(profile?.username || profile?.name || "");
-    setProfileError("");
-    setShowProfileModal(true);
-  };
+  const handleSavePassword = async () => {
+    setPasswordError("");
+    setPasswordSuccess("");
 
-  const saveProfile = async () => {
-    if (profileSaving) return;
-    const clean = username.normalize("NFKC").trim().replace(/\s+/g, " ");
-    const length = Array.from(clean).length;
-    if (length < 3 || length > 32) {
-      setProfileError(my ? "Username သည် စာလုံး ၃ မှ ၃၂ လုံး ဖြစ်ရမည်။" : "Username must be 3–32 characters.");
+    if (newPassword.length < 12) {
+      setPasswordError(my ? "စကားဝှက်သည် အနည်းဆုံး ၁၂ လုံး ဖြစ်ရပါမည်" : "Password must be at least 12 characters.");
       return;
     }
-    setProfileSaving(true);
-    setProfileError("");
-    try {
-      const payload = await updateProfile({ username: clean });
-      const saved = extractUser(payload);
-      if (!saved) throw new Error(my ? "Profile response မမှန်ပါ။" : "The profile response was invalid.");
-      const next = {
-        ...(profile || {}),
-        id: saved.id || profile?.id,
-        username: saved.username || clean,
-        name: saved.displayName || saved.username || clean,
-      };
-      setProfile(next);
-      setAuth((current) => ({ ...current, user: { ...(current.user || {}), ...saved } }));
-      onProfileUpdated?.(next);
-      setShowProfileModal(false);
-      await load();
-    } catch (err) {
-      setProfileError(err?.message || (my ? "Username မပြောင်းနိုင်ပါ။" : "Could not update username."));
-    } finally {
-      setProfileSaving(false);
+    if (!/[A-Za-z\p{L}]/u.test(newPassword) || !/\d/u.test(newPassword)) {
+      setPasswordError(my ? "စကားဝှက်တွင် စာလုံးနှင့် ဂဏန်း ပါဝင်ရပါမည်" : "Password must contain a letter and a number.");
+      return;
     }
-  };
+    if (newPassword !== confirmPassword) {
+      setPasswordError(my ? "စကားဝှက် ၂ ကြိမ် ထည့်သွင်းမှု မတူညီပါ" : "Passwords do not match.");
+      return;
+    }
+    if (hasPassword && !currentPassword) {
+      setPasswordError(my ? "လက်ရှိ စကားဝှက် ထည့်သွင်းပါ" : "Current password is required.");
+      return;
+    }
 
-  const uploadSelectedAvatar = async (asset) => {
-    if (avatarBusy || !asset) return;
-    setAvatarBusy(true);
-    setAvatarProgress(0);
+    setPasswordBusy(true);
     try {
-      const prepared = await prepareAvatar(asset);
-      const res = await uploadAvatar(prepared, { onProgress: setAvatarProgress });
-      if (!res.avatarUrl) throw new Error("The server did not return the new avatar.");
-      const next = { ...(profile || {}), avatar: res.avatarUrl };
-      setProfile(next);
-      onProfileUpdated?.(next);
-      await load();
+      await setUserPassword({ newPassword, currentPassword });
+      setPasswordSuccess(my ? "စကားဝှက် အောင်မြင်စွာ သတ်မှတ်ပြီးပါပြီ!" : "Password successfully updated!");
+      setHasPassword(true);
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setPasswordSuccess("");
+      }, 1500);
     } catch (err) {
-      Alert.alert(
-        my ? "ပုံတင်၍ မရပါ" : "Upload Failed",
-        err?.message || "Could not upload profile picture.",
-        [
-          { text: my ? "မလုပ်တော့ပါ" : "Cancel", style: "cancel" },
-          { text: my ? "ပြန်စမ်းမည်" : "Retry", onPress: () => uploadSelectedAvatar(asset) },
-        ],
-      );
+      setPasswordError(err?.message || (my ? "စကားဝှက် ပြောင်းလဲ၍ မရပါ" : "Could not update password."));
     } finally {
-      setAvatarBusy(false);
-      setAvatarProgress(0);
+      setPasswordBusy(false);
     }
   };
 
@@ -383,12 +441,26 @@ export default function AccountScreenV2({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,
+        base64: true,
       });
       if (!result.canceled && result.assets?.[0]) {
-        await uploadSelectedAvatar(result.assets[0]);
+        const asset = result.assets[0];
+        setAvatarBusy(true);
+        const res = await uploadAvatar({
+          uri: asset.uri,
+          base64: asset.base64,
+          contentType: asset.mimeType || "image/jpeg",
+        });
+        if (res.avatarUrl) {
+          setProfile((prev) => ({ ...prev, avatar: res.avatarUrl }));
+          onProfileUpdated?.({ ...(profile || {}), avatar: res.avatarUrl });
+          await load();
+        }
       }
     } catch (err) {
       Alert.alert(my ? "အမှား" : "Error", err?.message || "Could not upload profile picture.");
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -407,12 +479,26 @@ export default function AccountScreenV2({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,
+        base64: true,
       });
       if (!result.canceled && result.assets?.[0]) {
-        await uploadSelectedAvatar(result.assets[0]);
+        const asset = result.assets[0];
+        setAvatarBusy(true);
+        const res = await uploadAvatar({
+          uri: asset.uri,
+          base64: asset.base64,
+          contentType: asset.mimeType || "image/jpeg",
+        });
+        if (res.avatarUrl) {
+          setProfile((prev) => ({ ...prev, avatar: res.avatarUrl }));
+          onProfileUpdated?.({ ...(profile || {}), avatar: res.avatarUrl });
+          await load();
+        }
       }
     } catch (err) {
       Alert.alert(my ? "အမှား" : "Error", err?.message || "Could not capture photo.");
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -464,20 +550,24 @@ export default function AccountScreenV2({
 
         {!loading && auth.authenticated ? (
           <>
+            {/* Profile Card */}
             <View style={[s.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Pressable
                 style={s.avatarContainer}
                 onPress={() => setShowPhotoModal(true)}
                 disabled={avatarBusy}
               >
-                {profile?.avatar ? (
+                {avatarBusy ? (
+                  <View style={[s.avatarFallback, { backgroundColor: colors.panel }]}>
+                    <ActivityIndicator size="small" color={colors.red} />
+                  </View>
+                ) : profile?.avatar ? (
                   <Image source={{ uri: profile.avatar }} style={s.avatar} />
                 ) : (
                   <View style={[s.avatarFallback, { backgroundColor: colors.redSoft }]}>
                     <Text style={[s.avatarInitials, { color: colors.red }]}>{initials}</Text>
                   </View>
                 )}
-                {avatarBusy ? <View style={s.avatarProgressOverlay}><ActivityIndicator size="small" color="#FFFFFF" /></View> : null}
                 <View style={[s.cameraBadge, { backgroundColor: colors.red, borderColor: colors.card }]}>
                   <Ionicons name="camera" size={13} color="#FFFFFF" />
                 </View>
@@ -496,7 +586,7 @@ export default function AccountScreenV2({
                   hitSlop={6}
                 >
                   <Text style={[s.changePhotoText, { color: colors.red }]}>
-                    {avatarBusy ? `${my ? "ပုံတင်နေသည်" : "Uploading"} ${Math.round(avatarProgress * 100)}%` : (my ? "ပုံပြောင်းရန်" : "Change Photo")}
+                    {my ? "ပုံပြောင်းရန်" : "Change Photo"}
                   </Text>
                 </Pressable>
               </View>
@@ -509,16 +599,37 @@ export default function AccountScreenV2({
               ) : null}
             </View>
 
-            <Text style={[s.section, { color: colors.text2 }]}>{my ? "အကောင့်နှင့် လှုပ်ရှားမှုများ" : "ACCOUNT & ACTIVITY"}</Text>
-
+            {/* Password & Security Card */}
+            <Text style={[s.section, { color: colors.text2 }]}>{my ? "လုံခြုံရေးနှင့် စကားဝှက်" : "SECURITY & PASSWORD"}</Text>
             <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <MenuRow
-                icon="person-outline"
-                title={my ? "ပရိုဖိုင် ပြင်မည်" : "Edit Profile"}
-                subtitle={my ? "Username ပြောင်းရန်" : "Change your username"}
-                onPress={openProfileEditor}
-                colors={colors}
-              />
+              <Pressable
+                style={[s.menuRow, { borderBottomWidth: 0 }]}
+                onPress={() => {
+                  setPasswordError("");
+                  setPasswordSuccess("");
+                  setShowPasswordModal(true);
+                }}
+              >
+                <View style={[s.menuIcon, { backgroundColor: hasPassword ? colors.greenSoft || "rgba(74,222,128,0.12)" : colors.redSoft }]}>
+                  <Ionicons name="shield-checkmark-outline" size={20} color={hasPassword ? colors.green : colors.red} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.menuTitle, { color: colors.text }]}>
+                    {hasPassword ? (my ? "စကားဝှက် ပြောင်းလဲမည်" : "Change Password") : (my ? "စကားဝှက် အသစ်သတ်မှတ်မည်" : "Set Account Password")}
+                  </Text>
+                  <Text style={[s.menuSub, { color: colors.muted }]}>
+                    {hasPassword
+                      ? (my ? "စိတ်ကြိုက် စကားဝှက် သတ်မှတ်ထားပြီးဖြစ်သည်" : "Custom password is enabled for your account")
+                      : (my ? "စကားဝှက် သတ်မှတ်ပြီး တိုက်ရိုက် ဝင်ရောက်နိုင်ပါသည်" : "Create your own password for instant sign-in")}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+              </Pressable>
+            </View>
+
+            {/* Navigation Menus */}
+            <Text style={[s.section, { color: colors.text2 }]}>{my ? "အကောင့်နှင့် လှုပ်ရှားမှုများ" : "ACCOUNT & ACTIVITY"}</Text>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <MenuRow
                 icon="star-outline"
                 title={my ? "အကြိုက်ဆုံးများ" : "Favorites"}
@@ -578,31 +689,78 @@ export default function AccountScreenV2({
         ) : null}
       </ScrollView>
 
-      <Modal visible={showProfileModal} transparent animationType="fade" onRequestClose={() => !profileSaving && setShowProfileModal(false)}>
-        <Pressable style={s.modalBackdrop} onPress={() => !profileSaving && setShowProfileModal(false)}>
-          <Pressable style={[s.profileModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[s.photoModalTitle, { color: colors.text }]}>{my ? "Username ပြောင်းရန်" : "Change Username"}</Text>
-            <Text style={[s.photoModalSub, { color: colors.muted }]}>
-              {my ? "Leaderboard နှင့် Predictions တွင် Username အသစ်ကို ပြပါမည်။ Account ID မပြောင်းပါ။" : "The new username will appear on the leaderboard. Your permanent account ID will not change."}
+      {/* Password Management Modal */}
+      <Modal
+        visible={showPasswordModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPasswordModal(false)}
+      >
+        <Pressable
+          style={s.modalBackdrop}
+          onPress={() => setShowPasswordModal(false)}
+        >
+          <Pressable
+            style={[s.photoModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[s.photoModalTitle, { color: colors.text }]}>
+              {hasPassword ? (my ? "စကားဝှက် ပြောင်းလဲရန်" : "Change Password") : (my ? "စကားဝှက် သတ်မှတ်ရန်" : "Set Password")}
             </Text>
+            <Text style={[s.photoModalSub, { color: colors.muted }]}>
+              {my
+                ? "စကားဝှက်သည် အနည်းဆုံး ၁၂ လုံး ဖြစ်ပြီး စာလုံးနှင့် ဂဏန်း ပါဝင်ရပါမည်။"
+                : "Must be at least 12 characters and include a letter and a number."}
+            </Text>
+
+            {hasPassword ? (
+              <TextInput
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                secureTextEntry
+                placeholder={my ? "လက်ရှိ စကားဝှက်" : "Current password"}
+                placeholderTextColor={colors.muted}
+                style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
+              />
+            ) : null}
+
             <TextInput
-              value={username}
-              onChangeText={setUsername}
-              editable={!profileSaving}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={40}
-              placeholder={my ? "Username" : "Username"}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              placeholder={my ? "စကားဝှက် အသစ်" : "New password (min 12 chars)"}
               placeholderTextColor={colors.muted}
               style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
-              returnKeyType="done"
-              onSubmitEditing={saveProfile}
             />
-            {profileError ? <Text style={[s.error, { color: colors.red }]}>{profileError}</Text> : null}
-            <Pressable disabled={profileSaving} style={[s.primary, { backgroundColor: colors.red }, profileSaving && { opacity: 0.55 }]} onPress={saveProfile}>
-              {profileSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.primaryText}>{my ? "သိမ်းမည်" : "SAVE USERNAME"}</Text>}
+
+            <TextInput
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              placeholder={my ? "စကားဝှက် အသစ် ထပ်မံထည့်ပါ" : "Confirm new password"}
+              placeholderTextColor={colors.muted}
+              style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
+            />
+
+            {passwordSuccess ? <Text style={[s.success, { color: colors.green }]}>{passwordSuccess}</Text> : null}
+            {passwordError ? <Text style={[s.error, { color: colors.red }]}>{passwordError}</Text> : null}
+
+            <Pressable
+              disabled={passwordBusy}
+              style={[s.primary, { backgroundColor: colors.red }, passwordBusy && { opacity: 0.55 }]}
+              onPress={handleSavePassword}
+            >
+              {passwordBusy ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={s.primaryText}>{my ? "စကားဝှက် သိမ်းမည်" : "SAVE PASSWORD"}</Text>
+              )}
             </Pressable>
-            <Pressable disabled={profileSaving} style={[s.modalCancelButton, { backgroundColor: colors.panel }]} onPress={() => setShowProfileModal(false)}>
+
+            <Pressable
+              style={[s.modalCancelButton, { backgroundColor: colors.panel }]}
+              onPress={() => setShowPasswordModal(false)}
+            >
               <Text style={[s.modalCancelText, { color: colors.text }]}>{my ? "မလုပ်တော့ပါ" : "Cancel"}</Text>
             </Pressable>
           </Pressable>
@@ -706,7 +864,28 @@ const s = StyleSheet.create({
   mstBadge: { width: 54, height: 54, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   mst: { fontSize: 20, fontWeight: "900", fontStyle: "italic" },
   loginTitle: { fontSize: 16, fontWeight: "900", textAlign: "center", marginTop: 12 },
-  loginText: { fontSize: 10.5, lineHeight: 15, textAlign: "center", marginTop: 6, marginBottom: 14, maxWidth: 300 },
+  loginText: { fontSize: 10.5, lineHeight: 15, textAlign: "center", marginTop: 6, marginBottom: 12, maxWidth: 300 },
+  modeToggleWrap: {
+    flexDirection: "row",
+    width: "100%",
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+    gap: 4,
+  },
+  modeToggleBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  modeToggleText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
   input: { width: "100%", height: 46, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 12, marginBottom: 8 },
   primary: { width: "100%", height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center", marginTop: 6 },
   primaryText: { fontSize: 10.5, fontWeight: "900", color: "#FFFFFF" },
@@ -718,7 +897,6 @@ const s = StyleSheet.create({
   avatarContainer: { position: "relative" },
   avatar: { width: 56, height: 56, borderRadius: 28 },
   avatarFallback: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
-  avatarProgressOverlay: { position: "absolute", left: 0, top: 0, width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(0,0,0,.55)", alignItems: "center", justifyContent: "center" },
   avatarInitials: { fontSize: 18, fontWeight: "900" },
   cameraBadge: {
     position: "absolute",
@@ -757,13 +935,6 @@ const s = StyleSheet.create({
     padding: 20,
     paddingBottom: 36,
   },
-  profileModalContent: {
-    marginHorizontal: 18,
-    marginBottom: 28,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 20,
-  },
   photoModalTitle: {
     fontSize: 16,
     fontWeight: "900",
@@ -773,7 +944,7 @@ const s = StyleSheet.create({
   photoModalSub: {
     fontSize: 11,
     textAlign: "center",
-    marginBottom: 18,
+    marginBottom: 16,
     lineHeight: 16,
   },
   modalOption: {

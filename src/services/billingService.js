@@ -1,14 +1,40 @@
 import { getSessionToken } from "./accountApi";
-import { mstJsonRequest } from "./mstNetwork";
+
+const API_BASE = "https://myanmarsportstalk.com/api";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = await getSessionToken().catch(() => null);
-  const payload = await mstJsonRequest(path, {
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mobile-app",
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    headers["x-mst-session"] = token;
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
     method,
-    body,
-    token,
-    label: "MST billing API",
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  const text = await response.text();
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch (_) {
+    payload = { message: text };
+  }
+
+  if (!response.ok) {
+    const error = new Error(payload?.error || payload?.message || `Billing API ${response.status}`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
   return payload?.data ?? payload;
 }
 
@@ -38,11 +64,8 @@ export async function verifyPlayPurchaseOnServer({
   });
 }
 
-/**
- * Executes or prepares a Google Play Credit purchase.
- * Designed for immediate plug-and-play connection when Google Play Console
- * Merchant credentials and in-app product IDs are activated.
- */
+// Checkout is intentionally blocked until a real Play Billing purchase token
+// can be supplied by a configured native billing provider.
 export async function purchaseCredits(packageId) {
   const packages = await getCreditPackages();
   if (!packages.some((pkg) => pkg.id === packageId)) throw new Error("Invalid credit package selected.");

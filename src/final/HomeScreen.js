@@ -1,7 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Image,
   Modal,
   Pressable,
@@ -10,7 +9,6 @@ import {
   SectionList,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,7 +18,6 @@ import {
   fetchFastFootballMatches,
   peekFastFootballMatches,
   prefetchFastFootballMatches,
-  prefetchRecentPastMatches,
 } from "../services/fastFootballApi";
 import { regionalNationalTeamPriority } from "../services/regionalFootball";
 import {
@@ -28,7 +25,6 @@ import {
   getAuthStatus,
   getFavorites,
   getProfile,
-  normalizeAvatarUrl,
   normalizeFavoritePayload,
 } from "../services/accountApi";
 import { loadOnboardingPreferences } from "../services/onboardingStore";
@@ -49,14 +45,14 @@ function kickoffTime(match) {
   return Number.isFinite(t) ? t : 0;
 }
 
-function importantMatchSort(a, b, favorites = {}) {
+function importantMatchSort(a, b, priorityByMatch) {
   // 1. Live status first
   const aLive = isLiveMatch(a), bLive = isLiveMatch(b);
   if (aLive !== bLive) return aLive ? -1 : 1;
 
   // 2. Priority score (Big matches, favorites, regional, top leagues)
-  const aScore = calculateFactualMatchPriority(a, favorites, regionalNationalTeamPriority);
-  const bScore = calculateFactualMatchPriority(b, favorites, regionalNationalTeamPriority);
+  const aScore = priorityByMatch.get(a) || 0;
+  const bScore = priorityByMatch.get(b) || 0;
   if (aScore !== bScore) return bScore - aScore;
 
   // 3. Kickoff chronological order
@@ -90,11 +86,6 @@ function dayMeta(offsetDays, language) {
     month: d.toLocaleDateString([], { month: "short" }).toUpperCase(),
     isToday,
   };
-}
-
-function isUpcoming(match) {
-  const status = String(match?.statusCode ?? match?.status ?? "").toUpperCase();
-  return ["NS", "TBD", "SCHEDULED", "NOT_STARTED", "UPCOMING"].includes(status) && !isLiveMatch(match);
 }
 
 function isFinished(match) {
@@ -240,7 +231,7 @@ const MatchRow = memo(function MatchRow({ match, onOpen, colors, language }) {
 // MAIN HOMESCREEN COMPONENT
 // -------------------------------------------------------------
 
-export default function HomeScreen({
+function HomeScreen({
   language = "my",
   openMatch,
   openNotifications,
@@ -259,9 +250,7 @@ export default function HomeScreen({
 
   // Modals & UI
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [leagueSearchModalOpen, setLeagueSearchModalOpen] = useState(false);
-  const [leagueSearch, setLeagueSearch] = useState("");
-  const [expandedLeagues, setExpandedLeagues] = useState(() => new Set());
+  const [collapsedLeagues, setCollapsedLeagues] = useState(() => new Set());
   const dateStripRef = useRef(null);
   const matchRequestSequence = useRef(0);
 
@@ -416,40 +405,15 @@ export default function HomeScreen({
     return () => clearInterval(interval);
   }, [offset, liveCount, load]);
 
-  // Expand top major leagues by default when matches change
-  useEffect(() => {
-    if (!state.matches.length) return;
-    const map = new Map();
-    state.matches.forEach((m) => {
-      const comp = m.competition || "Other";
-      const score = calculateFactualMatchPriority(m, favorites, regionalNationalTeamPriority);
-      if (!map.has(comp)) map.set(comp, score);
-      else map.set(comp, Math.max(map.get(comp), score));
-    });
-    // Top 5 leagues by priority score
-    const topLeagues = [...map.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name]) => name);
-    setExpandedLeagues(new Set(topLeagues));
-  }, [state.matches, favorites]);
-
-  // Toggle Accordion
-  const toggleCompetitionExpand = useCallback((title) => {
-    setExpandedLeagues((prev) => {
+  // Sections are expanded by default. Only explicit user collapses are tracked,
+  // so refreshes cannot reset a section the user chose to collapse.
+  const toggleCompetitionExpand = useCallback((groupKey) => {
+    setCollapsedLeagues((prev) => {
       const next = new Set(prev);
-      if (next.has(title)) next.delete(title);
-      else next.add(title);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
       return next;
     });
-  }, []);
-
-  const expandAllCompetitions = useCallback((allTitles) => {
-    setExpandedLeagues(new Set(allTitles));
-  }, []);
-
-  const collapseAllCompetitions = useCallback(() => {
-    setExpandedLeagues(new Set());
   }, []);
 
   // -------------------------------------------------------------
@@ -468,20 +432,25 @@ export default function HomeScreen({
   }, [state.matches, typeFilter, competitionFilter]);
 
   // Group into sections with Big Match Priority sorting
-  const sections = useMemo(() => {
+  const groupedSections = useMemo(() => {
     const map = new Map();
+    const priorityByMatch = new Map();
     for (const match of filteredMatches) {
       const key = getFactualCompetitionKey(match);
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(match);
+      priorityByMatch.set(
+        match,
+        calculateFactualMatchPriority(match, favorites, regionalNationalTeamPriority),
+      );
     }
 
     const rows = [...map.entries()].map(([groupKey, data]) => {
       // Sort matches within each competition by Big Match Priority
-      const ordered = [...data].sort((a, b) => importantMatchSort(a, b, favorites));
+      const ordered = [...data].sort((a, b) => importantMatchSort(a, b, priorityByMatch));
       // Max match priority in this league
       const maxScore = ordered.reduce(
-        (max, m) => Math.max(max, calculateFactualMatchPriority(m, favorites, regionalNationalTeamPriority)),
+        (max, m) => Math.max(max, priorityByMatch.get(m) || 0),
         0
       );
       const hasLiveInLeague = ordered.some(isLiveMatch);
@@ -517,19 +486,20 @@ export default function HomeScreen({
       // 4. Alphabetical fallback
       return a.title.localeCompare(b.title);
     });
+    return rows;
+  }, [filteredMatches, favorites]);
 
-
-    return rows.map((sec) => ({
+  // Expanding/collapsing now remaps section visibility without re-sorting every
+  // fixture. SectionList still receives all expanded rows and virtualizes them.
+  const sections = useMemo(() => groupedSections.map((sec) => {
+    const isExpanded = !collapsedLeagues.has(sec.groupKey);
+    return {
       ...sec,
-      isExpanded: expandedLeagues.has(sec.title) || expandedLeagues.has(sec.groupKey),
-      data: expandedLeagues.has(sec.title) || expandedLeagues.has(sec.groupKey) ? sec.data : [],
+      isExpanded,
+      data: isExpanded ? sec.data : [],
       totalCount: sec.data.length,
-    }));
-  }, [filteredMatches, favorites, expandedLeagues]);
-
-  const allLeagueTitles = useMemo(() => {
-    return [...new Set(filteredMatches.map((m) => m.competition).filter(Boolean))];
-  }, [filteredMatches]);
+    };
+  }), [groupedSections, collapsedLeagues]);
 
   // Calendar dates
   const calendarDates = useMemo(() => {
@@ -546,15 +516,6 @@ export default function HomeScreen({
       };
     });
   }, []);
-
-  // Distinct competitions list for modal search
-  const visibleCompetitions = useMemo(() => {
-    const list = [...new Set(state.matches.map((m) => m.competition).filter(Boolean))];
-    list.sort();
-    if (!leagueSearch.trim()) return list;
-    const q = leagueSearch.trim().toLowerCase();
-    return list.filter((name) => name.toLowerCase().includes(q));
-  }, [state.matches, leagueSearch]);
 
   // -------------------------------------------------------------
   // RENDER HEADER COMPONENTS
@@ -677,7 +638,7 @@ export default function HomeScreen({
         </ScrollView>
       </View>
 
-      {/* 5. SLIM MATCH TYPE & ACCORDION ACTION BAR */}
+      {/* 5. SLIM MATCH TYPE FILTER BAR */}
       <View style={s.filterActionBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRowContent}>
           {[
@@ -708,24 +669,6 @@ export default function HomeScreen({
             );
           })}
 
-          {/* Expand / Collapse Accordion Controls */}
-          <Pressable
-            style={[s.accordionActionChip, { backgroundColor: colors.card, borderColor: colors.border2 }]}
-            onPress={() => expandAllCompetitions(allLeagueTitles)}
-          >
-            <Text style={[s.accordionActionText, { color: colors.text2 }]}>
-              {my ? "အားလုံးဖွင့်" : "Expand All"}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[s.accordionActionChip, { backgroundColor: colors.card, borderColor: colors.border2 }]}
-            onPress={collapseAllCompetitions}
-          >
-            <Text style={[s.accordionActionText, { color: colors.muted }]}>
-              {my ? "အားလုံးပိတ်" : "Collapse"}
-            </Text>
-          </Pressable>
         </ScrollView>
       </View>
 
@@ -801,7 +744,7 @@ export default function HomeScreen({
                   borderBottomColor: colors.border2,
                 },
               ]}
-              onPress={() => toggleCompetitionExpand(section.title)}
+              onPress={() => toggleCompetitionExpand(section.groupKey)}
             >
               <LeagueLogo uri={section.logo} colors={colors} />
               <View style={s.leagueTextWrap}>
@@ -1014,6 +957,8 @@ export default function HomeScreen({
   );
 }
 
+export default memo(HomeScreen);
+
 // -------------------------------------------------------------
 // STYLES
 // -------------------------------------------------------------
@@ -1125,14 +1070,6 @@ const s = StyleSheet.create({
   },
   chipLiveDot: { width: 5, height: 5, borderRadius: 2.5 },
   subFilterText: { fontSize: 10, fontWeight: "800" },
-  accordionActionChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  accordionActionText: { fontSize: 9.5, fontWeight: "800" },
-
   // Favorite prompt
   favPromptCard: {
     marginHorizontal: 12,
