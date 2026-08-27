@@ -4,12 +4,19 @@ import { MST_FOOTBALL_API_BASE } from "./mstApiConfig";
 export const FOOTBALL_API_BASE = MST_FOOTBALL_API_BASE;
 const APP_TIME_ZONE = "Asia/Bangkok";
 const DEFAULT_TIMEOUT_MS = 15000;
+const MAX_CACHED_DATES = 21;
 
 const root = globalThis;
 if (!root.__MST_MATCH_CACHE__) root.__MST_MATCH_CACHE__ = new Map();
 if (!root.__MST_MATCH_INFLIGHT__) root.__MST_MATCH_INFLIGHT__ = new Map();
 const cache = root.__MST_MATCH_CACHE__;
 const inflight = root.__MST_MATCH_INFLIGHT__;
+
+function cacheResult(date, result) {
+  cache.delete(date);
+  cache.set(date, result);
+  while (cache.size > MAX_CACHED_DATES) cache.delete(cache.keys().next().value);
+}
 
 function dateKeyInBangkok(value) {
   if (!value) return null;
@@ -138,9 +145,15 @@ async function fetchJson(url, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
 }
 
 function normalizePayload(payload) {
-  return extractArray(payload)
+  const normalized = extractArray(payload)
     .map((item, index) => normalizeFootballMatch(item, index))
     .filter((match) => match?.id && match.home?.name && match.away?.name);
+  const byId = new Map();
+  for (const match of normalized) {
+    const key = String(match.id);
+    byId.set(key, mergeMatchSnapshot(byId.get(key), match));
+  }
+  return Array.from(byId.values());
 }
 
 function chooseRequestedDateMatches(normalized, date) {
@@ -222,7 +235,7 @@ async function requestDate(date, { signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
     apiBase: FOOTBALL_API_BASE,
     sourceUrl: best.sourceUrl,
   };
-  cache.set(date, result);
+  cacheResult(date, result);
   return result;
 }
 

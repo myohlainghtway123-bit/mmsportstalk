@@ -155,7 +155,7 @@ Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
 - First-launch favorites are stored locally immediately; when the same user later authenticates with an MST account, pending favorites are synced to the existing MST favorites API.
 
 ## Football data connection — V7.4
-- Mobile football data must use `https://myanmarsportstalk.com/api/football` as the canonical backend.
+- Mobile football data must use `https://app-api.myanmarsportstalk.com/api/football` as the dedicated app gateway to the canonical backend.
 - Provider/API secrets remain server-side and are never packaged in the APK/IPA.
 - Match loading retries the backend without the timezone query only if the canonical request shape is explicitly rejected (400/404/405/422).
 - Date normalization uses Bangkok calendar time first, then a conservative raw-date fallback to avoid false empty match screens.
@@ -172,4 +172,3 @@ Never place API-Football/API-Sports/bookmaker/provider secrets inside the APK.
 ## GitHub source-of-truth rule
 - Every completed MST Score app change must be synced to the GitHub `main` branch before it is treated as finished.
 - Local/EAS-only changes are not considered complete until GitHub contains the same source/version state.
-

@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../theme/ThemeContext";
-import { extractArray, fetchCompetitionCatalog } from "../services/footballApi";
-import { fetchFastFootballMatches, peekFastFootballMatches } from "../services/fastFootballApi";
+import { peekFastFootballMatches } from "../services/fastFootballApi";
 import { fetchFifaMenRanking, peekFifaMenRanking } from "../services/fifaRankingApi";
 import { searchFootballEntities as fetchSmartSearch } from "../services/smartSearchApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -12,34 +11,34 @@ const RECENT_SEARCH_KEY = "@mst_recent_searches";
 const EMPTY_REMOTE = { teams: [], players: [], stale: false };
 
 const POPULAR_SEARCH_TEAMS = [
-  { id: 33, name: "Manchester United", logo: "https://media.api-sports.io/football/teams/33.png", priority: 100, country: "England" },
-  { id: 50, name: "Manchester City", logo: "https://media.api-sports.io/football/teams/50.png", priority: 100, country: "England" },
-  { id: 541, name: "Real Madrid", logo: "https://media.api-sports.io/football/teams/541.png", priority: 100, country: "Spain" },
-  { id: 529, name: "Barcelona", logo: "https://media.api-sports.io/football/teams/529.png", priority: 100, country: "Spain" },
-  { id: 40, name: "Liverpool", logo: "https://media.api-sports.io/football/teams/40.png", priority: 100, country: "England" },
-  { id: 42, name: "Arsenal", logo: "https://media.api-sports.io/football/teams/42.png", priority: 100, country: "England" },
-  { id: 49, name: "Chelsea", logo: "https://media.api-sports.io/football/teams/49.png", priority: 95, country: "England" },
-  { id: 157, name: "Bayern Munich", logo: "https://media.api-sports.io/football/teams/157.png", priority: 95, country: "Germany" },
-  { id: 85, name: "Paris Saint Germain", logo: "https://media.api-sports.io/football/teams/85.png", priority: 95, country: "France" },
-  { id: 496, name: "Juventus", logo: "https://media.api-sports.io/football/teams/496.png", priority: 90, country: "Italy" },
-  { id: 505, name: "Inter", logo: "https://media.api-sports.io/football/teams/505.png", priority: 90, country: "Italy" },
-  { id: 489, name: "AC Milan", logo: "https://media.api-sports.io/football/teams/489.png", priority: 90, country: "Italy" },
-  { id: 47, name: "Tottenham", logo: "https://media.api-sports.io/football/teams/47.png", priority: 90, country: "England" },
-  { id: 165, name: "Borussia Dortmund", logo: "https://media.api-sports.io/football/teams/165.png", priority: 90, country: "Germany" },
-  { id: 530, name: "Atletico Madrid", logo: "https://media.api-sports.io/football/teams/530.png", priority: 90, country: "Spain" },
+  { id: 33, name: "Manchester United", priority: 100, country: "England" },
+  { id: 50, name: "Manchester City", priority: 100, country: "England" },
+  { id: 541, name: "Real Madrid", priority: 100, country: "Spain" },
+  { id: 529, name: "Barcelona", priority: 100, country: "Spain" },
+  { id: 40, name: "Liverpool", priority: 100, country: "England" },
+  { id: 42, name: "Arsenal", priority: 100, country: "England" },
+  { id: 49, name: "Chelsea", priority: 95, country: "England" },
+  { id: 157, name: "Bayern Munich", priority: 95, country: "Germany" },
+  { id: 85, name: "Paris Saint Germain", priority: 95, country: "France" },
+  { id: 496, name: "Juventus", priority: 90, country: "Italy" },
+  { id: 505, name: "Inter", priority: 90, country: "Italy" },
+  { id: 489, name: "AC Milan", priority: 90, country: "Italy" },
+  { id: 47, name: "Tottenham", priority: 90, country: "England" },
+  { id: 165, name: "Borussia Dortmund", priority: 90, country: "Germany" },
+  { id: 530, name: "Atletico Madrid", priority: 90, country: "Spain" },
 ];
 
 const POPULAR_NATIONAL_TEAMS = [
-  { id: 26, name: "Argentina", logo: "https://media.api-sports.io/football/teams/26.png", country: "South America" },
-  { id: 6, name: "Brazil", logo: "https://media.api-sports.io/football/teams/6.png", country: "South America" },
-  { id: 10, name: "England", logo: "https://media.api-sports.io/football/teams/10.png", country: "Europe" },
-  { id: 2, name: "France", logo: "https://media.api-sports.io/football/teams/2.png", country: "Europe" },
-  { id: 9, name: "Spain", logo: "https://media.api-sports.io/football/teams/9.png", country: "Europe" },
-  { id: 25, name: "Germany", logo: "https://media.api-sports.io/football/teams/25.png", country: "Europe" },
-  { id: 27, name: "Portugal", logo: "https://media.api-sports.io/football/teams/27.png", country: "Europe" },
-  { id: 767, name: "Italy", logo: "https://media.api-sports.io/football/teams/767.png", country: "Europe" },
-  { id: 1118, name: "Netherlands", logo: "https://media.api-sports.io/football/teams/1118.png", country: "Europe" },
-  { id: 12, name: "Japan", logo: "https://media.api-sports.io/football/teams/12.png", country: "Asia" },
+  { id: 26, name: "Argentina", country: "South America" },
+  { id: 6, name: "Brazil", country: "South America" },
+  { id: 10, name: "England", country: "Europe" },
+  { id: 2, name: "France", country: "Europe" },
+  { id: 9, name: "Spain", country: "Europe" },
+  { id: 25, name: "Germany", country: "Europe" },
+  { id: 27, name: "Portugal", country: "Europe" },
+  { id: 767, name: "Italy", country: "Europe" },
+  { id: 1118, name: "Netherlands", country: "Europe" },
+  { id: 12, name: "Japan", country: "Asia" },
 ];
 
 const ASEAN_NATIONAL_TEAMS = [
@@ -57,7 +56,7 @@ const ASEAN_NATIONAL_TEAMS = [
 ];
 
 function normalized(value) {
-  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function scoreSearchRelevance(name, query, basePriority = 0) {
@@ -119,7 +118,7 @@ function ResultRow({ icon, image, title, subtitle, onPress, accent = false, colo
   );
 }
 
-export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, language = "my" }) {
+export default function SearchScreen({ goBack, openEntity, language = "my" }) {
   const { colors } = useTheme();
   const my = language === "my";
   const [query, setQuery] = useState("");
@@ -128,6 +127,8 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
   const [remoteResults, setRemoteResults] = useState(EMPTY_REMOTE);
   const [fifaRanking, setFifaRanking] = useState(peekFifaMenRanking());
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const searchSequence = useRef(0);
 
   useEffect(() => {
     AsyncStorage.getItem(RECENT_SEARCH_KEY)
@@ -167,30 +168,39 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
+    if (Array.from(q).length < 3) {
       setRemoteResults(EMPTY_REMOTE);
       setLoading(false);
+      setSearchError("");
       return;
     }
-    let alive = true;
+    const sequence = ++searchSequence.current;
+    const controller = new AbortController();
     setLoading(true);
+    setSearchError("");
     const timer = setTimeout(async () => {
       try {
-        const result = await fetchSmartSearch(q);
-        if (alive) {
+        const result = await fetchSmartSearch(q, { signal: controller.signal });
+        if (sequence === searchSequence.current) {
           setRemoteResults(result || EMPTY_REMOTE);
+          setSearchError(result?.warning
+            ? (my ? "ရှာဖွေမှုရလဒ်အချို့ ယာယီမရနိုင်ပါ။" : "Some search results are temporarily unavailable.")
+            : "");
           setLoading(false);
         }
-      } catch (_) {
-        if (alive) setLoading(false);
+      } catch (error) {
+        if (error?.name !== "AbortError" && sequence === searchSequence.current) {
+          setSearchError(my ? "ရှာဖွေရေးဝန်ဆောင်မှု ယာယီမရနိုင်ပါ။" : "Search is temporarily unavailable.");
+          setLoading(false);
+        }
       }
     }, 250);
 
     return () => {
-      alive = false;
+      controller.abort();
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [my, query]);
 
   const matchesPayload = peekFastFootballMatches(todayBangkok());
   const localTeams = useMemo(() => {
@@ -230,6 +240,24 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
     }
     return Array.from(combined.values()).sort((a, b) => b.score - a.score);
   }, [query, localTeams, remoteResults.teams]);
+
+  const filteredPlayers = useMemo(() => {
+    const q = query.trim();
+    const combined = new Map();
+    for (const player of remoteResults.players || []) {
+      const score = Math.max(
+        scoreSearchRelevance(player.name, q, 50),
+        scoreSearchRelevance(player.firstName, q, 40),
+        scoreSearchRelevance(player.lastName, q, 40),
+      );
+      if (score > 0) combined.set(String(player.id), { ...player, score });
+    }
+    return Array.from(combined.values()).sort((a, b) => b.score - a.score).slice(0, 20);
+  }, [query, remoteResults.players]);
+
+  const visibleTeams = activeTab === "PLAYERS" ? [] : filteredTeams.slice(0, 20);
+  const visiblePlayers = activeTab === "TEAMS" ? [] : filteredPlayers;
+  const resultCount = visibleTeams.length + visiblePlayers.length;
 
   return (
     <View style={[s.screen, { backgroundColor: colors.bg }]}>
@@ -286,27 +314,48 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
         {/* Live Search Query Results */}
         {query ? (
           <View style={s.section}>
+            <View style={s.searchTabs}>
+              {["ALL", "TEAMS", "PLAYERS"].map((tab) => (
+                <Pressable key={tab} onPress={() => setActiveTab(tab)} style={[s.searchTab, { borderColor: colors.border, backgroundColor: activeTab === tab ? colors.redSoft : colors.card }]}>
+                  <Text style={[s.sectionSub, { color: activeTab === tab ? colors.red : colors.muted }]}>{tab}</Text>
+                </Pressable>
+              ))}
+            </View>
             <View style={s.sectionHead}>
               <Text style={[s.sectionTitle, { color: colors.muted }]}>
-                {my ? `ရှာဖွေတွေ့ရှိချက်များ (${filteredTeams.length})` : `SEARCH RESULTS (${filteredTeams.length})`}
+                {my ? `ရှာဖွေတွေ့ရှိချက်များ (${resultCount})` : `SEARCH RESULTS (${resultCount})`}
               </Text>
               {loading ? <ActivityIndicator size="small" color={colors.red} /> : null}
             </View>
-            {filteredTeams.length > 0 ? (
-              filteredTeams.map((team) => (
+            {searchError ? <Text style={[s.errorText, { color: colors.red }]}>{searchError}</Text> : null}
+            {visibleTeams.map((team) => (
                 <ResultRow
-                  key={team.id || team.name}
+                  key={`team-${team.id || team.name}`}
                   image={team.logo}
                   title={team.name}
                   subtitle={team.country || "Club"}
                   onPress={() => {
                     saveRecentSearch(team.name);
-                    onSelectTeam?.(team);
+                    openEntity?.("team", team);
                   }}
                   colors={colors}
                 />
-              ))
-            ) : !loading ? (
+            ))}
+            {visiblePlayers.map((player) => (
+              <ResultRow
+                key={`player-${player.id}`}
+                icon="person-outline"
+                image={player.photo}
+                title={player.name}
+                subtitle={[player.nationality, player.age ? `${player.age} yrs` : null].filter(Boolean).join(" · ") || "Player"}
+                onPress={() => {
+                  saveRecentSearch(player.name);
+                  openEntity?.("player", player);
+                }}
+                colors={colors}
+              />
+            ))}
+            {resultCount === 0 && !loading ? (
               <View style={s.noResults}>
                 <Ionicons name="search-outline" size={32} color={colors.muted} />
                 <Text style={[s.noResultsTitle, { color: colors.text }]}>{my ? "ရှာမတွေ့ပါ" : "No results found"}</Text>
@@ -368,7 +417,7 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
                   subtitle={team.country}
                   onPress={() => {
                     saveRecentSearch(team.name);
-                    onSelectTeam?.(team);
+                    openEntity?.("team", team);
                   }}
                   colors={colors}
                 />
@@ -391,7 +440,7 @@ export default function SearchScreen({ goBack, onSelectTeam, onSelectLeague, lan
                   subtitle={team.country}
                   onPress={() => {
                     saveRecentSearch(team.name);
-                    onSelectTeam?.(team);
+                    openEntity?.("team", team);
                   }}
                   colors={colors}
                 />
@@ -428,6 +477,8 @@ const s = StyleSheet.create({
   input: { flex: 1, fontSize: 12.5, fontWeight: "600" },
   content: { padding: 14, paddingBottom: 40, gap: 18 },
   section: { gap: 8 },
+  searchTabs: { flexDirection: "row", gap: 7, marginBottom: 2 },
+  searchTab: { minWidth: 70, height: 32, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4 },
   sectionTitle: { fontSize: 11, fontWeight: "900", letterSpacing: 0.8 },
   sectionSub: { fontSize: 9.5, fontWeight: "700" },
@@ -474,4 +525,5 @@ const s = StyleSheet.create({
   noResults: { padding: 40, alignItems: "center", justifyContent: "center", gap: 8 },
   noResultsTitle: { fontSize: 15, fontWeight: "900" },
   noResultsSub: { fontSize: 11, textAlign: "center" },
+  errorText: { fontSize: 10.5, lineHeight: 15, paddingHorizontal: 4 },
 });

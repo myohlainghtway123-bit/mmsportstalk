@@ -3,7 +3,7 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { getSessionToken } from "./accountApi";
-import { MST_API_BASE } from "./mstApiConfig";
+import { mstJsonRequest } from "./mstNetwork";
 import { setStoredDevicePushToken } from "./pushTokenStore";
 
 Notifications.setNotificationHandler({
@@ -17,33 +17,12 @@ Notifications.setNotificationHandler({
 
 async function api(path, { method = "GET", body } = {}) {
   const token = await getSessionToken();
-  const headers = {
-    Accept: "application/json",
-    "x-mst-client": "mobile-app",
-    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    ...(token ? {
-      Authorization: `Bearer ${token}`,
-      "x-mst-session": token,
-      Cookie: `mst_user_session=${token}`,
-    } : {}),
-  };
-
-  const response = await fetch(`${MST_API_BASE}${path}`, {
+  return mstJsonRequest(path, {
     method,
-    credentials: "include",
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body,
+    token,
+    label: "MST match engagement",
   });
-  const text = await response.text();
-  let payload = null;
-  try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = { message: text }; }
-  if (!response.ok) {
-    const error = new Error(payload?.error || payload?.message || `MST API ${response.status}`);
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-  return payload;
 }
 
 export const DEFAULT_MATCH_ALERTS = {

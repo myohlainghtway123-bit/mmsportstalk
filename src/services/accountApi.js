@@ -77,21 +77,49 @@ async function api(path, { method = "GET", body, signal } = {}) {
     ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     ...(token ? {
       Authorization: `Bearer ${token}`,
-      "x-mst-session": token,
-      Cookie: `mst_user_session=${token}`,
     } : {}),
   };
 
-  const response = await fetch(`${MST_API_BASE}${path}`, {
-    method,
-    credentials: "include",
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
-  });
-  const payload = await decodeResponse(response);
-  if (!response.ok) throw new MstApiError(errorMessage(payload, `MST API request failed (${response.status})`), response.status, payload);
-  return payload;
+  const canRetry = method === "GET" || method === "HEAD";
+  for (let attempt = 0; attempt <= (canRetry ? 1 : 0); attempt += 1) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener?.("abort", abort, { once: true });
+    const timeout = setTimeout(abort, 15000);
+    try {
+      const response = await fetch(`${MST_API_BASE}${path}`, {
+        method,
+        credentials: "include",
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      const payload = await decodeResponse(response);
+      if (!response.ok) {
+        if (attempt === 0 && [408, 429, 502, 503].includes(response.status)) {
+          const retryAfter = Number(response.headers.get("Retry-After"));
+          const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 3000) : 500;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw new MstApiError(errorMessage(payload, `MST API request failed (${response.status})`), response.status, payload);
+      }
+      return payload;
+    } catch (error) {
+      if (error instanceof MstApiError) throw error;
+      if (attempt === 0 && canRetry && !signal?.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        continue;
+      }
+      if (controller.signal.aborted && !signal?.aborted) throw new MstApiError("MST request timed out. Try again.", 408);
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener?.("abort", abort);
+    }
+  }
+  throw new MstApiError("MST request could not be completed.");
 }
 
 export function normalizeAvatarUrl(url) {
@@ -132,6 +160,7 @@ export function extractUser(payload) {
   return {
     ...raw,
     id: raw.id || raw.userId || raw._id,
+    username: raw.username || raw.displayName || raw.name || "",
     name: raw.name || raw.displayName || raw.username || (raw.email ? raw.email.split("@")[0] : "MST User"),
     displayName: raw.displayName || raw.name || raw.username || (raw.email ? raw.email.split("@")[0] : "MST User"),
     email: raw.email || "",
@@ -219,11 +248,12 @@ export async function logout() {
 }
 
 export const getProfile = (options) => api("/account/profile", options);
-export const updateProfile = ({ displayName, preferredLanguage } = {}, options = {}) =>
+export const updateProfile = ({ username, displayName, preferredLanguage } = {}, options = {}) =>
   api("/account/profile", {
     ...options,
     method: "PATCH",
     body: {
+      username: typeof username === "string" ? username.trim() : undefined,
       displayName: typeof displayName === "string" ? displayName.trim() : undefined,
       preferredLanguage: preferredLanguage || undefined,
     },
@@ -236,52 +266,46 @@ export const getLeaderboard = (timeframe = "all", options) => {
   return api(`/predictions/leaderboard?timeframe=${encodeURIComponent(tf)}`, opts);
 };
 
-export async function uploadAvatar(input) {
+export async function uploadAvatar(input, { onProgress, signal } = {}) {
   const token = await getSessionToken();
-  const headers = {
-    Accept: "application/json",
-    "x-mst-client": "mobile-app",
-    ...(token ? {
-      Authorization: `Bearer ${token}`,
-      "x-mst-session": token,
-      Cookie: `mst_user_session=${token}`,
-    } : {}),
-  };
-
-  let body;
-  if (input?.base64) {
-    headers["Content-Type"] = "application/json";
-    body = JSON.stringify({
-      base64: input.base64,
-      contentType: input.contentType || input.mimeType || "image/jpeg",
-    });
-  } else if (input?.uri) {
-    const formData = new FormData();
-    const uri = input.uri;
-    const name = uri.split("/").pop() || "avatar.jpg";
-    const match = /\.(\w+)$/.exec(name);
-    const type = input.contentType || (match ? `image/${match[1]}` : "image/jpeg");
-    formData.append("avatar", { uri, name, type });
-    body = formData;
-  } else {
-    throw new MstApiError("Invalid image selection.");
-  }
-
-  const response = await fetch(`${MST_API_BASE}/account/avatar`, {
-    method: "POST",
-    headers,
-    body,
+  if (!input?.uri) throw new MstApiError("Invalid image selection.");
+  const formData = new FormData();
+  formData.append("avatar", {
+    uri: input.uri,
+    name: input.name || "avatar.jpg",
+    type: input.contentType || input.mimeType || "image/jpeg",
   });
-  const payload = await decodeResponse(response);
-  if (!response.ok) {
-    throw new MstApiError(errorMessage(payload, `Avatar upload failed (${response.status})`), response.status, payload);
-  }
-  const rawUrl = payload?.data?.avatarUrl || payload?.avatarUrl;
-  return {
-    ok: true,
-    avatarUrl: normalizeAvatarUrl(rawUrl),
-    payload,
-  };
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const cleanup = () => signal?.removeEventListener?.("abort", abort);
+    xhr.open("POST", `${MST_API_BASE}/account/avatar`);
+    xhr.timeout = 30000;
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("x-mst-client", "mobile-app");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(Math.min(1, event.loaded / event.total));
+    };
+    xhr.onerror = () => { cleanup(); reject(new MstApiError("Avatar upload failed. Check your connection.")); };
+    xhr.ontimeout = () => { cleanup(); reject(new MstApiError("Avatar upload timed out. Try again.")); };
+    xhr.onabort = () => { cleanup(); reject(new MstApiError("Avatar upload cancelled.")); };
+    xhr.onload = () => {
+      cleanup();
+      let payload = null;
+      try { payload = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (_) { payload = { message: xhr.responseText }; }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new MstApiError(errorMessage(payload, `Avatar upload failed (${xhr.status})`), xhr.status, payload));
+        return;
+      }
+      const rawUrl = payload?.data?.avatarUrl || payload?.avatarUrl;
+      resolve({ ok: true, avatarUrl: normalizeAvatarUrl(rawUrl), payload });
+    };
+    if (signal?.aborted) return abort();
+    signal?.addEventListener?.("abort", abort, { once: true });
+    xhr.send(formData);
+  });
 }
 
 export async function deleteAvatar() {
@@ -291,8 +315,6 @@ export async function deleteAvatar() {
     "x-mst-client": "mobile-app",
     ...(token ? {
       Authorization: `Bearer ${token}`,
-      "x-mst-session": token,
-      Cookie: `mst_user_session=${token}`,
     } : {}),
   };
 

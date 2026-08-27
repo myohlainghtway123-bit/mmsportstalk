@@ -44,8 +44,8 @@ const COMPETITIONS = [
   [78, "Bundesliga"], [61, "Ligue 1"], [3, "Europa League"],
 ];
 
-const teamLogo = (id) => `https://media.api-sports.io/football/teams/${id}.png`;
-const leagueLogo = (id) => `https://media.api-sports.io/football/leagues/${id}.png`;
+const teamLogo = () => null;
+const leagueLogo = () => null;
 
 function ChoiceCard({ selected, onPress, title, subtitle, icon }) {
   return (

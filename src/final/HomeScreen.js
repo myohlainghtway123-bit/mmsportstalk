@@ -263,6 +263,7 @@ export default function HomeScreen({
   const [leagueSearch, setLeagueSearch] = useState("");
   const [expandedLeagues, setExpandedLeagues] = useState(() => new Set());
   const dateStripRef = useRef(null);
+  const matchRequestSequence = useRef(0);
 
   // User & Favorites
   const [currentUser, setCurrentUser] = useState(null);
@@ -354,6 +355,7 @@ export default function HomeScreen({
   // Load Matches
   const load = useCallback(
     async (force = false, isRefresh = false) => {
+      const sequence = ++matchRequestSequence.current;
       setState((prev) => ({
         ...prev,
         loading: !prev.matches.length && !isRefresh,
@@ -362,6 +364,7 @@ export default function HomeScreen({
       }));
       try {
         const result = await fetchFastFootballMatches({ date, force });
+        if (sequence !== matchRequestSequence.current) return;
         setState({
           loading: false,
           refreshing: false,
@@ -369,6 +372,7 @@ export default function HomeScreen({
           matches: result?.matches || [],
         });
       } catch (err) {
+        if (sequence !== matchRequestSequence.current) return;
         setState((prev) => ({
           ...prev,
           loading: false,
@@ -386,6 +390,7 @@ export default function HomeScreen({
     const saved = peekFastFootballMatches(date);
     setState({ loading: !saved, refreshing: false, error: "", matches: saved?.matches || [] });
     load(false, false);
+    return () => { matchRequestSequence.current += 1; };
   }, [date, load]);
 
   // Background Prefetch adjacent days

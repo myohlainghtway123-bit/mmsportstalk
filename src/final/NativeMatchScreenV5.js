@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
   Image,
   PanResponder,
   Pressable,
@@ -51,7 +52,14 @@ import {
   scheduleKickoffReminders,
   voteMatchPoll,
 } from "../services/matchEngagementApi";
-import { getMatchChat, postMatchChat, reportMatchChat } from "../services/communityApi";
+import {
+  connectMatchChat,
+  createClientMessageId,
+  getMatchChat,
+  mergeChatMessages,
+  postMatchChat,
+  reportMatchChat,
+} from "../services/communityApi";
 import { shareMatch } from "../utils/shareUtils";
 import MatchOddsCard from "./MatchOddsCard";
 
@@ -1169,11 +1177,16 @@ function PollCard({ match, my, colors }) {
 // Live-only Chat Panel
 function ChatPanel({ matchId, match, my, colors }) {
   const listRef = useRef(null);
-  const [auth, setAuth] = useState(false);
+  const currentMatchRef = useRef(String(matchId));
+  currentMatchRef.current = String(matchId);
+  const [auth, setAuth] = useState({ authenticated: false, user: null });
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [connectionState, setConnectionState] = useState("connecting");
   const [error, setError] = useState("");
 
   const live = isLiveMatch(match);
@@ -1181,45 +1194,91 @@ function ChatPanel({ matchId, match, my, colors }) {
   const isPreMatch = !live && !isMatchFinished;
 
   const load = useCallback(
-    async (silent = false) => {
+    async ({ silent = false, before = null } = {}) => {
+      const requestedMatch = String(matchId);
       if (!silent) setLoading(true);
+      if (before) setLoadingOlder(true);
       try {
-        const rows = await getMatchChat(matchId, { limit: 100 });
-        setMessages(Array.isArray(rows) ? rows : []);
+        const page = await getMatchChat(matchId, { limit: 50, before });
+        if (currentMatchRef.current !== requestedMatch) return;
+        setMessages((current) => mergeChatMessages(before ? page.messages : current, before ? current : page.messages));
+        if (before || !silent) {
+          setNextCursor(page.nextCursor);
+          setHasMore(page.hasMore);
+        }
         setError("");
       } catch (e) {
-        setError(e?.message || "Chat unavailable.");
+        if (e?.name !== "AbortError" && currentMatchRef.current === requestedMatch) {
+          setError(e?.message || "Chat unavailable.");
+        }
       } finally {
         if (!silent) setLoading(false);
+        if (before) setLoadingOlder(false);
       }
     },
     [matchId],
   );
 
   useEffect(() => {
+    let active = true;
     getAuthStatus()
-      .then((a) => setAuth(Boolean(a.authenticated)))
-      .catch(() => setAuth(false));
-    load(false);
-    const timer = setInterval(() => load(true), 5000);
-    return () => clearInterval(timer);
+      .then((value) => { if (active) setAuth(value || { authenticated: false, user: null }); })
+      .catch(() => { if (active) setAuth({ authenticated: false, user: null }); });
+    setMessages([]);
+    setNextCursor(null);
+    setHasMore(false);
+    load({ silent: false });
+    return () => { active = false; };
   }, [load]);
 
-  const send = async () => {
-    const value = text.trim();
-    if (!value || sending || !live) return;
-    setSending(true);
-    setError("");
+  useEffect(() => {
+    if (!auth.authenticated) {
+      setConnectionState("unauthenticated");
+      return undefined;
+    }
+    return connectMatchChat({
+      matchId,
+      onState: setConnectionState,
+      onRecovery: () => load({ silent: true }),
+      onMessage: (message) => {
+        setMessages((current) => mergeChatMessages(current, [{ ...message, deliveryState: null }]));
+        setTimeout(() => listRef.current?.scrollToEnd?.({ animated: true }), 80);
+      },
+      onError: () => setConnectionState("reconnecting"),
+    });
+  }, [auth.authenticated, load, matchId]);
+
+  const deliver = async (pending) => {
     try {
-      await postMatchChat(matchId, value);
-      setText("");
-      await load(true);
+      const saved = await postMatchChat(matchId, pending.body, { clientMessageId: pending.id });
+      setMessages((current) => mergeChatMessages(current, [{ ...saved, deliveryState: null }]));
+      setError("");
       setTimeout(() => listRef.current?.scrollToEnd?.({ animated: true }), 80);
     } catch (e) {
+      setMessages((current) => current.map((message) => (
+        message.id === pending.id ? { ...message, deliveryState: "failed", failure: e?.message || "Send failed." } : message
+      )));
       setError(e?.message || "Could not post message.");
-    } finally {
-      setSending(false);
     }
+  };
+
+  const send = () => {
+    const value = text.trim();
+    if (!value || !live || !auth.authenticated) return;
+    const pending = {
+      id: createClientMessageId(),
+      matchId: String(matchId),
+      userId: auth.user?.id || null,
+      displayName: auth.user?.username || auth.user?.displayName || "MST User",
+      body: value,
+      createdAt: new Date().toISOString(),
+      deliveryState: "sending",
+    };
+    setText("");
+    setError("");
+    setMessages((current) => mergeChatMessages(current, [pending]));
+    deliver(pending);
+    setTimeout(() => listRef.current?.scrollToEnd?.({ animated: true }), 40);
   };
 
   const report = async (id) => {
@@ -1237,7 +1296,7 @@ function ChatPanel({ matchId, match, my, colors }) {
         <View>
           <Text style={[styles.cardTitleNoMargin, { color: colors.text }]}>{tx(my, "Live Match Chat", "ပွဲတိုက်ရိုက် Chat")}</Text>
           <Text style={[styles.smallMuted, { color: colors.muted }]}>
-            {messages.length} {tx(my, "messages", "မှတ်ချက်များ")} · {live ? (my ? "ပွဲတိုက်ရိုက် comment ပေးနိုင်သည်" : "Posting active while live") : isPreMatch ? (my ? "ပွဲစတင်ချိန်တွင် ဖွင့်ပါမည်" : "Opens at kickoff") : (my ? "ပွဲပြီးဆုံးသဖြင့် ဖတ်ရှုနိုင်ရုံသာ" : "Match finished (Read-only)")}
+            {messages.length} {tx(my, "messages", "မှတ်ချက်များ")} · {connectionState === "connected" ? tx(my, "connected", "ချိတ်ဆက်ထားသည်") : connectionState}
           </Text>
         </View>
         {live ? (
@@ -1253,16 +1312,27 @@ function ChatPanel({ matchId, match, my, colors }) {
         )}
       </View>
 
-      <ScrollView
+      <FlatList
         ref={listRef}
         style={[styles.chatList, { borderColor: colors.border2 }]}
         nestedScrollEnabled
-        onContentSizeChange={() => listRef.current?.scrollToEnd?.({ animated: false })}
-      >
-        {loading ? (
+        data={loading ? [] : messages}
+        keyExtractor={(message) => String(message.id)}
+        ListHeaderComponent={hasMore ? (
+          <Pressable disabled={loadingOlder} onPress={() => load({ silent: true, before: nextCursor })} style={{ paddingVertical: 10, alignItems: "center" }}>
+            {loadingOlder ? <ActivityIndicator size="small" color={colors.red} /> : (
+              <Text style={[styles.smallMuted, { color: colors.red }]}>{tx(my, "Load earlier messages", "အစောပိုင်း message များ ကြည့်ရန်")}</Text>
+            )}
+          </Pressable>
+        ) : null}
+        ListEmptyComponent={loading ? (
           <ActivityIndicator style={{ marginVertical: 25 }} color={colors.red} />
-        ) : messages.length ? (
-          messages.map((m) => (
+        ) : (
+          <Text style={[styles.empty, { color: colors.muted }]}>
+            {tx(my, "Be the first to discuss this match.", "ဒီပွဲအတွက် ပထမဆုံး ဆွေးနွေးပါ။")}
+          </Text>
+        )}
+        renderItem={({ item: m }) => (
             <View key={m.id} style={[styles.chatMessage, { borderBottomColor: colors.border2 }]}>
               <View style={[styles.chatAvatar, { backgroundColor: colors.card2 }]}>
                 <Text style={[styles.chatInitial, { color: colors.text2 }]}>
@@ -1277,23 +1347,28 @@ function ChatPanel({ matchId, match, my, colors }) {
                   </Text>
                 </View>
                 <Text style={[styles.chatBody, { color: colors.text2 }]}>{m.body}</Text>
+                {m.deliveryState === "sending" ? <Text style={[styles.chatTime, { color: colors.muted }]}>{tx(my, "Sending…", "ပို့နေသည်…")}</Text> : null}
+                {m.deliveryState === "failed" ? (
+                  <Pressable onPress={() => {
+                    const retrying = { ...m, deliveryState: "sending", failure: null };
+                    setMessages((current) => current.map((message) => message.id === m.id ? retrying : message));
+                    deliver(retrying);
+                  }}>
+                    <Text style={[styles.chatTime, { color: colors.red }]}>{tx(my, "Failed — tap to retry", "မပို့နိုင်ပါ — ပြန်ပို့ရန် နှိပ်ပါ")}</Text>
+                  </Pressable>
+                ) : null}
               </View>
-              <Pressable hitSlop={8} onPress={() => report(m.id)}>
+              {m.deliveryState ? null : <Pressable hitSlop={8} onPress={() => report(m.id)}>
                 <Ionicons name="flag-outline" size={14} color={colors.muted2} />
-              </Pressable>
+              </Pressable>}
             </View>
-          ))
-        ) : (
-          <Text style={[styles.empty, { color: colors.muted }]}>
-            {tx(my, "Be the first to discuss this match.", "ဒီပွဲအတွက် ပထမဆုံး ဆွေးနွေးပါ။")}
-          </Text>
         )}
-      </ScrollView>
+      />
 
       {error ? <Text style={[styles.chatError, { color: colors.red }]}>{error}</Text> : null}
 
       {live ? (
-        auth ? (
+        auth.authenticated ? (
           <View style={styles.chatComposer}>
             <TextInput
               value={text}
@@ -1306,11 +1381,11 @@ function ChatPanel({ matchId, match, my, colors }) {
               onSubmitEditing={send}
             />
             <Pressable
-              disabled={!text.trim() || sending}
-              style={[styles.sendButton, { backgroundColor: colors.red }, (!text.trim() || sending) && { opacity: 0.35 }]}
+              disabled={!text.trim()}
+              style={[styles.sendButton, { backgroundColor: colors.red }, !text.trim() && { opacity: 0.35 }]}
               onPress={send}
             >
-              {sending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="send" size={18} color="#FFFFFF" />}
+              <Ionicons name="send" size={18} color="#FFFFFF" />
             </Pressable>
           </View>
         ) : (

@@ -4,6 +4,7 @@ const API_BASE = MST_API_BASE;
 const SITE = MST_SITE_ORIGIN;
 const YOUTUBE_CHANNEL = "https://www.youtube.com/@MyanmarSportsTalk/videos";
 const TIMEOUT_MS = 9000;
+const CACHE_LIMIT = 80;
 
 const root = globalThis;
 if (!root.__MST_CONTENT_CACHE__) root.__MST_CONTENT_CACHE__ = new Map();
@@ -28,7 +29,9 @@ async function networkGet(path) {
     let payload = null;
     try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = { message: text }; }
     if (!response.ok) throw new Error(payload?.error || payload?.message || `MST API ${response.status}`);
+    cache.delete(path);
     cache.set(path, { payload, fetchedAt: Date.now() });
+    while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
     return payload;
   } catch (error) {
     const saved = cache.get(path);
@@ -119,15 +122,24 @@ function articleImage(raw) {
 }
 
 export function normalizeArticle(raw, index = 0) {
-  const categoryRaw = first(raw?.category?.name, raw?.category, raw?.type, raw?.section, raw?.topic, "News");
+  const articleType = String(first(raw?.articleType, raw?.article_type, raw?.type, "news"));
+  const categoryRaw = first(raw?.category?.name, raw?.category, articleType === "weekly_article" ? "Weekly Article" : null, raw?.section, raw?.topic, "News");
   const slug = first(raw?.slug, raw?.id, `article-${index}`);
   const published = first(raw?.publishedAt, raw?.published_at, raw?.date, raw?.createdAt, raw?.created_at, raw?.updatedAt);
   const title = first(raw?.title, raw?.headline, raw?.name, "Myanmar Sports Talk");
   const excerpt = first(raw?.excerpt, raw?.summary, raw?.description, raw?.dek, raw?.content, raw?.body, "");
+  const structuredBody = first(raw?.body, raw?.contentBlocks, raw?.content_blocks, null);
   return {
     id: String(first(raw?.id, slug, index)), slug: String(slug), title: cleanText(title),
-    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.content, raw?.body, raw?.article, raw?.description, "")),
+    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.bodySource, raw?.body_source, raw?.content, raw?.article, raw?.description, "")),
+    body: structuredBody,
     category: typeof categoryRaw === "string" ? categoryRaw : first(categoryRaw?.name, categoryRaw?.title, "News"),
+    articleType,
+    language: first(raw?.contentLocale, raw?.content_locale, raw?.language, raw?.locale, null),
+    matchId: first(raw?.relatedMatchId, raw?.related_match_id, raw?.matchId, null),
+    competition: first(raw?.relatedCompetition, raw?.related_competition, null),
+    source: first(raw?.source?.name, raw?.sourceName, raw?.source_name, typeof raw?.source === "string" ? raw.source : null, null),
+    deepLink: `mst://article/${encodeURIComponent(String(slug))}`,
     image: absoluteUrl(articleImage(raw)),
     author: first(raw?.author?.name, raw?.authorName, raw?.author_name, typeof raw?.author === "string" ? raw.author : null, "Myanmar Sports Talk"),
     publishedAt: published || null,
@@ -205,10 +217,17 @@ async function fetchYouTubeFallback() {
   }
 }
 
-export async function fetchArticles(options) {
-  const payload = await get("/content/articles", options);
+export async function fetchArticles(options = {}) {
+  const params = new URLSearchParams();
+  if (options.type) params.set("type", String(options.type));
+  if (options.locale) params.set("locale", String(options.locale));
+  if (options.matchId) params.set("matchId", String(options.matchId));
+  if (options.limit) params.set("limit", String(options.limit));
+  const payload = await get(`/content/articles${params.toString() ? `?${params.toString()}` : ""}`, options);
   return { payload, articles: arrayFrom(payload, ["posts"]).map(normalizeArticle).filter((x) => x.title) };
 }
+
+export const fetchWeeklyArticles = (options = {}) => fetchArticles({ ...options, type: "weekly_article" });
 
 export async function fetchArticle(slug, options) {
   const payload = await get(`/content/articles/${encodeURIComponent(slug)}`, options);

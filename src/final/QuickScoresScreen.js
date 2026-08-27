@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { isLiveMatch } from "../services/footballApi";
@@ -38,12 +38,14 @@ function bangkokDate(offset = 0) {
 }
 
 function useMatches(date) {
+  const requestSequence = useRef(0);
   const [state, setState] = useState(() => {
     const saved = peekFastFootballMatches(date);
     return { loading: !saved, refreshing: false, error: "", matches: saved?.matches || [] };
   });
 
   const load = useCallback(async (refresh = false, silent = false) => {
+    const sequence = ++requestSequence.current;
     const saved = peekFastFootballMatches(date);
     if (!silent) {
       setState((prev) => ({
@@ -56,6 +58,7 @@ function useMatches(date) {
     }
     try {
       const result = await fetchFastFootballMatches({ date, force: refresh });
+      if (sequence !== requestSequence.current) return;
       setState((prev) => ({
         loading: false,
         refreshing: false,
@@ -63,13 +66,17 @@ function useMatches(date) {
         matches: result.matches || prev.matches || [],
       }));
     } catch (error) {
+      if (sequence !== requestSequence.current) return;
       if (!silent) {
         setState((prev) => ({ ...prev, loading: false, refreshing: false, error: error?.message || "Could not load matches." }));
       }
     }
   }, [date]);
 
-  useEffect(() => { load(false); }, [load]);
+  useEffect(() => {
+    load(false);
+    return () => { requestSequence.current += 1; };
+  }, [load]);
   return {
     ...state,
     reload: () => load(true),

@@ -56,11 +56,11 @@ const POPULAR_COMPETITIONS = [
 ];
 
 const POPULAR_TEAMS = [
-  { id: 541, name: "Real Madrid", logo: "https://media.api-sports.io/football/teams/541.png" },
-  { id: 50, name: "Manchester City", logo: "https://media.api-sports.io/football/teams/50.png" },
-  { id: 529, name: "Barcelona", logo: "https://media.api-sports.io/football/teams/529.png" },
-  { id: 40, name: "Liverpool", logo: "https://media.api-sports.io/football/teams/40.png" },
-  { id: 42, name: "Arsenal", logo: "https://media.api-sports.io/football/teams/42.png" },
+  { id: 541, name: "Real Madrid" },
+  { id: 50, name: "Manchester City" },
+  { id: 529, name: "Barcelona" },
+  { id: 40, name: "Liverpool" },
+  { id: 42, name: "Arsenal" },
 ];
 
 const POPULAR_PLAYERS = [

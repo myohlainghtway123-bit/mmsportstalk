@@ -1,39 +1,14 @@
 import { getSessionToken } from "./accountApi";
-import { MST_API_BASE } from "./mstApiConfig";
+import { mstJsonRequest } from "./mstNetwork";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = await getSessionToken().catch(() => null);
-  const headers = {
-    Accept: "application/json",
-    "x-mst-client": "mobile-app",
-    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-    headers["x-mst-session"] = token;
-  }
-
-  const response = await fetch(`${MST_API_BASE}${path}`, {
+  const payload = await mstJsonRequest(path, {
     method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body,
+    token,
+    label: "MST billing API",
   });
-
-  const text = await response.text();
-  let payload = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch (_) {
-    payload = { message: text };
-  }
-
-  if (!response.ok) {
-    const error = new Error(payload?.error || payload?.message || `Billing API ${response.status}`);
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-
   return payload?.data ?? payload;
 }
 

@@ -1,44 +1,14 @@
 import { getSessionToken } from "./accountApi";
-import { MST_API_BASE } from "./mstApiConfig";
-
-async function decode(response) {
-  const text = await response.text();
-  if (!text) return null;
-  try { return JSON.parse(text); } catch (_) { return { message: text }; }
-}
-
-function message(payload, fallback) {
-  return payload?.error || payload?.message || payload?.detail || payload?.reason || fallback;
-}
+import { mstJsonRequest } from "./mstNetwork";
 
 async function request(path, { method = "GET", body } = {}) {
   const token = await getSessionToken();
-  const headers = {
-    Accept: "application/json",
-    "x-mst-client": "mobile-app",
-    "Cache-Control": "no-cache",
-    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    ...(token ? {
-      Authorization: `Bearer ${token}`,
-      "x-mst-session": token,
-      Cookie: `mst_user_session=${token}`,
-    } : {}),
-  };
-
-  const response = await fetch(`${MST_API_BASE}${path}`, {
+  return mstJsonRequest(path, {
     method,
-    credentials: "include",
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body,
+    token,
+    label: "MST notifications",
   });
-  const payload = await decode(response);
-  if (!response.ok) {
-    const error = new Error(message(payload, `MST notification request failed (${response.status})`));
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-  return payload;
 }
 
 export const getNotifications = ({ sync = true, limit = 40 } = {}) =>

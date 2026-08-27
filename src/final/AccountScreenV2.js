@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { useTheme } from "../theme/ThemeContext";
 import {
   deleteAvatar,
@@ -26,6 +27,7 @@ import {
   normalizePredictionPayload,
   normalizeAvatarUrl,
   startEmailLogin,
+  updateProfile,
   uploadAvatar,
   verifyEmailLogin,
 } from "../services/accountApi";
@@ -39,9 +41,28 @@ function predictionPointsFrom(payload) {
   return normalizePredictionPayload(payload).reduce((total, prediction) => total + (Number(prediction.points) || 0), 0);
 }
 
+async function prepareAvatar(asset) {
+  if (!asset?.uri || (asset.type && asset.type !== "image")) throw new Error("Choose a valid image.");
+  if (asset.mimeType && !["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType)) {
+    throw new Error("Use a JPG, PNG or WebP image.");
+  }
+  if (Number(asset.fileSize || 0) > 12 * 1024 * 1024) throw new Error("Choose an image smaller than 12 MB.");
+  if (!Number(asset.width) || !Number(asset.height)) throw new Error("The selected image dimensions are invalid.");
+  const context = ImageManipulator.manipulate(asset.uri);
+  if (Math.max(asset.width, asset.height) > 1024) {
+    if (asset.width >= asset.height) context.resize({ width: 1024, height: null });
+    else context.resize({ width: null, height: 1024 });
+  }
+  const rendered = await context.renderAsync();
+  const output = await rendered.saveAsync({ compress: 0.82, format: SaveFormat.JPEG });
+  return { uri: output.uri, name: "avatar.jpg", contentType: "image/jpeg" };
+}
+
 function profileFrom(payload, user, predictionPoints = null) {
   const parsed = extractUser(payload) || extractUser(user) || {};
   return {
+    id: parsed.id || null,
+    username: parsed.username || parsed.displayName || parsed.name || "MST User",
     name: parsed.name || parsed.displayName || "MST User",
     email: parsed.email || "",
     avatar: parsed.avatar || parsed.avatarUrl || null,
@@ -229,6 +250,11 @@ export default function AccountScreenV2({
   const [signingOut, setSigningOut] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarProgress, setAvatarProgress] = useState(0);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [username, setUsername] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -276,6 +302,71 @@ export default function AccountScreenV2({
     }
   };
 
+  const openProfileEditor = () => {
+    setUsername(profile?.username || profile?.name || "");
+    setProfileError("");
+    setShowProfileModal(true);
+  };
+
+  const saveProfile = async () => {
+    if (profileSaving) return;
+    const clean = username.normalize("NFKC").trim().replace(/\s+/g, " ");
+    const length = Array.from(clean).length;
+    if (length < 3 || length > 32) {
+      setProfileError(my ? "Username သည် စာလုံး ၃ မှ ၃၂ လုံး ဖြစ်ရမည်။" : "Username must be 3–32 characters.");
+      return;
+    }
+    setProfileSaving(true);
+    setProfileError("");
+    try {
+      const payload = await updateProfile({ username: clean });
+      const saved = extractUser(payload);
+      if (!saved) throw new Error(my ? "Profile response မမှန်ပါ။" : "The profile response was invalid.");
+      const next = {
+        ...(profile || {}),
+        id: saved.id || profile?.id,
+        username: saved.username || clean,
+        name: saved.displayName || saved.username || clean,
+      };
+      setProfile(next);
+      setAuth((current) => ({ ...current, user: { ...(current.user || {}), ...saved } }));
+      onProfileUpdated?.(next);
+      setShowProfileModal(false);
+      await load();
+    } catch (err) {
+      setProfileError(err?.message || (my ? "Username မပြောင်းနိုင်ပါ။" : "Could not update username."));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const uploadSelectedAvatar = async (asset) => {
+    if (avatarBusy || !asset) return;
+    setAvatarBusy(true);
+    setAvatarProgress(0);
+    try {
+      const prepared = await prepareAvatar(asset);
+      const res = await uploadAvatar(prepared, { onProgress: setAvatarProgress });
+      if (!res.avatarUrl) throw new Error("The server did not return the new avatar.");
+      const next = { ...(profile || {}), avatar: res.avatarUrl };
+      setProfile(next);
+      onProfileUpdated?.(next);
+      await load();
+    } catch (err) {
+      Alert.alert(
+        my ? "ပုံတင်၍ မရပါ" : "Upload Failed",
+        err?.message || "Could not upload profile picture.",
+        [
+          { text: my ? "မလုပ်တော့ပါ" : "Cancel", style: "cancel" },
+          { text: my ? "ပြန်စမ်းမည်" : "Retry", onPress: () => uploadSelectedAvatar(asset) },
+        ],
+      );
+    } finally {
+      setAvatarBusy(false);
+      setAvatarProgress(0);
+    }
+  };
+
   const handlePickGallery = async () => {
     setShowPhotoModal(false);
     try {
@@ -292,26 +383,12 @@ export default function AccountScreenV2({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,
-        base64: true,
       });
       if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        setAvatarBusy(true);
-        const res = await uploadAvatar({
-          uri: asset.uri,
-          base64: asset.base64,
-          contentType: asset.mimeType || "image/jpeg",
-        });
-        if (res.avatarUrl) {
-          setProfile((prev) => ({ ...prev, avatar: res.avatarUrl }));
-          onProfileUpdated?.({ ...(profile || {}), avatar: res.avatarUrl });
-          await load();
-        }
+        await uploadSelectedAvatar(result.assets[0]);
       }
     } catch (err) {
       Alert.alert(my ? "အမှား" : "Error", err?.message || "Could not upload profile picture.");
-    } finally {
-      setAvatarBusy(false);
     }
   };
 
@@ -330,26 +407,12 @@ export default function AccountScreenV2({
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,
-        base64: true,
       });
       if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        setAvatarBusy(true);
-        const res = await uploadAvatar({
-          uri: asset.uri,
-          base64: asset.base64,
-          contentType: asset.mimeType || "image/jpeg",
-        });
-        if (res.avatarUrl) {
-          setProfile((prev) => ({ ...prev, avatar: res.avatarUrl }));
-          onProfileUpdated?.({ ...(profile || {}), avatar: res.avatarUrl });
-          await load();
-        }
+        await uploadSelectedAvatar(result.assets[0]);
       }
     } catch (err) {
       Alert.alert(my ? "အမှား" : "Error", err?.message || "Could not capture photo.");
-    } finally {
-      setAvatarBusy(false);
     }
   };
 
@@ -407,17 +470,14 @@ export default function AccountScreenV2({
                 onPress={() => setShowPhotoModal(true)}
                 disabled={avatarBusy}
               >
-                {avatarBusy ? (
-                  <View style={[s.avatarFallback, { backgroundColor: colors.panel }]}>
-                    <ActivityIndicator size="small" color={colors.red} />
-                  </View>
-                ) : profile?.avatar ? (
+                {profile?.avatar ? (
                   <Image source={{ uri: profile.avatar }} style={s.avatar} />
                 ) : (
                   <View style={[s.avatarFallback, { backgroundColor: colors.redSoft }]}>
                     <Text style={[s.avatarInitials, { color: colors.red }]}>{initials}</Text>
                   </View>
                 )}
+                {avatarBusy ? <View style={s.avatarProgressOverlay}><ActivityIndicator size="small" color="#FFFFFF" /></View> : null}
                 <View style={[s.cameraBadge, { backgroundColor: colors.red, borderColor: colors.card }]}>
                   <Ionicons name="camera" size={13} color="#FFFFFF" />
                 </View>
@@ -436,7 +496,7 @@ export default function AccountScreenV2({
                   hitSlop={6}
                 >
                   <Text style={[s.changePhotoText, { color: colors.red }]}>
-                    {my ? "ပုံပြောင်းရန်" : "Change Photo"}
+                    {avatarBusy ? `${my ? "ပုံတင်နေသည်" : "Uploading"} ${Math.round(avatarProgress * 100)}%` : (my ? "ပုံပြောင်းရန်" : "Change Photo")}
                   </Text>
                 </Pressable>
               </View>
@@ -452,6 +512,13 @@ export default function AccountScreenV2({
             <Text style={[s.section, { color: colors.text2 }]}>{my ? "အကောင့်နှင့် လှုပ်ရှားမှုများ" : "ACCOUNT & ACTIVITY"}</Text>
 
             <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <MenuRow
+                icon="person-outline"
+                title={my ? "ပရိုဖိုင် ပြင်မည်" : "Edit Profile"}
+                subtitle={my ? "Username ပြောင်းရန်" : "Change your username"}
+                onPress={openProfileEditor}
+                colors={colors}
+              />
               <MenuRow
                 icon="star-outline"
                 title={my ? "အကြိုက်ဆုံးများ" : "Favorites"}
@@ -510,6 +577,37 @@ export default function AccountScreenV2({
           </>
         ) : null}
       </ScrollView>
+
+      <Modal visible={showProfileModal} transparent animationType="fade" onRequestClose={() => !profileSaving && setShowProfileModal(false)}>
+        <Pressable style={s.modalBackdrop} onPress={() => !profileSaving && setShowProfileModal(false)}>
+          <Pressable style={[s.profileModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.photoModalTitle, { color: colors.text }]}>{my ? "Username ပြောင်းရန်" : "Change Username"}</Text>
+            <Text style={[s.photoModalSub, { color: colors.muted }]}>
+              {my ? "Leaderboard နှင့် Predictions တွင် Username အသစ်ကို ပြပါမည်။ Account ID မပြောင်းပါ။" : "The new username will appear on the leaderboard. Your permanent account ID will not change."}
+            </Text>
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              editable={!profileSaving}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={40}
+              placeholder={my ? "Username" : "Username"}
+              placeholderTextColor={colors.muted}
+              style={[s.input, { backgroundColor: colors.panel, borderColor: colors.border, color: colors.text }]}
+              returnKeyType="done"
+              onSubmitEditing={saveProfile}
+            />
+            {profileError ? <Text style={[s.error, { color: colors.red }]}>{profileError}</Text> : null}
+            <Pressable disabled={profileSaving} style={[s.primary, { backgroundColor: colors.red }, profileSaving && { opacity: 0.55 }]} onPress={saveProfile}>
+              {profileSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.primaryText}>{my ? "သိမ်းမည်" : "SAVE USERNAME"}</Text>}
+            </Pressable>
+            <Pressable disabled={profileSaving} style={[s.modalCancelButton, { backgroundColor: colors.panel }]} onPress={() => setShowProfileModal(false)}>
+              <Text style={[s.modalCancelText, { color: colors.text }]}>{my ? "မလုပ်တော့ပါ" : "Cancel"}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Avatar Actions Native Modal */}
       <Modal
@@ -620,6 +718,7 @@ const s = StyleSheet.create({
   avatarContainer: { position: "relative" },
   avatar: { width: 56, height: 56, borderRadius: 28 },
   avatarFallback: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  avatarProgressOverlay: { position: "absolute", left: 0, top: 0, width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(0,0,0,.55)", alignItems: "center", justifyContent: "center" },
   avatarInitials: { fontSize: 18, fontWeight: "900" },
   cameraBadge: {
     position: "absolute",
@@ -657,6 +756,13 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     padding: 20,
     paddingBottom: 36,
+  },
+  profileModalContent: {
+    marginHorizontal: 18,
+    marginBottom: 28,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 20,
   },
   photoModalTitle: {
     fontSize: 16,

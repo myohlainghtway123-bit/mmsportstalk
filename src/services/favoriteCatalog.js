@@ -1,7 +1,3 @@
-const teamLogo = (id) => `https://media.api-sports.io/football/teams/${id}.png`;
-const competitionLogo = (id) => `https://media.api-sports.io/football/leagues/${id}.png`;
-const playerPhoto = (id) => `https://media.api-sports.io/football/players/${id}.png`;
-
 export const CURATED_FAVORITE_COMPETITIONS = [
   { id: 39, name: "Premier League", country: "England" },
   { id: 2, name: "UEFA Champions League", country: "Europe" },
@@ -10,7 +6,7 @@ export const CURATED_FAVORITE_COMPETITIONS = [
   { id: 78, name: "Bundesliga", country: "Germany" },
   { id: 61, name: "Ligue 1", country: "France" },
   { id: 3, name: "UEFA Europa League", country: "Europe" },
-].map((item) => ({ ...item, logo: competitionLogo(item.id), imageUrl: competitionLogo(item.id) }));
+];
 
 export const CURATED_FAVORITE_TEAMS = [
   [33, "Manchester United"],
@@ -29,10 +25,10 @@ export const CURATED_FAVORITE_TEAMS = [
   [489, "AC Milan"],
   [492, "Napoli"],
   [165, "Borussia Dortmund"],
-].map(([id, name]) => ({ id, name, logo: teamLogo(id), imageUrl: teamLogo(id) }));
+].map(([id, name]) => ({ id, name }));
 
 export const CURATED_FAVORITE_PLAYERS = [
-  { id: 1100, name: "Erling Haaland", photo: playerPhoto(1100), imageUrl: playerPhoto(1100) },
+  { id: 1100, name: "Erling Haaland" },
 ];
 
 const catalogs = {

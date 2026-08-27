@@ -109,7 +109,11 @@ function formatArticleBody(content) {
         if (!block) return "";
         if (typeof block === "string") return block;
         if (typeof block === "object") {
-          return block.text || block.content || block.value || block.paragraph || "";
+          if (Array.isArray(block.items)) return block.items.map((item) => `• ${item}`).join("\n");
+          if (Array.isArray(block.headers) && Array.isArray(block.rows)) {
+            return [block.headers.join(" | "), ...block.rows.map((row) => row.join(" | "))].join("\n");
+          }
+          return block.text || block.content || block.value || block.paragraph || block.caption || "";
         }
         return String(block);
       })
@@ -143,11 +147,11 @@ export function NativeArticleScreen({ article, goBack }) {
   }, [load]);
 
   const current = state.article || article || {};
-  const formattedBody = formatArticleBody(current.content || current.body || current.excerpt || "");
+  const formattedBody = formatArticleBody(current.body || current.content || current.excerpt || "");
 
   return (
     <View style={[s.screen, { backgroundColor: colors.bg }]}>
-      <Header title="News" goBack={goBack} colors={colors} />
+      <Header title={current.articleType === "weekly_article" ? "Weekly Article" : current.articleType === "match_preview" || current.articleType === "match_analysis" ? "MST Match Preview" : "News"} goBack={goBack} colors={colors} />
       <ScrollView contentContainerStyle={s.articleContent} showsVerticalScrollIndicator={false}>
         {current.image ? (
           <Image source={{ uri: current.image }} style={s.articleImage} resizeMode="cover" />
