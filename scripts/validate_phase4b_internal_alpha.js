@@ -7,6 +7,7 @@ const screen = read("src/phase4b/Phase4BScoresInternalAlpha.js");
 const api = read("src/phase4b/scoresStagingApi.js");
 const eas = JSON.parse(read("eas.json"));
 const workflow = read(".github/workflows/validate-app.yml");
+const productContract = read("docs/product/mst-scores-product-contract.md");
 const phase4b = `${app}\n${screen}\n${api}`;
 
 assert.match(app, /Phase4BScoresInternalAlpha/);
@@ -24,10 +25,29 @@ assert.doesNotMatch(phase4b, /D1Database|wrangler\s+d1|mst-prediction-core|mst-f
 
 for (const marker of [
   "STAGING / INTERNAL",
-  "loadScoresFeed",
+  "loadScoresOverview",
   "loadMatchCenter",
   "Canonical MST ID",
-  "PREDICTION / TIP PREVIEW",
+  "BIG MATCH PREVIEW",
+  "Matches",
+  "News",
+  "Favorites",
+  "Tips + Prediction",
+  "More",
+  "Stats",
+  "Lineups",
+  "Events",
+  "xG",
+  "H2H",
+  "Form",
+  "Standings",
+  "Match Info",
+  "Watch Video unavailable",
+  "Buy Tipster Tip",
+  "Tipster Leaderboard",
+  "Prediction Leaderboard",
+  "Open MST Prediction App",
+  "Become a Tipster",
   "MST Scores cannot submit predictions",
   "Loading staging data",
   "Staging dependency unavailable",
@@ -36,6 +56,24 @@ for (const marker of [
   "request_id",
 ]) {
   assert.ok(screen.includes(marker), `missing Phase 4B marker: ${marker}`);
+}
+assert.match(screen, /Array\.from\(\{ length: 10 \}/);
+assert.match(screen, /groupByCompetition/);
+assert.match(screen, /current staging Match detail response does not provide/);
+assert.match(screen, /No fake purchase or paid-tip access/);
+assert.match(screen, /No fake unlock is possible/);
+
+for (const contractRule of [
+  "a live-score app first",
+  "Matches | News | Favorites | Tips + Prediction | More",
+  "does **not** create, edit, or submit user predictions",
+  "exact score: **3 points**",
+  "correct result: **1 point**",
+  "wrong result: **0 points**",
+  "MST Scores -> MST Prediction App -> Tipster Program",
+  "Phase 13 remains responsible",
+]) {
+  assert.ok(productContract.includes(contractRule), `missing locked product rule: ${contractRule}`);
 }
 
 for (const route of ["/v1/fixtures", "/v1/live", "/v1/results", "/v1/matches/", "/v1/tips?"]) {
