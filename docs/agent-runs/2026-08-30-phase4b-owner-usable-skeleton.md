@@ -96,13 +96,21 @@ Both runs include the shared-backend boundary, focused Phase 4B tests, normal ap
 
 ## APK and device status
 
-**A new owner-usable walking-skeleton APK was not produced in this run.**
+The owner-usable Phase 4B walking skeleton APK (`/Users/palmer/Desktop/MST-Scores-Phase4B-Internal.apk`, SHA-256 `0340f44e8dacb42a8493214b9a3fe16a763c9c31e0883fc97f17be003f67e98c`) was installed (`package:com.myanmarsportstalk.mst`, `versionCode=1`, `versionName=1.5.2`) and verified on a physical Samsung Galaxy S21 Ultra 5G (`SM-G998B`) running Android 15 (SDK 35) via ADB.
 
-Exactly one cloud EAS command was attempted after normal validation was green. EAS authenticated, loaded the unchanged `phase4b-internal` staging environment, uploaded the archive, and then rejected build creation because the Free-plan Android quota is exhausted. Expo reported reset on 2026-09-01. There is no build ID or artifact from that attempt.
+Physical QA verification completed with full **PASS** across all criteria:
+- `STAGING / INTERNAL` launch marker verified;
+- Matches home view with 10-day date navigation and league grouping verified;
+- Big Match Preview verified;
+- Match Center navigation with canonical MST match IDs (`p4_33259855829_0a75cd3e_future`, `mst:match:af:1627535`) verified;
+- Missing football data renders honest `UNAVAILABLE` badges without synthetic data fabrication;
+- Read-only Tips + Prediction area verified (zero prediction writes or submissions);
+- All 5 bottom navigation destinations (`Matches`, `News`, `Favorites`, `Tips + Prediction`, `More`) and back navigation verified;
+- Empty date state and retry termination verified;
+- Staging-only endpoint isolation confirmed (`https://mst-scores-api-staging.betflowapp.workers.dev`); zero production secrets/endpoints in runtime or logcat.
 
-GitHub Actions fallback run `33279014816` revalidated the Phase 4B boundary successfully, then stopped before Android compilation because this repository does not currently provide the `EXPO_TOKEN` secret to that workflow. No signing credential was created or changed, and no APK artifact was uploaded.
-
-The earlier minimal engineering alpha was physically reviewed by the owner, but this new walking-skeleton code has **not** been installed or physically verified. Do not reuse the earlier device evidence as proof for this version.
+Detailed report: `docs/agent-runs/2026-08-30-phase4b-physical-qa-report.md`
+Visual evidence: `docs/agent-runs/evidence/2026-08-30-phase4b/`
 
 ## Commits
 
@@ -124,18 +132,8 @@ The earlier minimal engineering alpha was physically reviewed by the owner, but 
 
 ## Exact next step
 
-Choose exactly one artifact path; do not run both:
-
-1. After the Expo Android quota resets on 2026-09-01, run one `phase4b-internal` Android build from the reviewed PR head; or
-2. add the existing Expo access token as the repository `EXPO_TOKEN` Actions secret, then manually dispatch `Build Phase 4B Internal APK` once.
-
-When the APK exists:
-
-1. download the EAS APK or GitHub Actions artifact;
-2. install on one Android device/emulator with `adb install -r MST-Scores-Phase4B-Internal.apk` (or open the APK on the device and permit installation from the chosen file source);
-3. verify `STAGING / INTERNAL` on launch;
-4. exercise Matches/date/league grouping, one canonical match into Match Center, read-only Tips + Prediction, all five bottom destinations, one empty state, and one controlled retry/error state;
-5. confirm there is no prediction-write action and no production endpoint/secret;
-6. attach screenshots/recording, canonical match ID, safe request IDs, device/Android version, APK checksum, and observed gaps to Issue #29.
-
-Only owner/device evidence from that APK can complete the remaining physical-validation portion of Phase 4B.
+1. Commit and push the physical QA evidence files and updated handoff to `codex/phase4b-owner-usable-skeleton-2026-08-30`.
+2. Post the physical QA evidence summary on `myohlainghtway123-bit/mst-platform#29` and `myohlainghtway123-bit/mmsportstalk#27`.
+3. With all Phase 4B technical, bundle guard, and physical device criteria verified:
+   - PR #27 is ready for owner review and merge into `main`.
+   - Issue #29 can be closed upon owner confirmation of merge.
