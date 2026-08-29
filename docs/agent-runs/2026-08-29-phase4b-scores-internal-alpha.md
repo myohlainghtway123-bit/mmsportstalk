@@ -56,6 +56,7 @@ The durable endpoint verification is also recorded in Issue #29 comment `5463304
 - `78497ffb3c97843417549e4b9ff6b4cc26dab0e7` — staging Scores client and deterministic API tests
 - `5c9e5ca` — minimum internal-alpha UI, CI, contract checks, and APK profile
 - `ac65d67` — Hermes bytecode-aware bundle validation
+- `e0d9aeae9662dfaa6159abbd19cb09d6e6667c3f` — durable Phase 4B run handoff
 
 ## Validation evidence
 
@@ -76,7 +77,7 @@ The durable endpoint verification is also recorded in Issue #29 comment `5463304
   - staging origin and marker present
   - production app API absent
   - prediction-write routes/symbols absent
-- GitHub PR validation — pending at the time this handoff was first committed
+- GitHub Actions run `33261190732` (`Validate MST App`) — PASS for commit `e0d9aeae9662dfaa6159abbd19cb09d6e6667c3f`
 
 ## Failed approach retained for future runs
 
@@ -92,7 +93,7 @@ The first post-export bundle check inspected only text extensions. Expo emitted 
 
 ## Remaining gaps
 
-- PR #25 must complete normal GitHub validation and be reviewed/merged.
+- PR #25 has passed normal GitHub validation and remains to be reviewed/merged.
 - No EAS quota/status was consumed or assumed in this run.
 - The installable APK and device/emulator screenshots/recording required to complete Issue #29 do not exist yet.
 - The tested canonical match had no permitted tips, so the real empty preview is proven; a later device proof should also select a match with a free tip if staging has one. Locked selections remain fail-closed regardless.
