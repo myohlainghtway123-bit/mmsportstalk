@@ -57,6 +57,17 @@ The durable endpoint verification is also recorded in Issue #29 comment `5463304
 - `5c9e5ca` — minimum internal-alpha UI, CI, contract checks, and APK profile
 - `ac65d67` — Hermes bytecode-aware bundle validation
 - `e0d9aeae9662dfaa6159abbd19cb09d6e6667c3f` — durable Phase 4B run handoff
+- `269c31c4ff8d3c86130dfa0648abe0ce668203a0` — isolate the internal entrypoint and restore additive normal-app validation
+
+## Merge-safety follow-up
+
+- the unflagged/default app boots `AppFinalShell`
+- `Phase4BScoresInternalAlpha` is selected only when `EXPO_PUBLIC_MST_INTERNAL === "true"`
+- the `phase4b-internal` EAS profile is unchanged
+- CI verifies the normal app API and staging Scores API as separate additive checks
+- CI clears Metro transforms and exports both default and internal Android bundles
+- the default bundle must contain the normal app API and exclude the staging origin/marker
+- the internal bundle retains all staging, marker, production-absence, and prediction-write-absence guards
 
 ## Validation evidence
 
@@ -78,10 +89,17 @@ The durable endpoint verification is also recorded in Issue #29 comment `5463304
   - production app API absent
   - prediction-write routes/symbols absent
 - GitHub Actions run `33261190732` (`Validate MST App`) — PASS for commit `e0d9aeae9662dfaa6159abbd19cb09d6e6667c3f`
+- merge-safety focused validation on 2026-08-29:
+  - `npm run test:phase4b` — PASS
+  - clear-cache default Android export — PASS; normal app API present and Phase 4B staging origin/marker absent
+  - `EXPO_PUBLIC_MST_INTERNAL=true npm run validate:android` — PASS; staging origin/marker present and production API/prediction-write surfaces absent
+  - `git diff --check` — PASS
 
 ## Failed approach retained for future runs
 
 The first post-export bundle check inspected only text extensions. Expo emitted the Android JavaScript as Hermes `.hbc` bytecode, so the app exported successfully but the guard could not see its strings and failed. The validator was corrected to inspect `.hbc` bytes as well; the same generated artifact then passed. No acceptance gate was weakened.
+
+During the merge-safety follow-up, the first unflagged export reused Metro's immediately preceding internal transform and produced the internal bundle. The new default-bundle assertion failed safely. Both environment-specific export paths now use `--clear`; fresh default and internal exports then produced distinct bundles and passed their isolation guards.
 
 ## Staging, infrastructure, and production actions
 
@@ -93,7 +111,7 @@ The first post-export bundle check inspected only text extensions. Expo emitted 
 
 ## Remaining gaps
 
-- PR #25 has passed normal GitHub validation and remains to be reviewed/merged.
+- The earlier PR head passed GitHub validation; merge-safety commit `269c31c4ff8d3c86130dfa0648abe0ce668203a0` is pushed and its new GitHub validation may still be running.
 - No EAS quota/status was consumed or assumed in this run.
 - The installable APK and device/emulator screenshots/recording required to complete Issue #29 do not exist yet.
 - The tested canonical match had no permitted tips, so the real empty preview is proven; a later device proof should also select a match with a free tip if staging has one. Locked selections remain fail-closed regardless.
