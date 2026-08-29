@@ -10,6 +10,17 @@
         "buildType": "apk"
       }
     },
+    "phase4b-internal": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MST_ENVIRONMENT": "staging",
+        "EXPO_PUBLIC_MST_INTERNAL": "true",
+        "EXPO_PUBLIC_MST_SCORES_API_ORIGIN": "https://mst-scores-api-staging.betflowapp.workers.dev"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "autoIncrement": true
     }
