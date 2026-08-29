@@ -54,6 +54,7 @@ const MATCH_SECTION_DEFS = [
 ];
 
 function dateKey(value) {
+  if (value == null || value === "") return "";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -442,10 +443,11 @@ function MoreScreen({ onSelect }) {
 }
 
 function MatchDataSection({ title, value }) {
+  const available = value !== undefined;
   return (
     <View style={s.dataSection}>
-      <View style={s.dataSectionHeader}><Text style={s.dataSectionTitle}>{title}</Text><Text style={[s.availability, value && s.available]}> {value ? "AVAILABLE" : "UNAVAILABLE"} </Text></View>
-      <Text style={s.dataSectionText}>{value ? sectionSummary(value) : `The current staging Match detail response does not provide ${title}.`}</Text>
+      <View style={s.dataSectionHeader}><Text style={s.dataSectionTitle}>{title}</Text><Text style={[s.availability, available && s.available]}> {available ? "AVAILABLE" : "UNAVAILABLE"} </Text></View>
+      <Text style={s.dataSectionText}>{available ? sectionSummary(value) : `The current staging Match detail response does not provide ${title}.`}</Text>
     </View>
   );
 }
