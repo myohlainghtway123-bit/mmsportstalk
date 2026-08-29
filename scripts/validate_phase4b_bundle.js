@@ -10,8 +10,8 @@ function files(directory) {
 }
 
 const bundle = files("dist-ci")
-  .filter((file) => /\.(?:js|map|html|json)$/.test(file))
-  .map((file) => fs.readFileSync(file, "utf8"))
+  .filter((file) => /\.(?:hbc|js|map|html|json)$/.test(file))
+  .map((file) => fs.readFileSync(file).toString("latin1"))
   .join("\n");
 
 assert.match(bundle, /mst-scores-api-staging\.betflowapp\.workers\.dev/);
