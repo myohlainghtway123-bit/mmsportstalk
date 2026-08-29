@@ -1,0 +1,54 @@
+name: Build Phase 4B Internal APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/phase4b-owner-usable-skeleton-2026-08-30
+    paths:
+      - '.github/workflows/phase4b-internal-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-internal-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.18.0'
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Revalidate Phase 4B boundary
+        run: npm run test:phase4b
+
+      - name: Build staging internal APK locally
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --local --platform android --profile phase4b-internal --non-interactive --output "$GITHUB_WORKSPACE/artifacts/MST-Scores-Phase4B-Internal.apk"
+
+      - name: Record checksum
+        run: sha256sum artifacts/MST-Scores-Phase4B-Internal.apk > artifacts/MST-Scores-Phase4B-Internal.apk.sha256
+
+      - name: Upload owner-test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MST-Scores-Phase4B-Internal-Android
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 90
