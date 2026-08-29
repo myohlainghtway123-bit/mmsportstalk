@@ -1,6 +1,7 @@
-import React, { memo, useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,60 +14,187 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   canonicalMatchId,
   loadMatchCenter,
-  loadScoresFeed,
+  loadScoresOverview,
 } from "./scoresStagingApi";
 
-const C = {
-  bg: "#080A0C",
-  panel: "#111416",
-  panel2: "#171B1E",
-  border: "#292F33",
-  text: "#FFFFFF",
-  text2: "#D4D7D9",
-  muted: "#92999E",
-  red: "#F3262D",
-  redSoft: "rgba(243,38,45,0.15)",
-  amber: "#F4C84D",
-  green: "#48C78E",
-};
+const T = Object.freeze({
+  color: {
+    bg: "#080A0C",
+    surface: "#101417",
+    raised: "#171C20",
+    border: "#293036",
+    text: "#FFFFFF",
+    secondary: "#D4D8DB",
+    muted: "#929AA0",
+    red: "#F3262D",
+    redSoft: "rgba(243,38,45,0.14)",
+    amber: "#F4C84D",
+    green: "#48C78E",
+  },
+  space: { xs: 6, sm: 10, md: 16, lg: 22 },
+  radius: { sm: 8, md: 13, lg: 17 },
+});
 
-const FEEDS = [
-  { id: "fixtures", label: "FIXTURES" },
-  { id: "live", label: "LIVE" },
-  { id: "results", label: "RESULTS" },
+const NAV_ITEMS = [
+  { id: "matches", label: "Matches", icon: "football-outline", activeIcon: "football" },
+  { id: "news", label: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
+  { id: "favorites", label: "Favorites", icon: "star-outline", activeIcon: "star" },
+  { id: "tips", label: "Tips + Prediction", icon: "radio-outline", activeIcon: "radio" },
+  { id: "more", label: "More", icon: "ellipsis-horizontal", activeIcon: "ellipsis-horizontal-circle" },
 ];
 
-function dateTime(value) {
-  if (!value) return "Kickoff unavailable";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+const MATCH_SECTION_DEFS = [
+  { title: "Stats", keys: ["stats", "statistics"] },
+  { title: "Lineups", keys: ["lineups", "lineup"] },
+  { title: "Events", keys: ["events"] },
+  { title: "xG", keys: ["xg", "expected_goals"] },
+  { title: "H2H", keys: ["h2h", "head_to_head"] },
+  { title: "Form", keys: ["form", "team_form"] },
+  { title: "Standings", keys: ["standings"] },
+];
+
+function dateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function dateWindow(center = new Date()) {
+  return Array.from({ length: 10 }, (_, index) => {
+    const date = new Date(center);
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + index - 4);
+    return date;
   });
 }
 
+function dayLabel(date) {
+  const today = dateKey(new Date());
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (dateKey(date) === today) return "Today";
+  if (dateKey(date) === dateKey(tomorrow)) return "Tomorrow";
+  if (dateKey(date) === dateKey(yesterday)) return "Yesterday";
+  return date.toLocaleDateString([], { weekday: "short" });
+}
+
+function kickoffText(value) {
+  if (!value) return "TBD";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "TBD";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function fullKickoff(value) {
+  if (!value) return "Kickoff unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Kickoff unavailable";
+  return date.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 function statusText(match) {
-  const status = String(match?.status ?? "scheduled").toUpperCase();
-  if (status === "LIVE" && match?.minute != null) return `LIVE · ${match.minute}'`;
-  if (status === "FINISHED") return "FULL TIME";
+  const status = String(match?.status || "scheduled").toLowerCase();
+  if (["live", "in_play", "1h", "2h"].includes(status)) return match?.minute == null ? "LIVE" : `LIVE ${match.minute}'`;
+  if (["ht", "halftime"].includes(status)) return "HT";
+  if (["finished", "ft"].includes(status)) return "FT";
   return String(match?.status_detail || status).toUpperCase();
 }
 
+function isLive(match) {
+  return ["live", "in_play", "1h", "2h", "ht", "halftime"].includes(String(match?.status || "").toLowerCase());
+}
+
+function isFinished(match) {
+  return ["finished", "ft"].includes(String(match?.status || "").toLowerCase());
+}
+
 function scoreText(match) {
-  if (match?.home_score == null || match?.away_score == null) return "VS";
-  return `${match.home_score}  –  ${match.away_score}`;
+  if (match?.home_score == null || match?.away_score == null) return "vs";
+  return `${match.home_score} - ${match.away_score}`;
+}
+
+function matchStateText(match) {
+  return isLive(match) || isFinished(match) ? statusText(match) : kickoffText(match?.kickoff_at);
+}
+
+function groupByCompetition(matches) {
+  const groups = new Map();
+  for (const match of matches) {
+    const id = String(match?.competition_id || match?.competition_name || "football");
+    if (!groups.has(id)) groups.set(id, { id, name: match?.competition_name || "Football", logo: match?.competition_logo_url || null, matches: [] });
+    groups.get(id).matches.push(match);
+  }
+  return [...groups.values()];
+}
+
+function nearestAvailableDate(matches) {
+  const now = Date.now();
+  const dated = matches
+    .map((match) => ({ key: dateKey(match?.kickoff_at), time: new Date(match?.kickoff_at).getTime() }))
+    .filter(({ key, time }) => key && Number.isFinite(time))
+    .sort((a, b) => Math.abs(a.time - now) - Math.abs(b.time - now));
+  return dated[0]?.key || dateKey(new Date());
+}
+
+function firstSectionValue(match, keys) {
+  return keys.map((key) => match?.[key]).find((value) => (
+    Array.isArray(value) ? value.length > 0 : value && typeof value === "object" ? Object.keys(value).length > 0 : value != null
+  ));
+}
+
+function sectionSummary(value) {
+  if (Array.isArray(value)) return `${value.length} staging record${value.length === 1 ? "" : "s"} available.`;
+  if (value && typeof value === "object") return `${Object.keys(value).length} staging field${Object.keys(value).length === 1 ? "" : "s"} available.`;
+  return value == null ? "" : String(value);
 }
 
 function EnvironmentBanner() {
   return (
     <View style={s.environmentBanner} accessibilityLabel="STAGING INTERNAL build">
-      <Ionicons name="flask-outline" size={16} color={C.bg} />
+      <Ionicons name="flask-outline" size={14} color={T.color.bg} />
       <Text style={s.environmentText}>STAGING / INTERNAL</Text>
-      <Text style={s.environmentSub}>REAL MST SCORES API</Text>
+      <Text style={s.environmentSub}>REAL SCORES API · NO PRODUCTION</Text>
+    </View>
+  );
+}
+
+function BrandHeader({ eyebrow = "FOLLOW THE GAME", title = "MST Scores" }) {
+  return (
+    <View style={s.brandHeader}>
+      <View style={s.brandBlock}>
+        <Text style={s.brandTitle}><Text style={s.brandMst}>MST</Text> Scores</Text>
+        <Text style={s.brandEyebrow}>{eyebrow}</Text>
+      </View>
+      <View style={s.headerIcons} pointerEvents="none">
+        <Ionicons name="search-outline" size={21} color={T.color.secondary} />
+        <Ionicons name="notifications-outline" size={21} color={T.color.secondary} />
+        <Ionicons name="calendar-outline" size={20} color={T.color.secondary} />
+      </View>
+      {title !== "MST Scores" ? <Text style={s.screenName}>{title}</Text> : null}
+    </View>
+  );
+}
+
+function BottomNavigation({ active, onSelect }) {
+  return (
+    <View style={s.bottomNav}>
+      {NAV_ITEMS.map((item) => {
+        const selected = active === item.id;
+        return (
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            key={item.id}
+            onPress={() => onSelect(item.id)}
+            style={s.navItem}
+          >
+            <Ionicons name={selected ? item.activeIcon : item.icon} size={21} color={selected ? T.color.red : T.color.muted} />
+            <Text numberOfLines={1} style={[s.navLabel, selected && s.navLabelActive]}>{item.label}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -76,141 +204,248 @@ function RequestId({ label, value }) {
   return <Text selectable style={s.requestId}>{label} request_id: {value}</Text>;
 }
 
-function TerminalState({ loading, error, empty, onRetry }) {
-  if (loading) {
-    return (
-      <View style={s.stateCard}>
-        <ActivityIndicator color={C.red} />
-        <Text style={s.stateTitle}>Loading staging data…</Text>
-        <Text style={s.stateText}>This request stops after 8 seconds if the dependency does not respond.</Text>
-      </View>
-    );
-  }
-  if (error) {
-    return (
-      <View style={s.stateCard}>
-        <Ionicons name="cloud-offline-outline" size={28} color={C.amber} />
-        <Text style={s.stateTitle}>Staging dependency unavailable</Text>
-        <Text style={s.stateText}>{error}</Text>
-        <Pressable accessibilityRole="button" style={s.retryButton} onPress={onRetry}>
-          <Ionicons name="refresh" size={16} color={C.text} />
-          <Text style={s.retryText}>RETRY</Text>
+function TerminalState({ loading, error, empty, emptyTitle = "No matches available", emptyText, onRetry }) {
+  if (!loading && !error && !empty) return null;
+  return (
+    <View style={s.stateCard}>
+      {loading ? <ActivityIndicator color={T.color.red} /> : <Ionicons name={error ? "cloud-offline-outline" : "football-outline"} size={27} color={error ? T.color.amber : T.color.muted} />}
+      <Text style={s.stateTitle}>{loading ? "Loading staging data…" : error ? "Staging dependency unavailable" : emptyTitle}</Text>
+      <Text style={s.stateText}>{loading ? "The request stops after 8 seconds if staging does not respond." : error || emptyText || "The selected staging view is honestly empty."}</Text>
+      {!loading && onRetry ? (
+        <Pressable accessibilityRole="button" style={s.primaryButton} onPress={onRetry}>
+          <Ionicons name="refresh" size={16} color={T.color.text} />
+          <Text style={s.primaryButtonText}>RETRY</Text>
         </Pressable>
-      </View>
-    );
-  }
-  if (empty) {
-    return (
-      <View style={s.stateCard}>
-        <Ionicons name="football-outline" size={28} color={C.muted} />
-        <Text style={s.stateTitle}>No matches available</Text>
-        <Text style={s.stateText}>The selected real staging feed is empty. Try another tab or retry.</Text>
-        <Pressable accessibilityRole="button" style={s.retryButton} onPress={onRetry}>
-          <Ionicons name="refresh" size={16} color={C.text} />
-          <Text style={s.retryText}>RETRY</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  return null;
+      ) : null}
+    </View>
+  );
 }
 
-const MatchCard = memo(function MatchCard({ match, onOpen }) {
+function TeamMark({ name, uri, size = 30 }) {
+  if (uri) return <Image source={{ uri }} resizeMode="contain" style={{ width: size, height: size }} />;
+  return (
+    <View style={[s.fallbackMark, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Text style={s.fallbackMarkText}>{String(name || "M").trim().slice(0, 1).toUpperCase()}</Text>
+    </View>
+  );
+}
+
+const MatchRow = memo(function MatchRow({ match, onOpen }) {
   const id = canonicalMatchId(match);
-  const live = String(match?.status).toLowerCase() === "live";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open match ${match?.home_team_name || "Home"} versus ${match?.away_team_name || "Away"}`}
-      style={[s.matchCard, live && s.liveCard]}
+      accessibilityLabel={`Open ${match?.home_team_name || "Home"} versus ${match?.away_team_name || "Away"}`}
       onPress={() => id && onOpen(match)}
+      style={s.matchRow}
     >
-      <View style={s.cardTop}>
-        <Text numberOfLines={1} style={s.competition}>{match?.competition_name || "Football"}</Text>
-        <Text style={[s.status, live && s.liveText]}>{statusText(match)}</Text>
+      <View style={s.matchState}>
+        <Text style={[s.matchStateText, isLive(match) && s.liveText]}>{matchStateText(match)}</Text>
+        {isLive(match) ? <View style={s.liveDot} /> : null}
       </View>
-      <View style={s.teamsRow}>
-        <Text numberOfLines={2} style={s.teamName}>{match?.home_team_name || "Home"}</Text>
-        <Text style={[s.score, live && s.liveText]}>{scoreText(match)}</Text>
-        <Text numberOfLines={2} style={[s.teamName, s.teamNameRight]}>{match?.away_team_name || "Away"}</Text>
+      <View style={s.matchTeams}>
+        <View style={s.teamLine}><TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={24} /><Text numberOfLines={1} style={s.teamLineName}>{match?.home_team_name || "Home"}</Text></View>
+        <View style={s.teamLine}><TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={24} /><Text numberOfLines={1} style={s.teamLineName}>{match?.away_team_name || "Away"}</Text></View>
       </View>
-      <Text style={s.kickoff}>{dateTime(match?.kickoff_at)}</Text>
-      <View style={s.canonicalRow}>
-        <Text selectable numberOfLines={1} style={s.canonicalText}>MST match: {id}</Text>
-        <Ionicons name="chevron-forward" size={17} color={C.muted} />
-      </View>
+      <Text style={[s.rowScore, isLive(match) && s.liveText]}>{scoreText(match)}</Text>
+      <Ionicons name="chevron-forward" size={17} color={T.color.muted} />
     </Pressable>
   );
 });
 
-function ScoresHome({ onOpenMatch }) {
-  const [feed, setFeed] = useState("fixtures");
-  const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState({ loading: true, matches: [], error: "", requestId: null });
+function LeagueGroup({ group, onOpen }) {
+  return (
+    <View style={s.leagueCard}>
+      <View style={s.leagueHeader}>
+        <TeamMark name={group.name} uri={group.logo} size={24} />
+        <Text numberOfLines={1} style={s.leagueName}>{group.name}</Text>
+        <Text style={s.viewAll}>View all</Text>
+      </View>
+      {group.matches.map((match) => <MatchRow key={canonicalMatchId(match)} match={match} onOpen={onOpen} />)}
+    </View>
+  );
+}
 
-  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+function BigMatchPreview({ match, onOpen }) {
+  if (!match) return null;
+  return (
+    <Pressable accessibilityRole="button" onPress={() => onOpen(match)} style={s.bigMatchCard}>
+      <Text style={s.bigMatchEyebrow}>BIG MATCH PREVIEW</Text>
+      <View style={s.bigMatchTeams}>
+        <View style={s.bigTeam}><TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={42} /><Text numberOfLines={2} style={s.bigTeamName}>{match?.home_team_name || "Home"}</Text></View>
+        <View style={s.bigVersus}><Text style={s.bigVs}>VS</Text><Text style={s.bigKickoff}>{fullKickoff(match?.kickoff_at)}</Text></View>
+        <View style={s.bigTeam}><TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={42} /><Text numberOfLines={2} style={s.bigTeamName}>{match?.away_team_name || "Away"}</Text></View>
+      </View>
+      <View style={s.previewCta}><Text style={s.previewCtaText}>MATCH CENTER</Text><Ionicons name="arrow-forward" size={15} color={T.color.text} /></View>
+    </Pressable>
+  );
+}
+
+function DateNavigation({ selected, onSelect }) {
+  const dates = useMemo(() => dateWindow(), []);
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dateStrip}>
+      {dates.map((date) => {
+        const key = dateKey(date);
+        const active = selected === key;
+        return (
+          <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={() => onSelect(key)} style={[s.dateCell, active && s.dateCellActive]}>
+            <Text style={[s.dateDay, active && s.dateActiveText]}>{dayLabel(date)}</Text>
+            <Text style={[s.dateNumber, active && s.dateActiveText]}>{date.getDate()}</Text>
+            <Text style={[s.dateMonth, active && s.dateActiveText]}>{date.toLocaleDateString([], { month: "short" }).toUpperCase()}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function MatchesScreen({ overview, onOpenMatch, onRetry }) {
+  const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
+  const [didSelectFallback, setDidSelectFallback] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    setState({ loading: true, matches: [], error: "", requestId: null });
-    loadScoresFeed(feed)
-      .then((result) => {
-        if (!active) return;
-        setState({ loading: false, matches: result.matches, error: "", requestId: result.requestId });
-      })
-      .catch((error) => {
-        if (!active) return;
-        setState({ loading: false, matches: [], error: error?.message || "Could not load staging matches.", requestId: error?.requestId || null });
-      });
-    return () => { active = false; };
-  }, [feed, attempt]);
+    if (!overview.loading && !didSelectFallback && overview.matches.length) {
+      const todayHasMatches = overview.matches.some((match) => dateKey(match?.kickoff_at) === selectedDate);
+      if (!todayHasMatches) setSelectedDate(nearestAvailableDate(overview.matches));
+      setDidSelectFallback(true);
+    }
+  }, [didSelectFallback, overview.loading, overview.matches, selectedDate]);
+
+  const selectedMatches = useMemo(
+    () => overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate),
+    [overview.matches, selectedDate],
+  );
+  const groups = useMemo(() => groupByCompetition(selectedMatches), [selectedMatches]);
 
   return (
-    <View style={s.screen}>
-      <EnvironmentBanner />
-      <View style={s.header}>
-        <View>
-          <Text style={s.eyebrow}>PHASE 4B INTERNAL ALPHA</Text>
-          <Text style={s.title}>MST Scores</Text>
-          <Text style={s.subtitle}>Real staging fixtures, live scores and results</Text>
-        </View>
-        <View style={s.readOnlyBadge}><Text style={s.readOnlyText}>READ ONLY</Text></View>
-      </View>
-
-      <View style={s.tabs}>
-        {FEEDS.map((item) => (
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{ selected: feed === item.id }}
-            key={item.id}
-            style={[s.tab, feed === item.id && s.tabActive]}
-            onPress={() => setFeed(item.id)}
-          >
-            <Text style={[s.tabText, feed === item.id && s.tabTextActive]}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
+    <View style={s.flex}>
+      <BrandHeader />
+      <DateNavigation selected={selectedDate} onSelect={setSelectedDate} />
       <ScrollView
-        contentContainerStyle={s.content}
-        refreshControl={<RefreshControl refreshing={state.loading} onRefresh={retry} tintColor={C.red} colors={[C.red]} />}
+        contentContainerStyle={s.scrollContent}
+        refreshControl={<RefreshControl refreshing={overview.loading} onRefresh={onRetry} tintColor={T.color.red} colors={[T.color.red]} />}
       >
-        <View style={s.sectionHeader}>
-          <Text style={s.sectionTitle}>{feed.toUpperCase()}</Text>
-          <Text style={s.count}>{state.matches.length} matches</Text>
+        <View style={s.sectionHeadingRow}>
+          <View><Text style={s.sectionEyebrow}>MATCHES</Text><Text style={s.sectionTitle}>Follow the game</Text></View>
+          <Text style={s.matchCount}>{selectedMatches.length} matches</Text>
         </View>
         <TerminalState
-          loading={state.loading}
-          error={state.error}
-          empty={!state.loading && !state.error && state.matches.length === 0}
-          onRetry={retry}
+          loading={overview.loading}
+          error={overview.error}
+          empty={!overview.loading && !overview.error && selectedMatches.length === 0}
+          emptyText="No real staging match is scheduled for this date. Choose another date or retry."
+          onRetry={onRetry}
         />
-        {state.matches.map((match) => (
-          <MatchCard key={canonicalMatchId(match)} match={match} onOpen={onOpenMatch} />
+        {overview.warnings.map((warning) => (
+          <View key={warning.feed} style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{warning.feed}: {warning.message}</Text></View>
         ))}
-        <RequestId label="scores" value={state.requestId} />
-        <View style={s.bottomSpace} />
+        {groups.map((group, index) => (
+          <React.Fragment key={group.id}>
+            <LeagueGroup group={group} onOpen={onOpenMatch} />
+            {index === 0 ? <BigMatchPreview match={group.matches[0]} onOpen={onOpenMatch} /> : null}
+          </React.Fragment>
+        ))}
+        <RequestId label="fixtures" value={overview.requestIds.fixtures} />
+        <RequestId label="live" value={overview.requestIds.live} />
+        <RequestId label="results" value={overview.requestIds.results} />
       </ScrollView>
+    </View>
+  );
+}
+
+function DependencyCard({ icon, title, text, action }) {
+  return (
+    <View style={s.dependencyCard}>
+      <View style={s.dependencyIcon}><Ionicons name={icon} size={22} color={T.color.red} /></View>
+      <View style={s.dependencyCopy}><Text style={s.dependencyTitle}>{title}</Text><Text style={s.dependencyText}>{text}</Text></View>
+      {action ? <View style={s.disabledButton}><Text style={s.disabledButtonText}>{action}</Text></View> : null}
+    </View>
+  );
+}
+
+function ShellScreen({ title, eyebrow, active, onSelect, children }) {
+  return (
+    <View style={s.flex}>
+      <BrandHeader title={title} eyebrow={eyebrow} />
+      <ScrollView contentContainerStyle={s.scrollContent}>{children}</ScrollView>
+      <BottomNavigation active={active} onSelect={onSelect} />
+    </View>
+  );
+}
+
+function NewsScreen({ onSelect }) {
+  return (
+    <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>
+      <View style={s.placeholderHero}><Ionicons name="newspaper-outline" size={34} color={T.color.red} /><Text style={s.placeholderTitle}>News structure confirmed</Text><Text style={s.placeholderText}>The authorized editorial feed is not connected to this Phase 4B staging build. No fake articles are shown.</Text></View>
+      <DependencyCard icon="server-outline" title="Latest football news" text="Waiting for the authorized MST web/editorial product API." action="UNAVAILABLE" />
+      <DependencyCard icon="bookmark-outline" title="Saved stories" text="Persistence is intentionally deferred; this shell does not pretend stories are saved." action="PHASE 13" />
+    </ShellScreen>
+  );
+}
+
+function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
+  const realMatches = matches.slice(0, 2);
+  return (
+    <ShellScreen title="Favorites" eyebrow="TEAMS · COMPETITIONS" active="favorites" onSelect={onSelect}>
+      <View style={s.segmented}><View style={[s.segment, s.segmentActive]}><Text style={s.segmentActiveText}>All</Text></View><View style={s.segment}><Text style={s.segmentText}>Teams</Text></View><View style={s.segment}><Text style={s.segmentText}>Competitions</Text></View></View>
+      <DependencyCard icon="heart-outline" title="Favorite teams and competitions" text="Account-backed favorites are not available from the current staging Scores API. Nothing has been fabricated or persisted." action="NOT CONNECTED" />
+      <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Real staging matches</Text><Text style={s.matchCount}>Not personalized</Text></View>
+      {realMatches.length ? <View style={s.leagueCard}>{realMatches.map((match) => <MatchRow key={canonicalMatchId(match)} match={match} onOpen={onOpenMatch} />)}</View> : <TerminalState empty emptyTitle="No staging matches" emptyText="There are no real matches to show here." />}
+    </ShellScreen>
+  );
+}
+
+function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
+  return (
+    <ShellScreen title="Tips + Prediction" eyebrow="READ ONLY IN MST SCORES" active="tips" onSelect={onSelect}>
+      <View style={s.safetyBanner}><Ionicons name="shield-checkmark-outline" size={20} color={T.color.green} /><View style={s.dependencyCopy}><Text style={s.safetyTitle}>No prediction writes</Text><Text style={s.safetyText}>MST Scores can consume authorized predictions and tips, but cannot create, edit, or submit them.</Text></View></View>
+      {featuredMatch ? (
+        <View style={s.featuredPrediction}>
+          <Text style={s.sectionEyebrow}>MST PREDICTION UNLOCK</Text>
+          <Text style={s.featuredPredictionTitle}>{featuredMatch.home_team_name} vs {featuredMatch.away_team_name}</Text>
+          <Text style={s.dependencyText}>Real staging match · prediction remains locked until an authorized rewarded-video service exists.</Text>
+          <View style={s.actionRow}>
+            <View style={s.disabledAction}><Ionicons name="play-circle-outline" size={18} color={T.color.muted} /><Text style={s.disabledActionText}>Watch Video unavailable</Text></View>
+            <Pressable style={s.outlineAction} onPress={() => onOpenMatch(featuredMatch)}><Text style={s.outlineActionText}>View match</Text></Pressable>
+          </View>
+        </View>
+      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real staging match is available for a read-only preview." />}
+      <DependencyCard icon="cart-outline" title="Buy Tipster Tip" text="Purchase and entitlement services are not connected. No fake purchase or paid-tip access is offered." action="DISABLED" />
+      <View style={s.twoColumns}>
+        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Tipster Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>
+        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Prediction Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>
+      </View>
+      <DependencyCard icon="open-outline" title="Open MST Prediction App" text="The staging deep-link contract is not configured. Prediction creation stays in MST Prediction." action="LINK UNAVAILABLE" />
+      <DependencyCard icon="ribbon-outline" title="Become a Tipster" text="Final path starts in MST Prediction, continues to the MST website, and is reviewed in Web Admin." action="LINK UNAVAILABLE" />
+      <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>
+    </ShellScreen>
+  );
+}
+
+function MoreScreen({ onSelect }) {
+  const rows = [
+    ["language-outline", "Language", "Burmese / English · Phase 13"],
+    ["moon-outline", "Appearance", "Dark / light / system · Phase 13"],
+    ["notifications-outline", "Notifications", "Not connected"],
+    ["card-outline", "Payments & cards", "Not connected"],
+    ["document-text-outline", "Terms, Privacy & Policies", "Final content pending"],
+    ["information-circle-outline", "About MST", "Product shell"],
+    ["help-circle-outline", "Support / Help", "Integration pending"],
+  ];
+  return (
+    <ShellScreen title="More" eyebrow="SETTINGS · SUPPORT" active="more" onSelect={onSelect}>
+      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="person-outline" size={28} color={T.color.muted} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>Internal tester</Text><Text style={s.dependencyText}>Profile/account service is not connected in this Phase 4B build.</Text></View></View>
+      <View style={s.menuCard}>{rows.map(([icon, title, detail]) => <View key={title} style={s.menuRow}><Ionicons name={icon} size={19} color={T.color.secondary} /><Text style={s.menuTitle}>{title}</Text><Text style={s.menuDetail}>{detail}</Text><Ionicons name="chevron-forward" size={16} color={T.color.muted} /></View>)}</View>
+    </ShellScreen>
+  );
+}
+
+function MatchDataSection({ title, value }) {
+  return (
+    <View style={s.dataSection}>
+      <View style={s.dataSectionHeader}><Text style={s.dataSectionTitle}>{title}</Text><Text style={[s.availability, value && s.available]}> {value ? "AVAILABLE" : "UNAVAILABLE"} </Text></View>
+      <Text style={s.dataSectionText}>{value ? sectionSummary(value) : `The current staging Match detail response does not provide ${title}.`}</Text>
     </View>
   );
 }
@@ -218,15 +453,9 @@ function ScoresHome({ onOpenMatch }) {
 function TipPreview({ tip }) {
   return (
     <View style={s.tipCard}>
-      <View style={s.tipTitleRow}>
-        <Text numberOfLines={1} style={s.tipTitle}>{tip.title}</Text>
-        <View style={[s.tipAccess, tip.locked ? s.tipLocked : s.tipFree]}>
-          <Ionicons name={tip.locked ? "lock-closed" : "lock-open"} size={12} color={tip.locked ? C.amber : C.green} />
-          <Text style={[s.tipAccessText, { color: tip.locked ? C.amber : C.green }]}>{tip.locked ? "LOCKED" : "FREE"}</Text>
-        </View>
-      </View>
-      {tip.summary ? <Text style={s.tipSummary}>{tip.summary}</Text> : null}
-      <Text style={s.tipSelection}>{tip.locked ? "Selection protected by the server" : `Selection: ${tip.selection || "Unavailable"}`}</Text>
+      <View style={s.tipTitleRow}><Text style={s.tipTitle}>{tip.title}</Text><Text style={[s.tipAccess, tip.locked ? s.tipLocked : s.tipFree]}>{tip.locked ? "LOCKED" : "FREE"}</Text></View>
+      {tip.summary ? <Text style={s.dependencyText}>{tip.summary}</Text> : null}
+      <Text style={s.tipSelection}>{tip.locked ? "Selection protected by server authorization" : `Selection: ${tip.selection || "Unavailable"}`}</Text>
     </View>
   );
 }
@@ -241,175 +470,226 @@ function MatchCenter({ selectedMatch, onBack }) {
     let active = true;
     setState({ loading: true, data: null, error: "", requestId: null });
     loadMatchCenter(selectedId)
-      .then((data) => {
-        if (!active) return;
-        setState({ loading: false, data, error: "", requestId: data.requestIds.match });
-      })
-      .catch((error) => {
-        if (!active) return;
-        setState({ loading: false, data: null, error: error?.message || "Could not load Match Center.", requestId: error?.requestId || null });
-      });
+      .then((data) => active && setState({ loading: false, data, error: "", requestId: data.requestIds.match }))
+      .catch((error) => active && setState({ loading: false, data: null, error: error?.message || "Could not load Match Center.", requestId: error?.requestId || null }));
     return () => { active = false; };
-  }, [selectedId, attempt]);
+  }, [attempt, selectedId]);
 
   const match = state.data?.match || selectedMatch;
   return (
-    <View style={s.screen}>
-      <EnvironmentBanner />
-      <View style={s.matchHeader}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to Scores" hitSlop={10} onPress={onBack}>
-          <Ionicons name="chevron-back" size={28} color={C.text} />
-        </Pressable>
-        <View style={s.matchHeaderText}>
-          <Text style={s.eyebrow}>MATCH CENTER</Text>
-          <Text selectable numberOfLines={1} style={s.matchId}>Canonical MST ID: {selectedId}</Text>
-        </View>
+    <View style={s.flex}>
+      <View style={s.matchCenterHeader}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to Matches" hitSlop={10} onPress={onBack}><Ionicons name="chevron-back" size={27} color={T.color.text} /></Pressable>
+        <View style={s.dependencyCopy}><Text style={s.matchCenterTitle}>Match Center</Text><Text selectable numberOfLines={1} style={s.canonicalId}>Canonical MST ID: {selectedId}</Text></View>
+        <Ionicons name="share-social-outline" size={21} color={T.color.secondary} />
       </View>
-
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView contentContainerStyle={s.matchCenterContent}>
         <TerminalState loading={state.loading} error={state.error} onRetry={retry} />
         {!state.loading && !state.error ? (
           <>
-            <View style={s.heroCard}>
-              <Text style={s.competitionCenter}>{match?.competition_name || "Football"}</Text>
-              <Text style={s.kickoffCenter}>{dateTime(match?.kickoff_at)}</Text>
+            <View style={s.matchHero}>
+              <Text style={s.heroCompetition}>{match?.competition_name || "Football"}</Text>
+              <Text style={s.heroKickoff}>{fullKickoff(match?.kickoff_at)}</Text>
               <View style={s.heroTeams}>
-                <Text style={s.heroTeam}>{match?.home_team_name || "Home"}</Text>
-                <View style={s.heroScoreWrap}>
-                  <Text style={s.heroScore}>{scoreText(match)}</Text>
-                  <Text style={s.heroStatus}>{statusText(match)}</Text>
-                </View>
-                <Text style={[s.heroTeam, s.teamNameRight]}>{match?.away_team_name || "Away"}</Text>
-              </View>
-              <View style={s.contextGrid}>
-                <View style={s.contextItem}><Text style={s.contextLabel}>VENUE</Text><Text numberOfLines={2} style={s.contextValue}>{match?.venue_name || "Unavailable"}</Text></View>
-                <View style={s.contextItem}><Text style={s.contextLabel}>QUALITY</Text><Text style={s.contextValue}>{match?.quality_score ?? "—"}</Text></View>
-                <View style={s.contextItem}><Text style={s.contextLabel}>FRESHNESS</Text><Text style={s.contextValue}>{String(match?.freshness_state || "unknown").toUpperCase()}</Text></View>
+                <View style={s.heroTeam}><TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={52} /><Text style={s.heroTeamName}>{match?.home_team_name || "Home"}</Text></View>
+                <View style={s.heroScoreWrap}><Text style={s.heroScore}>{scoreText(match)}</Text><Text style={[s.heroStatus, isLive(match) && s.liveText]}>{statusText(match)}</Text></View>
+                <View style={s.heroTeam}><TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={52} /><Text style={s.heroTeamName}>{match?.away_team_name || "Away"}</Text></View>
               </View>
             </View>
-
-            <View style={s.previewHeader}>
-              <View>
-                <Text style={s.sectionTitle}>PREDICTION / TIP PREVIEW</Text>
-                <Text style={s.previewSub}>Read-only context. MST Scores cannot submit predictions.</Text>
+            <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real staging response</Text></View>
+            {MATCH_SECTION_DEFS.map((section) => <MatchDataSection key={section.title} title={section.title} value={firstSectionValue(match, section.keys)} />)}
+            <View style={s.dataSection}>
+              <View style={s.dataSectionHeader}><Text style={s.dataSectionTitle}>Match Info</Text><Text style={[s.availability, s.available]}> AVAILABLE </Text></View>
+              <View style={s.infoGrid}>
+                <View style={s.infoCell}><Text style={s.infoLabel}>KICKOFF</Text><Text style={s.infoValue}>{fullKickoff(match?.kickoff_at)}</Text></View>
+                <View style={s.infoCell}><Text style={s.infoLabel}>VENUE</Text><Text style={s.infoValue}>{match?.venue_name || "Unavailable"}</Text></View>
+                <View style={s.infoCell}><Text style={s.infoLabel}>STATUS</Text><Text style={s.infoValue}>{statusText(match)}</Text></View>
+                <View style={s.infoCell}><Text style={s.infoLabel}>FRESHNESS</Text><Text style={s.infoValue}>{String(match?.freshness_state || "unknown").toUpperCase()}</Text></View>
               </View>
-              <View style={s.readOnlyBadge}><Text style={s.readOnlyText}>NO WRITES</Text></View>
             </View>
-
-            <View style={s.outcomes} pointerEvents="none">
-              {["HOME", "DRAW", "AWAY"].map((outcome) => <View key={outcome} style={s.outcome}><Text style={s.outcomeText}>{outcome}</Text></View>)}
-            </View>
-
-            {state.data?.tipsError ? (
-              <View style={s.inlineError}>
-                <Ionicons name="alert-circle-outline" size={18} color={C.amber} />
-                <Text style={s.inlineErrorText}>Tip preview unavailable: {state.data.tipsError}</Text>
-              </View>
-            ) : state.data?.tips?.length ? (
-              state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />)
-            ) : (
-              <View style={s.emptyPreview}>
-                <Ionicons name="shield-checkmark-outline" size={24} color={C.muted} />
-                <Text style={s.stateTitle}>No permitted tips for this match</Text>
-                <Text style={s.stateText}>The staging API returned an empty read-only preview.</Text>
-              </View>
-            )}
-
+            <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>Prediction / Tip preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
+            {state.data?.tipsError ? <View style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{state.data.tipsError}</Text></View> : state.data?.tips?.length ? state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />) : <View style={s.stateCard}><Ionicons name="shield-checkmark-outline" size={26} color={T.color.muted} /><Text style={s.stateTitle}>No permitted tips for this match</Text><Text style={s.stateText}>The real staging tips response is empty. No selection was invented.</Text></View>}
+            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video service is not connected in Phase 4B. No fake unlock is possible." action="DISABLED" />
+            <DependencyCard icon="open-outline" title="Open MST Prediction App" text="Staging deep-link contract is not configured. MST Scores cannot submit predictions." action="LINK UNAVAILABLE" />
             <RequestId label="match" value={state.data?.requestIds?.match} />
             <RequestId label="tips" value={state.data?.requestIds?.tips} />
           </>
         ) : null}
-        <View style={s.bottomSpace} />
       </ScrollView>
     </View>
   );
 }
 
+function useScoresOverview() {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState({ loading: true, matches: [], requestIds: {}, warnings: [], error: "" });
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  useEffect(() => {
+    let active = true;
+    setState((current) => ({ ...current, loading: true, error: "" }));
+    loadScoresOverview()
+      .then((result) => active && setState({ loading: false, matches: result.matches, requestIds: result.requestIds, warnings: result.warnings, error: "" }))
+      .catch((error) => active && setState({ loading: false, matches: [], requestIds: {}, warnings: [], error: error?.message || "Could not load staging matches." }));
+    return () => { active = false; };
+  }, [attempt]);
+  return { ...state, retry };
+}
+
 export default function Phase4BScoresInternalAlpha() {
+  const overview = useScoresOverview();
+  const [active, setActive] = useState("matches");
   const [selectedMatch, setSelectedMatch] = useState(null);
+  const openMatch = useCallback((match) => setSelectedMatch(match), []);
+  const selectNav = useCallback((next) => { setSelectedMatch(null); setActive(next); }, []);
+
+  let screen;
+  if (selectedMatch) screen = <MatchCenter selectedMatch={selectedMatch} onBack={() => setSelectedMatch(null)} />;
+  else if (active === "news") screen = <NewsScreen onSelect={selectNav} />;
+  else if (active === "favorites") screen = <FavoritesScreen onSelect={selectNav} matches={overview.matches} onOpenMatch={openMatch} />;
+  else if (active === "tips") screen = <TipsPredictionScreen onSelect={selectNav} featuredMatch={overview.matches[0]} onOpenMatch={openMatch} />;
+  else if (active === "more") screen = <MoreScreen onSelect={selectNav} />;
+  else screen = <MatchesScreen overview={overview} onOpenMatch={openMatch} onRetry={overview.retry} />;
+
   return (
     <View style={s.root}>
-      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
-      {selectedMatch ? (
-        <MatchCenter selectedMatch={selectedMatch} onBack={() => setSelectedMatch(null)} />
-      ) : (
-        <ScoresHome onOpenMatch={setSelectedMatch} />
-      )}
+      <StatusBar barStyle="light-content" backgroundColor={T.color.bg} />
+      <EnvironmentBanner />
+      {screen}
+      {!selectedMatch && active === "matches" ? <BottomNavigation active={active} onSelect={selectNav} /> : null}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  screen: { flex: 1, backgroundColor: C.bg, paddingTop: StatusBar.currentHeight || 24 },
-  environmentBanner: { minHeight: 34, paddingHorizontal: 16, backgroundColor: C.amber, flexDirection: "row", alignItems: "center", gap: 7 },
-  environmentText: { color: C.bg, fontSize: 12, fontWeight: "900", letterSpacing: 1.1 },
-  environmentSub: { marginLeft: "auto", color: C.bg, fontSize: 9, fontWeight: "800" },
-  header: { minHeight: 108, padding: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: C.border },
-  eyebrow: { color: C.red, fontSize: 9.5, fontWeight: "900", letterSpacing: 1.1 },
-  title: { color: C.text, fontSize: 28, fontWeight: "900", marginTop: 4 },
-  subtitle: { color: C.muted, fontSize: 11, marginTop: 4 },
-  readOnlyBadge: { borderWidth: 1, borderColor: C.red, backgroundColor: C.redSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6 },
-  readOnlyText: { color: C.red, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.7 },
-  tabs: { flexDirection: "row", padding: 9, gap: 7, borderBottomWidth: 1, borderBottomColor: C.border },
-  tab: { flex: 1, minHeight: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "transparent" },
-  tabActive: { backgroundColor: C.redSoft, borderColor: C.red },
-  tabText: { color: C.muted, fontSize: 10, fontWeight: "900" },
-  tabTextActive: { color: C.red },
-  content: { padding: 16 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  sectionTitle: { color: C.text2, fontSize: 12, fontWeight: "900", letterSpacing: 0.6 },
-  count: { color: C.muted, fontSize: 10 },
-  stateCard: { minHeight: 170, borderWidth: 1, borderColor: C.border, backgroundColor: C.panel, borderRadius: 14, alignItems: "center", justifyContent: "center", padding: 20, gap: 9 },
-  stateTitle: { color: C.text, fontSize: 13, fontWeight: "800", textAlign: "center" },
-  stateText: { color: C.muted, fontSize: 11, lineHeight: 16, textAlign: "center" },
-  retryButton: { marginTop: 4, minHeight: 38, paddingHorizontal: 18, borderRadius: 8, backgroundColor: C.red, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center" },
-  retryText: { color: C.text, fontSize: 10, fontWeight: "900" },
-  matchCard: { borderWidth: 1, borderColor: C.border, backgroundColor: C.panel, borderRadius: 14, padding: 14, marginBottom: 10 },
-  liveCard: { borderColor: C.red },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  competition: { color: C.text2, fontSize: 10.5, fontWeight: "800", flex: 1 },
-  status: { color: C.muted, fontSize: 9, fontWeight: "900" },
-  liveText: { color: C.red },
-  teamsRow: { minHeight: 62, flexDirection: "row", alignItems: "center", marginTop: 8 },
-  teamName: { flex: 1, color: C.text, fontSize: 13, fontWeight: "700", lineHeight: 17 },
-  teamNameRight: { textAlign: "right" },
-  score: { color: C.text, fontSize: 20, fontWeight: "900", marginHorizontal: 12, fontVariant: ["tabular-nums"] },
-  kickoff: { color: C.muted, fontSize: 10, textAlign: "center" },
-  canonicalRow: { marginTop: 11, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", alignItems: "center" },
-  canonicalText: { color: C.muted, fontSize: 9, flex: 1 },
-  requestId: { color: C.muted, fontSize: 8.5, lineHeight: 14, marginTop: 8 },
-  bottomSpace: { height: 28 },
-  matchHeader: { minHeight: 74, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: C.border },
-  matchHeaderText: { flex: 1 },
-  matchId: { color: C.text2, fontSize: 10, marginTop: 4 },
-  heroCard: { borderWidth: 1, borderColor: C.border, backgroundColor: C.panel, borderRadius: 16, padding: 16 },
-  competitionCenter: { color: C.text2, fontSize: 12, fontWeight: "900", textAlign: "center" },
-  kickoffCenter: { color: C.muted, fontSize: 10, textAlign: "center", marginTop: 4 },
-  heroTeams: { minHeight: 110, flexDirection: "row", alignItems: "center", marginTop: 10 },
-  heroTeam: { color: C.text, flex: 1, fontSize: 15, fontWeight: "800", lineHeight: 20 },
-  heroScoreWrap: { width: 98, alignItems: "center" },
-  heroScore: { color: C.text, fontSize: 26, fontWeight: "900" },
-  heroStatus: { color: C.red, fontSize: 9, fontWeight: "900", marginTop: 5 },
-  contextGrid: { flexDirection: "row", borderTopWidth: 1, borderTopColor: C.border, paddingTop: 12 },
-  contextItem: { flex: 1, paddingHorizontal: 5 },
-  contextLabel: { color: C.muted, fontSize: 8, fontWeight: "900", textAlign: "center" },
-  contextValue: { color: C.text2, fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 4 },
-  previewHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 22, marginBottom: 10 },
-  previewSub: { color: C.muted, fontSize: 9.5, marginTop: 4 },
-  outcomes: { flexDirection: "row", gap: 8, marginBottom: 10 },
-  outcome: { flex: 1, minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.panel2, alignItems: "center", justifyContent: "center", opacity: 0.72 },
-  outcomeText: { color: C.muted, fontSize: 10, fontWeight: "900" },
-  tipCard: { borderWidth: 1, borderColor: C.border, backgroundColor: C.panel, borderRadius: 12, padding: 13, marginBottom: 9 },
-  tipTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tipTitle: { color: C.text, fontSize: 12, fontWeight: "800", flex: 1 },
-  tipAccess: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 },
-  tipLocked: { borderColor: C.amber },
-  tipFree: { borderColor: C.green },
-  tipAccessText: { fontSize: 8, fontWeight: "900" },
-  tipSummary: { color: C.text2, fontSize: 10.5, lineHeight: 15, marginTop: 9 },
-  tipSelection: { color: C.muted, fontSize: 9.5, marginTop: 8 },
-  inlineError: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.panel, borderRadius: 10, padding: 13 },
-  inlineErrorText: { color: C.muted, fontSize: 10.5, lineHeight: 15, flex: 1 },
-  emptyPreview: { borderWidth: 1, borderColor: C.border, backgroundColor: C.panel, borderRadius: 12, minHeight: 120, alignItems: "center", justifyContent: "center", gap: 7, padding: 16 },
+  root: { flex: 1, backgroundColor: T.color.bg, paddingTop: StatusBar.currentHeight || 24 },
+  flex: { flex: 1 },
+  environmentBanner: { minHeight: 30, paddingHorizontal: 14, backgroundColor: T.color.amber, flexDirection: "row", alignItems: "center", gap: 7 },
+  environmentText: { color: T.color.bg, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  environmentSub: { marginLeft: "auto", color: T.color.bg, fontSize: 8, fontWeight: "800" },
+  brandHeader: { minHeight: 77, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.color.border, flexDirection: "row", alignItems: "center" },
+  brandBlock: { flex: 1 },
+  brandTitle: { color: T.color.text, fontSize: 21, fontWeight: "800" },
+  brandMst: { color: T.color.red, fontWeight: "900", letterSpacing: 1 },
+  brandEyebrow: { color: T.color.muted, fontSize: 8, fontWeight: "800", letterSpacing: 0.8, marginTop: 2 },
+  headerIcons: { flexDirection: "row", gap: 15, alignItems: "center" },
+  screenName: { position: "absolute", left: 16, bottom: 7, color: T.color.secondary, fontSize: 10, fontWeight: "800" },
+  dateStrip: { paddingHorizontal: 10, paddingVertical: 9, gap: 6, borderBottomWidth: 1, borderBottomColor: T.color.border },
+  dateCell: { width: 62, minHeight: 65, borderRadius: T.radius.sm, borderWidth: 1, borderColor: "transparent", alignItems: "center", justifyContent: "center" },
+  dateCellActive: { borderColor: T.color.red, backgroundColor: T.color.redSoft },
+  dateDay: { color: T.color.muted, fontSize: 9, fontWeight: "700" },
+  dateNumber: { color: T.color.secondary, fontSize: 19, fontWeight: "900", lineHeight: 23 },
+  dateMonth: { color: T.color.muted, fontSize: 8, fontWeight: "800" },
+  dateActiveText: { color: T.color.red },
+  scrollContent: { padding: T.space.md, paddingBottom: 100 },
+  sectionHeadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 11, marginTop: 4 },
+  sectionEyebrow: { color: T.color.red, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.8 },
+  sectionTitle: { color: T.color.text, fontSize: 15, fontWeight: "900", marginTop: 2 },
+  matchCount: { color: T.color.muted, fontSize: 9.5 },
+  stateCard: { minHeight: 145, borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 18, alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 12 },
+  stateTitle: { color: T.color.text, fontSize: 13, fontWeight: "800", textAlign: "center" },
+  stateText: { color: T.color.muted, fontSize: 10.5, lineHeight: 15, textAlign: "center" },
+  primaryButton: { minHeight: 36, borderRadius: T.radius.sm, backgroundColor: T.color.red, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  primaryButtonText: { color: T.color.text, fontSize: 9, fontWeight: "900" },
+  fallbackMark: { backgroundColor: T.color.raised, borderWidth: 1, borderColor: T.color.border, alignItems: "center", justifyContent: "center" },
+  fallbackMarkText: { color: T.color.secondary, fontSize: 11, fontWeight: "900" },
+  leagueCard: { backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, borderRadius: T.radius.md, overflow: "hidden", marginBottom: 12 },
+  leagueHeader: { minHeight: 45, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9, borderBottomWidth: 1, borderBottomColor: T.color.border },
+  leagueName: { color: T.color.secondary, fontSize: 11.5, fontWeight: "900", flex: 1 },
+  viewAll: { color: T.color.red, fontSize: 8.5, fontWeight: "800" },
+  matchRow: { minHeight: 73, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.color.border },
+  matchState: { width: 48, alignItems: "center" },
+  matchStateText: { color: T.color.muted, fontSize: 9, fontWeight: "800", textAlign: "center" },
+  liveText: { color: T.color.red },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: T.color.red, marginTop: 4 },
+  matchTeams: { flex: 1, gap: 7 },
+  teamLine: { flexDirection: "row", alignItems: "center", gap: 7 },
+  teamLineName: { color: T.color.secondary, fontSize: 10.5, fontWeight: "700", flex: 1 },
+  rowScore: { width: 43, textAlign: "center", color: T.color.text, fontSize: 12, fontWeight: "900" },
+  bigMatchCard: { borderRadius: T.radius.md, borderWidth: 1, borderColor: T.color.red, backgroundColor: "#160C0E", padding: 15, marginBottom: 12 },
+  bigMatchEyebrow: { color: T.color.red, fontSize: 9, fontWeight: "900", textAlign: "center", letterSpacing: 0.8 },
+  bigMatchTeams: { flexDirection: "row", alignItems: "center", marginTop: 13 },
+  bigTeam: { flex: 1, alignItems: "center", gap: 6 },
+  bigTeamName: { color: T.color.text, fontSize: 11, fontWeight: "800", textAlign: "center" },
+  bigVersus: { width: 105, alignItems: "center" },
+  bigVs: { color: T.color.text, fontSize: 17, fontWeight: "900" },
+  bigKickoff: { color: T.color.muted, fontSize: 8.5, textAlign: "center", marginTop: 5 },
+  previewCta: { alignSelf: "center", backgroundColor: T.color.red, borderRadius: 18, paddingHorizontal: 17, minHeight: 34, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
+  previewCtaText: { color: T.color.text, fontSize: 9, fontWeight: "900" },
+  inlineWarning: { minHeight: 42, borderRadius: T.radius.sm, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 10, flexDirection: "row", gap: 7, alignItems: "center", marginBottom: 10 },
+  inlineWarningText: { flex: 1, color: T.color.muted, fontSize: 9.5, lineHeight: 14 },
+  requestId: { color: T.color.muted, fontSize: 8, marginTop: 6 },
+  bottomNav: { height: 69, borderTopWidth: 1, borderTopColor: T.color.border, backgroundColor: "#0B0E10", flexDirection: "row", paddingBottom: 4 },
+  navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 2 },
+  navLabel: { color: T.color.muted, fontSize: 7.5, fontWeight: "700", textAlign: "center" },
+  navLabelActive: { color: T.color.red },
+  placeholderHero: { minHeight: 180, borderRadius: T.radius.lg, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, alignItems: "center", justifyContent: "center", padding: 22, gap: 9, marginBottom: 12 },
+  placeholderTitle: { color: T.color.text, fontSize: 16, fontWeight: "900", textAlign: "center" },
+  placeholderText: { color: T.color.muted, fontSize: 10.5, lineHeight: 16, textAlign: "center" },
+  dependencyCard: { minHeight: 78, borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  dependencyIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: T.color.redSoft, alignItems: "center", justifyContent: "center" },
+  dependencyCopy: { flex: 1 },
+  dependencyTitle: { color: T.color.secondary, fontSize: 11.5, fontWeight: "800" },
+  dependencyText: { color: T.color.muted, fontSize: 9.5, lineHeight: 14, marginTop: 3 },
+  disabledButton: { borderRadius: 6, borderWidth: 1, borderColor: T.color.border, backgroundColor: T.color.raised, paddingHorizontal: 7, paddingVertical: 6 },
+  disabledButtonText: { color: T.color.muted, fontSize: 7.5, fontWeight: "900" },
+  segmented: { minHeight: 40, flexDirection: "row", backgroundColor: T.color.surface, borderRadius: T.radius.sm, overflow: "hidden", borderWidth: 1, borderColor: T.color.border, marginBottom: 12 },
+  segment: { flex: 1, alignItems: "center", justifyContent: "center" },
+  segmentActive: { backgroundColor: T.color.red },
+  segmentText: { color: T.color.muted, fontSize: 9.5, fontWeight: "800" },
+  segmentActiveText: { color: T.color.text, fontSize: 9.5, fontWeight: "900" },
+  safetyBanner: { borderRadius: T.radius.md, borderWidth: 1, borderColor: T.color.green, backgroundColor: T.color.surface, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  safetyTitle: { color: T.color.green, fontSize: 11.5, fontWeight: "900" },
+  safetyText: { color: T.color.muted, fontSize: 9.5, lineHeight: 14, marginTop: 3 },
+  featuredPrediction: { borderRadius: T.radius.md, borderWidth: 1, borderColor: T.color.red, backgroundColor: T.color.surface, padding: 14, marginBottom: 12 },
+  featuredPredictionTitle: { color: T.color.text, fontSize: 14, fontWeight: "900", marginTop: 6 },
+  actionRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  disabledAction: { flex: 1, minHeight: 38, borderRadius: T.radius.sm, backgroundColor: T.color.raised, borderWidth: 1, borderColor: T.color.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  disabledActionText: { color: T.color.muted, fontSize: 8.5, fontWeight: "800" },
+  outlineAction: { minHeight: 38, borderRadius: T.radius.sm, borderWidth: 1, borderColor: T.color.red, paddingHorizontal: 13, justifyContent: "center" },
+  outlineActionText: { color: T.color.red, fontSize: 8.5, fontWeight: "900" },
+  twoColumns: { flexDirection: "row", gap: 9, marginBottom: 10 },
+  leaderboardCard: { flex: 1, minHeight: 112, borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 11 },
+  leaderboardTitle: { color: T.color.secondary, fontSize: 10, fontWeight: "900" },
+  leaderboardEmpty: { color: T.color.muted, fontSize: 9, lineHeight: 13, marginTop: 9 },
+  scoringCard: { borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 12 },
+  scoringRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 9 },
+  scoreRule: { color: T.color.muted, fontSize: 8.5 },
+  scorePoints: { color: T.color.red, fontWeight: "900" },
+  profileCard: { minHeight: 92, borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 12, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  profileAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: T.color.raised, borderWidth: 1, borderColor: T.color.border, alignItems: "center", justifyContent: "center" },
+  menuCard: { borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, overflow: "hidden" },
+  menuRow: { minHeight: 52, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.color.border },
+  menuTitle: { color: T.color.secondary, fontSize: 10.5, fontWeight: "700", flex: 1 },
+  menuDetail: { color: T.color.muted, fontSize: 8, maxWidth: 115, textAlign: "right" },
+  matchCenterHeader: { minHeight: 65, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: T.color.border },
+  matchCenterTitle: { color: T.color.text, fontSize: 15, fontWeight: "900" },
+  canonicalId: { color: T.color.muted, fontSize: 8.5, marginTop: 2 },
+  matchCenterContent: { padding: T.space.md, paddingBottom: 35 },
+  matchHero: { borderRadius: T.radius.lg, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 15, marginBottom: 15 },
+  heroCompetition: { color: T.color.secondary, fontSize: 11, fontWeight: "900", textAlign: "center" },
+  heroKickoff: { color: T.color.muted, fontSize: 9, textAlign: "center", marginTop: 4 },
+  heroTeams: { flexDirection: "row", alignItems: "center", minHeight: 125, marginTop: 7 },
+  heroTeam: { flex: 1, alignItems: "center", gap: 7 },
+  heroTeamName: { color: T.color.text, fontSize: 11.5, fontWeight: "800", textAlign: "center" },
+  heroScoreWrap: { width: 92, alignItems: "center" },
+  heroScore: { color: T.color.text, fontSize: 27, fontWeight: "900" },
+  heroStatus: { color: T.color.muted, fontSize: 9, fontWeight: "900", marginTop: 5 },
+  dataSection: { borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 12, marginBottom: 9 },
+  dataSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  dataSectionTitle: { color: T.color.secondary, fontSize: 11.5, fontWeight: "900" },
+  availability: { color: T.color.muted, fontSize: 7.5, fontWeight: "900", borderWidth: 1, borderColor: T.color.border, borderRadius: 5, overflow: "hidden" },
+  available: { color: T.color.green, borderColor: T.color.green },
+  dataSectionText: { color: T.color.muted, fontSize: 9.5, lineHeight: 14, marginTop: 8 },
+  infoGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
+  infoCell: { width: "50%", padding: 7 },
+  infoLabel: { color: T.color.muted, fontSize: 7.5, fontWeight: "900" },
+  infoValue: { color: T.color.secondary, fontSize: 9.5, lineHeight: 14, marginTop: 3 },
+  noWrites: { color: T.color.red, fontSize: 8, fontWeight: "900", borderWidth: 1, borderColor: T.color.red, borderRadius: 5, padding: 5 },
+  tipCard: { borderRadius: T.radius.md, backgroundColor: T.color.surface, borderWidth: 1, borderColor: T.color.border, padding: 12, marginBottom: 9 },
+  tipTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  tipTitle: { color: T.color.secondary, fontSize: 11, fontWeight: "900", flex: 1 },
+  tipAccess: { fontSize: 7.5, fontWeight: "900", borderWidth: 1, borderRadius: 5, overflow: "hidden" },
+  tipLocked: { color: T.color.amber, borderColor: T.color.amber },
+  tipFree: { color: T.color.green, borderColor: T.color.green },
+  tipSelection: { color: T.color.muted, fontSize: 9, marginTop: 8 },
 });

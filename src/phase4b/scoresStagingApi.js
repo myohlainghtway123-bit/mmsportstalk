@@ -88,6 +88,40 @@ export async function loadScoresFeed(kind, options) {
   };
 }
 
+export async function loadScoresOverview(options) {
+  const feeds = Object.keys(FEED_ROUTES);
+  const settled = await Promise.allSettled(feeds.map((feed) => loadScoresFeed(feed, options)));
+  const successful = settled
+    .map((result, index) => ({ feed: feeds[index], result }))
+    .filter(({ result }) => result.status === "fulfilled");
+
+  if (successful.length === 0) {
+    throw settled[0]?.reason || new ScoresStagingError("No staging Scores feed is available.");
+  }
+
+  const matches = new Map();
+  const requestIds = {};
+  for (const { feed, result } of successful) {
+    requestIds[feed] = result.value.requestId;
+    for (const match of result.value.matches) {
+      const id = canonicalMatchId(match);
+      if (id) matches.set(id, { ...(matches.get(id) || {}), ...match });
+    }
+  }
+
+  const warnings = settled.flatMap((result, index) => (
+    result.status === "rejected"
+      ? [{ feed: feeds[index], message: result.reason?.message || "Feed unavailable.", requestId: result.reason?.requestId || null }]
+      : []
+  ));
+
+  return {
+    matches: [...matches.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+    requestIds,
+    warnings,
+  };
+}
+
 export function normalizeTipPreview(tip) {
   const accessLevel = String(tip?.access_level ?? tip?.accessLevel ?? "").toLowerCase();
   const serverLocked = tip?.locked === true || Number(tip?.locked) === 1;

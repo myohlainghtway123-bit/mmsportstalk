@@ -4,6 +4,7 @@ import {
   canonicalMatchId,
   loadMatchCenter,
   loadScoresFeed,
+  loadScoresOverview,
   normalizeTipPreview,
   scoresStagingGet,
 } from "../src/phase4b/scoresStagingApi.js";
@@ -51,6 +52,27 @@ async function testCanonicalMatchFlow() {
   assert.equal(result.tips[1].selection, null, "paid selection must remain hidden even if supplied upstream");
 }
 
+async function testOverviewCombinesRealReadFeeds() {
+  const observed = [];
+  const fetchImpl = async (url, init) => {
+    observed.push({ url, init });
+    if (url.includes("/v1/fixtures")) return jsonResponse([{ id: MATCH_ID, status: "scheduled" }], { requestId: "fixtures-request" });
+    if (url.includes("/v1/live")) return jsonResponse([{ id: MATCH_ID, status: "live" }], { requestId: "live-request" });
+    return new Response(JSON.stringify({ error: { message: "results unavailable" } }), {
+      status: 503,
+      headers: { "x-request-id": "results-error" },
+    });
+  };
+
+  const result = await loadScoresOverview({ fetchImpl, timeoutMs: 50 });
+  assert.equal(result.matches.length, 1, "canonical matches must be de-duplicated across feeds");
+  assert.equal(result.matches[0].id, MATCH_ID);
+  assert.equal(result.matches[0].status, "live");
+  assert.deepEqual(result.requestIds, { fixtures: "fixtures-request", live: "live-request" });
+  assert.deepEqual(result.warnings, [{ feed: "results", message: "results unavailable", requestId: "results-error" }]);
+  assert.ok(observed.every(({ init }) => init.method === "GET" && init.body === undefined));
+}
+
 async function testFailClosedIdentityAndErrors() {
   assert.deepEqual(normalizeTipPreview({ access_level: "subscriber", locked: 0, selection: "DRAW" }), {
     id: "",
@@ -92,6 +114,7 @@ async function testFailClosedIdentityAndErrors() {
 }
 
 await testReadOnlyFeed();
+await testOverviewCombinesRealReadFeeds();
 await testCanonicalMatchFlow();
 await testFailClosedIdentityAndErrors();
 console.log("Phase 4B Scores API tests passed: staging-only GET routes, canonical match identity, request correlation, timeout handling, and locked-tip protection are enforced.");
