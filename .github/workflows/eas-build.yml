@@ -19,6 +19,7 @@ on:
         type: choice
         options:
           - preview
+          - phase4b-internal
           - production
   push:
     branches: [main]
