@@ -55,6 +55,15 @@ jobs:
       - name: Test Phase 4B internal alpha
         run: npm run test:phase4b
 
+      - name: Verify dedicated app API
+        shell: bash
+        run: |
+          set -euo pipefail
+          API_ORIGIN='https://app-api.myanmarsportstalk.com'
+          health="$(curl -fsS --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$API_ORIGIN/health")"
+          node -e 'const p=JSON.parse(process.argv[1]); process.exit(p.service==="mst-app-api" && p.ok===true && p.upstreamStatus===200 ? 0 : 1)' "$health"
+          curl -fsS --retry 3 --retry-all-errors --retry-delay 2 --max-time 20 "$API_ORIGIN/api/content/articles" >/dev/null
+
       - name: Verify staging Scores Product API
         shell: bash
         run: |
@@ -65,5 +74,10 @@ jobs:
           fixtures="$(curl -fsS --retry 3 --retry-all-errors --retry-delay 2 --max-time 20 "$API_ORIGIN/v1/fixtures?limit=3")"
           node -e 'const p=JSON.parse(process.argv[1]); process.exit(p.ok===true && Array.isArray(p.data) && p.meta?.environment==="staging" && Boolean(p.meta?.requestId) ? 0 : 1)' "$fixtures"
 
-      - name: Export Android application
+      - name: Export default Android application
+        run: node scripts/generate_assets.js && npx expo export --clear --platform android --output-dir dist-ci-default && node scripts/validate_phase4b_bundle.js dist-ci-default default
+
+      - name: Export Phase 4B internal Android application
+        env:
+          EXPO_PUBLIC_MST_INTERNAL: "true"
         run: npm run validate:android

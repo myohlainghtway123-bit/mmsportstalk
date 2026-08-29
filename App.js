@@ -1,4 +1,5 @@
-// Phase 4B uses the existing MST Score application with a deliberately narrow,
-// staging-only entrypoint. The full product shell remains in the repository but
-// is not imported into this internal-alpha bundle.
-export { default } from "./src/phase4b/Phase4BScoresInternalAlpha";
+const App = process.env.EXPO_PUBLIC_MST_INTERNAL === "true"
+  ? require("./src/phase4b/Phase4BScoresInternalAlpha").default
+  : require("./src/AppFinalShell").default;
+
+export default App;

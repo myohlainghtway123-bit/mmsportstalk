@@ -10,7 +10,12 @@ const workflow = read(".github/workflows/validate-app.yml");
 const phase4b = `${app}\n${screen}\n${api}`;
 
 assert.match(app, /Phase4BScoresInternalAlpha/);
-assert.doesNotMatch(app, /AppFinalShell/);
+assert.match(app, /AppFinalShell/);
+assert.match(app, /process\.env\.EXPO_PUBLIC_MST_INTERNAL === "true"/);
+assert.ok(
+  app.indexOf("Phase4BScoresInternalAlpha") < app.indexOf("AppFinalShell"),
+  "internal shell must be the true branch and normal shell must be the default branch",
+);
 assert.match(api, /https:\/\/mst-scores-api-staging\.betflowapp\.workers\.dev/);
 assert.doesNotMatch(phase4b, /app-api\.myanmarsportstalk\.com/);
 assert.doesNotMatch(phase4b, /\/v1\/predictions|savePrediction|createPrediction|submitPrediction/);
@@ -47,7 +52,9 @@ assert.equal(profile?.android?.buildType, "apk");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_ENVIRONMENT, "staging");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_INTERNAL, "true");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN, "https://mst-scores-api-staging.betflowapp.workers.dev");
+assert.match(workflow, /API_ORIGIN='https:\/\/app-api\.myanmarsportstalk\.com'/);
 assert.match(workflow, /mst-scores-api-staging\.betflowapp\.workers\.dev/);
-assert.doesNotMatch(workflow, /API_ORIGIN='https:\/\/app-api\.myanmarsportstalk\.com'/);
+assert.match(workflow, /dist-ci-default default/);
+assert.match(workflow, /EXPO_PUBLIC_MST_INTERNAL:\s*"true"/);
 
-console.log("Phase 4B internal-alpha contract passed: staging-only entry, read-only Scores routes, canonical identity, terminal states, locked tips, and APK profile are enforced.");
+console.log("Phase 4B isolation contract passed: AppFinalShell is the default, the internal alpha requires the exact true flag, both API checks remain in CI, and the internal APK profile is enforced.");
