@@ -1,8 +1,11 @@
 # MST Scores product contract
 
-Status: **owner-confirmed and locked**  
-Confirmed: 2026-08-30  
-Applies to: MST Scores Android product direction  
+Status: **owner-confirmed and locked**
+
+Confirmed: 2026-08-30
+
+Applies to: MST Scores Android product direction
+
 Related planning: `myohlainghtway123-bit/mst-platform#29`
 
 This document is the durable interpretation of the owner-confirmed six-screen MST Scores visual and product decisions. It locks the final product structure while keeping Phase 4B and Phase 13 responsibilities separate.

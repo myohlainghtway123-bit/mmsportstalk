@@ -1,10 +1,15 @@
 # Phase 4B owner-usable MST Scores handoff
 
-Date: 2026-08-30  
-Repository: `myohlainghtway123-bit/mmsportstalk`  
-Issue: `myohlainghtway123-bit/mst-platform#29`  
-PR: `myohlainghtway123-bit/mmsportstalk#27`  
-Branch: `codex/phase4b-owner-usable-skeleton-2026-08-30`  
+Date: 2026-08-30
+
+Repository: `myohlainghtway123-bit/mmsportstalk`
+
+Issue: `myohlainghtway123-bit/mst-platform#29`
+
+PR: `myohlainghtway123-bit/mmsportstalk#27`
+
+Branch: `codex/phase4b-owner-usable-skeleton-2026-08-30`
+
 Base: `main` at `9aa98a4b8290e4a99dcc1c6c30b6a60015a403c7`
 
 ## Durable product decision
