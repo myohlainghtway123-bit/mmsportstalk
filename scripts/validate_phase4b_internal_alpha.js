@@ -17,7 +17,7 @@ assert.ok(
   app.indexOf("Phase4BScoresInternalAlpha") < app.indexOf("AppFinalShell"),
   "internal shell must be the true branch and normal shell must be the default branch",
 );
-assert.match(api, /https:\/\/mst-scores-api-staging\.betflowapp\.workers\.dev/);
+assert.match(api, /https:\/\/scores-api-staging\.myanmarsportstalk\.com/);
 assert.doesNotMatch(phase4b, /app-api\.myanmarsportstalk\.com/);
 assert.doesNotMatch(phase4b, /\/v1\/predictions|savePrediction|createPrediction|submitPrediction/);
 assert.doesNotMatch(phase4b, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
@@ -89,9 +89,9 @@ assert.equal(profile?.distribution, "internal");
 assert.equal(profile?.android?.buildType, "apk");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_ENVIRONMENT, "staging");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_INTERNAL, "true");
-assert.equal(profile?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN, "https://mst-scores-api-staging.betflowapp.workers.dev");
+assert.equal(profile?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN, "https://scores-api-staging.myanmarsportstalk.com");
 assert.match(workflow, /API_ORIGIN='https:\/\/app-api\.myanmarsportstalk\.com'/);
-assert.match(workflow, /mst-scores-api-staging\.betflowapp\.workers\.dev/);
+assert.match(workflow, /scores-api-staging\.myanmarsportstalk\.com/);
 assert.match(workflow, /dist-ci-default default/);
 assert.match(workflow, /EXPO_PUBLIC_MST_INTERNAL:\s*"true"/);
 
