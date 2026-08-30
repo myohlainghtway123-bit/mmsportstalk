@@ -25,7 +25,7 @@ async function testReadOnlyFeed() {
     return jsonResponse([{ id: MATCH_ID }], { requestId: "feed-request" });
   };
   const result = await loadScoresFeed("fixtures", { fetchImpl, timeoutMs: 50 });
-  assert.equal(MST_SCORES_STAGING_ORIGIN, "https://mst-scores-api-staging.betflowapp.workers.dev");
+  assert.equal(MST_SCORES_STAGING_ORIGIN, "https://scores-api-staging.myanmarsportstalk.com");
   assert.deepEqual(result, { matches: [{ id: MATCH_ID }], requestId: "feed-request" });
   assert.equal(observed[0].url, `${MST_SCORES_STAGING_ORIGIN}/v1/fixtures?limit=50`);
   assert.equal(observed[0].init.method, "GET");
