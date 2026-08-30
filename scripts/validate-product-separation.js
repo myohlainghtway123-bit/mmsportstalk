@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const roots = ['App.js', 'app.config.js', '.env.example', 'eas.json', 'config', 'scripts', 'src', 'package.json'];
+const roots = ['.github', 'App.js', 'app.config.js', '.env.example', 'eas.json', 'config', 'scripts', 'src', 'package.json'];
 const exactAllowlist = new Set(['scripts/validate-product-separation.js']);
 const ignoredPrefixes = ['docs/agent-runs/', 'node_modules/', 'android/', 'ios/', 'dist-ci/', '.expo/'];
 const textExtensions = new Set(['.js', '.cjs', '.mjs', '.json', '.md', '.yml', '.yaml', '.toml', '.ts', '.tsx']);
