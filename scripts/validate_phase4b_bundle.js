@@ -18,12 +18,12 @@ const bundle = files(directory)
 
 if (mode === "default") {
   assert.match(bundle, /app-api\.myanmarsportstalk\.com/);
-  assert.doesNotMatch(bundle, /mst-scores-api-staging\.betflowapp\.workers\.dev/);
+  assert.doesNotMatch(bundle, /scores-api-staging\.myanmarsportstalk\.com/);
   assert.doesNotMatch(bundle, /STAGING \/ INTERNAL/);
   console.log("Default Android bundle passed: normal app API present; Phase 4B staging origin and marker absent.");
 } else {
   assert.equal(mode, "internal");
-  assert.match(bundle, /mst-scores-api-staging\.betflowapp\.workers\.dev/);
+  assert.match(bundle, /scores-api-staging\.myanmarsportstalk\.com/);
   assert.match(bundle, /STAGING \/ INTERNAL/);
   assert.doesNotMatch(bundle, /app-api\.myanmarsportstalk\.com/);
   assert.doesNotMatch(bundle, /\/v1\/predictions|savePrediction|createPrediction|submitPrediction/);
