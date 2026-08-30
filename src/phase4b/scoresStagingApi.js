@@ -1,4 +1,4 @@
-export const MST_SCORES_STAGING_ORIGIN = "https://mst-scores-api-staging.betflowapp.workers.dev";
+export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
 const FEED_ROUTES = Object.freeze({
