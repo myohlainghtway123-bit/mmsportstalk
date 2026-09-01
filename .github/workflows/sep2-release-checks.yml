@@ -5,7 +5,15 @@ on:
     branches:
       - chatgpt/sep2-expo-auth-smoke-2026-09-02
     paths:
-      - .github/workflows/sep2-release-checks.yml
+      - 'App.js'
+      - 'src/**'
+      - 'scripts/**'
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/sep2-release-checks.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,8 +38,8 @@ jobs:
       - name: Android production JS export
         env:
           EXPO_PUBLIC_MST_ENVIRONMENT: production
-        run: npx expo export --platform android --output-dir dist-release-android --clear
+        run: npx expo export --platform android --output-dir dist-release-android --clear && node scripts/validate_phase4b_bundle.js dist-release-android default
       - name: iOS production JS export
         env:
           EXPO_PUBLIC_MST_ENVIRONMENT: production
-        run: npx expo export --platform ios --output-dir dist-release-ios --clear
+        run: npx expo export --platform ios --output-dir dist-release-ios --clear && node scripts/validate_phase4b_bundle.js dist-release-ios default
