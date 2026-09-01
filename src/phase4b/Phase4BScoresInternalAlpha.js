@@ -18,6 +18,7 @@ import {
 } from "./scoresStagingApi";
 import Phase4BMatchVote from "./Phase4BMatchVote";
 import Phase4BMatchInsights from "./Phase4BMatchInsights";
+import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";
 
 const T = Object.freeze({
   color: {
@@ -413,13 +414,9 @@ function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
             <Pressable style={s.outlineAction} onPress={() => onOpenMatch(featuredMatch)}><Text style={s.outlineActionText}>View match</Text></Pressable>
           </View>
         </View>
-      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real staging match is available for a read-only preview." />}
-      <DependencyCard icon="cart-outline" title="Buy Tipster Tip" text="Purchase and entitlement services are not connected. No fake purchase or paid-tip access is offered." action="DISABLED" />
-      <View style={s.twoColumns}>
-        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Tipster Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>
-        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Prediction Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>
-      </View>
-      <DependencyCard icon="open-outline" title="Open MST Prediction App" text="The staging deep-link contract is not configured. Prediction creation stays in MST Prediction." action="LINK UNAVAILABLE" />
+      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real match is available for a read-only preview." />}
+      <Phase4BReadOnlyHub />
+      {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}
       <DependencyCard icon="ribbon-outline" title="Become a Tipster" text="Final path starts in MST Prediction, continues to the MST website, and is reviewed in Web Admin." action="LINK UNAVAILABLE" />
       <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>
     </ShellScreen>
