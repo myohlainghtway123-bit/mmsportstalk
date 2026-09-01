@@ -1,6 +1,10 @@
 export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
+export const MST_SCORES_ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
+const CONFIGURED_SCORES_ORIGIN = String(process.env.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim().replace(/\/+$/, "");
+export const MST_SCORES_API_ORIGIN = CONFIGURED_SCORES_ORIGIN || (MST_SCORES_ENVIRONMENT === "production" ? "" : MST_SCORES_STAGING_ORIGIN);
+
 const FEED_ROUTES = Object.freeze({
   fixtures: "/v1/fixtures",
   live: "/v1/live",
@@ -17,6 +21,35 @@ export class ScoresStagingError extends Error {
   }
 }
 
+function configuredScoresOrigin() {
+  if (!MST_SCORES_API_ORIGIN) {
+    throw new ScoresStagingError(
+      "Production Scores API origin is not configured. Release is blocked rather than falling back to staging.",
+      { code: "SCORES_API_ORIGIN_REQUIRED" },
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(MST_SCORES_API_ORIGIN);
+  } catch {
+    throw new ScoresStagingError("Configured Scores API origin is invalid.", { code: "SCORES_API_ORIGIN_INVALID" });
+  }
+
+  if (parsed.protocol !== "https:" || !/(^|\.)myanmarsportstalk\.com$/i.test(parsed.hostname)) {
+    throw new ScoresStagingError("Scores API origin must be an HTTPS Myanmar Sports Talk host.", { code: "SCORES_API_ORIGIN_INVALID" });
+  }
+
+  if (MST_SCORES_ENVIRONMENT === "production" && parsed.hostname.toLowerCase().includes("staging")) {
+    throw new ScoresStagingError(
+      "Production Scores build cannot use a staging Scores API origin.",
+      { code: "PRODUCTION_STAGING_ORIGIN_BLOCKED" },
+    );
+  }
+
+  return parsed.origin;
+}
+
 function requestIdFrom(response, payload) {
   return response?.headers?.get?.("x-request-id")
     || payload?.meta?.requestId
@@ -30,7 +63,7 @@ async function decode(response) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new ScoresStagingError("The staging service returned an unreadable response.", {
+    throw new ScoresStagingError("The Scores service returned an unreadable response.", {
       code: "STAGING_RESPONSE_INVALID",
       status: response.status,
       requestId: response.headers?.get?.("x-request-id") || null,
@@ -42,11 +75,12 @@ export async function scoresStagingGet(path, {
   fetchImpl = fetch,
   timeoutMs = SCORES_REQUEST_TIMEOUT_MS,
 } = {}) {
+  const origin = configuredScoresOrigin();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetchImpl(`${MST_SCORES_STAGING_ORIGIN}${path}`, {
+    const response = await fetchImpl(`${origin}${path}`, {
       method: "GET",
       headers: { Accept: "application/json" },
       signal: controller.signal,
@@ -55,7 +89,7 @@ export async function scoresStagingGet(path, {
     const requestId = requestIdFrom(response, payload);
     if (!response.ok) {
       throw new ScoresStagingError(
-        payload?.error?.message || payload?.message || `Staging Scores API returned ${response.status}.`,
+        payload?.error?.message || payload?.message || `Scores API returned ${response.status}.`,
         { status: response.status, requestId },
       );
     }
@@ -63,11 +97,11 @@ export async function scoresStagingGet(path, {
   } catch (error) {
     if (error instanceof ScoresStagingError) throw error;
     if (controller.signal.aborted || error?.name === "AbortError") {
-      throw new ScoresStagingError("The staging Scores API timed out. Please retry.", {
+      throw new ScoresStagingError("The Scores API timed out. Please retry.", {
         code: "STAGING_TIMEOUT",
       });
     }
-    throw new ScoresStagingError("The staging Scores API is unavailable. Please retry.");
+    throw new ScoresStagingError("The Scores API is unavailable. Please retry.");
   } finally {
     clearTimeout(timer);
   }
@@ -96,7 +130,7 @@ export async function loadScoresOverview(options) {
     .filter(({ result }) => result.status === "fulfilled");
 
   if (successful.length === 0) {
-    throw settled[0]?.reason || new ScoresStagingError("No staging Scores feed is available.");
+    throw settled[0]?.reason || new ScoresStagingError("No Scores feed is available.");
   }
 
   const matches = new Map();
