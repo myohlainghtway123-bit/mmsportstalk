@@ -11,6 +11,7 @@ async function json(url) {
 function data(payload) { return payload?.data ?? payload; }
 function assert(condition, message) { if (!condition) throw new Error(message); }
 function keys(value) { return value && typeof value === "object" ? Object.keys(value).sort() : []; }
+function errorMessage(payload) { return payload?.error?.message || payload?.message || payload?.detail || payload?.error || null; }
 
 const health = await json(`${SCORES}/health`);
 assert(health.response.ok, `Scores staging health ${health.response.status}`);
@@ -22,7 +23,7 @@ for (const feed of ["live", "fixtures", "results"]) {
   assert(result.response.ok, `${feed} returned ${result.response.status}`);
   const rows = Array.isArray(data(result.payload)) ? data(result.payload) : [];
   feedResults[feed] = rows;
-  console.log(`feed-${feed}`, JSON.stringify({ status: result.response.status, count: rows.length, requestId: result.response.headers.get("x-request-id") || result.payload?.meta?.requestId || null }));
+  console.log(`feed-${feed}`, JSON.stringify({ status: result.response.status, count: rows.length, first: rows.slice(0,3).map((row) => ({ id:row.id, status:row.status, kickoff:row.kickoff_at })), requestId: result.response.headers.get("x-request-id") || result.payload?.meta?.requestId || null }));
 }
 
 const sample = [...feedResults.live, ...feedResults.fixtures, ...feedResults.results].find((row) => row?.id);
@@ -33,8 +34,7 @@ const detail = await json(`${SCORES}/v1/matches/${encodeURIComponent(sample.id)}
 assert(detail.response.ok, `Match detail returned ${detail.response.status}`);
 const match = data(detail.payload);
 assert(String(match?.id || "") === String(sample.id), "Match detail changed canonical identity");
-const detailKeys = keys(match);
-console.log("match-detail", JSON.stringify({ status: detail.response.status, id: match.id, keys: detailKeys }));
+console.log("match-detail", JSON.stringify({ status: detail.response.status, id: match.id, keys: keys(match) }));
 
 const sectionGroups = {
   stats: ["statistics", "stats", "match_statistics"],
@@ -44,32 +44,28 @@ const sectionGroups = {
   ai: ["mst_ai_prediction", "mstAiPrediction", "ai_prediction"],
   admin: ["mst_admin_prediction", "mstAdminPrediction", "admin_prediction"],
 };
-for (const [name, candidates] of Object.entries(sectionGroups)) {
-  console.log(`section-${name}`, JSON.stringify({ present: candidates.some((key) => Object.prototype.hasOwnProperty.call(match || {}, key)), matched: candidates.filter((key) => Object.prototype.hasOwnProperty.call(match || {}, key)) }));
-}
+for (const [name, candidates] of Object.entries(sectionGroups)) console.log(`section-${name}`, JSON.stringify({ present: candidates.some((key) => Object.prototype.hasOwnProperty.call(match || {}, key)), matched: candidates.filter((key) => Object.prototype.hasOwnProperty.call(match || {}, key)) }));
 
 const tips = await json(`${SCORES}/v1/tips?matchId=${encodeURIComponent(sample.id)}&limit=10`);
 assert(tips.response.ok, `Scores tips returned ${tips.response.status}`);
 console.log("scores-tips", JSON.stringify({ status: tips.response.status, count: Array.isArray(data(tips.payload)) ? data(tips.payload).length : 0 }));
 
-const numericSuffix = String(sample.id).match(/(\d+)$/)?.[1] || null;
-const pollCandidates = [...new Set([
-  String(sample.id),
-  match?.provider_match_id,
-  match?.provider_fixture_id,
-  match?.external_id,
-  match?.fixture_id,
-  match?.source_id,
-  numericSuffix,
-].filter(Boolean).map(String))];
+const pollSamples = [...feedResults.fixtures.slice(0,3), ...feedResults.live.slice(0,2), ...feedResults.results.slice(0,2)].filter((row) => row?.id);
 let pollWorkingId = null;
-for (const candidate of pollCandidates) {
-  const poll = await json(`${APP}/football/poll?matchId=${encodeURIComponent(candidate)}`);
-  console.log("match-vote-candidate", JSON.stringify({ candidate, status: poll.response.status, ok: poll.response.ok }));
-  if (poll.response.ok && !pollWorkingId) pollWorkingId = candidate;
+let pollWorkingCanonical = null;
+for (const pollSample of pollSamples) {
+  const canonical = String(pollSample.id);
+  const numericSuffix = canonical.match(/(\d+)$/)?.[1] || null;
+  for (const candidate of [...new Set([canonical, numericSuffix].filter(Boolean))]) {
+    const poll = await json(`${APP}/football/poll?matchId=${encodeURIComponent(candidate)}`);
+    console.log("match-vote-candidate", JSON.stringify({ canonical, candidate, status: poll.response.status, ok: poll.response.ok, message:errorMessage(poll.payload) }));
+    if (poll.response.ok && !pollWorkingId) {
+      pollWorkingId = candidate;
+      pollWorkingCanonical = canonical;
+    }
+  }
 }
-assert(pollWorkingId, `Existing Match Vote GET rejected all safe match ID candidates: ${pollCandidates.join(", ")}`);
-console.log("match-vote", JSON.stringify({ verifiedReadId: pollWorkingId, canonicalId: String(sample.id), canonicalWorks: pollWorkingId === String(sample.id) }));
+console.log("match-vote", JSON.stringify({ verifiedReadId: pollWorkingId, canonicalId: pollWorkingCanonical, canonicalWorks: Boolean(pollWorkingId && pollWorkingId === pollWorkingCanonical) }));
 
 for (const [name, url] of [
   ["tips", `${APP}/tips?limit=2`],
@@ -78,7 +74,8 @@ for (const [name, url] of [
   ["search", `${APP}/football/search?q=Arsenal`],
 ]) {
   const result = await json(url);
-  console.log(`existing-service-${name}`, JSON.stringify({ status: result.response.status, ok: result.response.ok, keys: keys(result.payload) }));
+  console.log(`existing-service-${name}`, JSON.stringify({ status: result.response.status, ok: result.response.ok, message:errorMessage(result.payload), keys: keys(result.payload) }));
 }
 
+assert(pollWorkingId, "Existing Match Vote GET rejected every tested current Scores match ID/provider suffix; Scores↔Match Vote runtime contract is not verified.");
 console.log("Sep 2 read-only runtime smoke completed. No vote, favorite, prediction, notification, purchase, build, deploy, or store write was performed.");
