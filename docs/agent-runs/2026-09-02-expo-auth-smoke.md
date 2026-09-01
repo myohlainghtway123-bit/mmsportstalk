@@ -5,6 +5,7 @@ Verify whether the existing MST Scores GitHub repository can authenticate to Exp
 
 ## Scope
 - branch: `chatgpt/sep2-expo-auth-smoke-2026-09-02`
+- PR: #31
 - production actions: none
 - store submission: none
 - EAS build: none
@@ -22,7 +23,18 @@ A temporary CI smoke checks only:
 2. `eas-cli whoami` authenticates successfully.
 
 ## Result
-Pending GitHub Actions execution.
+**BLOCKED — Expo authentication is not configured in this GitHub repository.**
 
-## Next action
-If auth passes, request/obtain explicit owner approval before starting production Android/iOS EAS builds. If auth fails, configure a valid Expo access token in the repository and rerun the smoke. Do not call the store build ready without a successful build artifact and live/store verification.
+GitHub Actions run `33538773761`, job `99959528156` executed the repository step and failed before any build with:
+
+`EXPO_TOKEN is not configured for this repository.`
+
+No build was started and no production/store action occurred.
+
+## Risk / blocker
+MST Scores cannot start an authenticated EAS Android/iOS production build from the current GitHub workflow until a valid Expo access token is configured as the repository Actions secret named `EXPO_TOKEN`.
+
+## Exact next action
+Owner: create/obtain the correct Expo access token for the Expo account that owns project `mst-app`, then add it to `mmsportstalk` GitHub repository → Settings → Secrets and variables → Actions → New repository secret → name exactly `EXPO_TOKEN`. After that, rerun the auth smoke. If it passes, obtain explicit owner approval before starting production Android/iOS EAS builds.
+
+Do not call store/build readiness complete without a successful build artifact and live/store verification.
