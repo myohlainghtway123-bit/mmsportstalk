@@ -1,0 +1,39 @@
+name: Sep 2 Apply Phase 4B Release Patch
+
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - .github/workflows/sep2-apply-phase4b-release.yml
+      - scripts/sep2_patch_phase4b_release.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  patch-current-scores-app:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: chatgpt/sep2-expo-auth-smoke-2026-09-02
+
+      - name: Apply narrow current-app patch
+        run: node scripts/sep2_patch_phase4b_release.mjs
+
+      - name: Commit generated source change
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/phase4b/Phase4BScoresInternalAlpha.js; then
+            echo "Phase 4B source already contains release integrations."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/phase4b/Phase4BScoresInternalAlpha.js
+          git commit -m "fix(scores): wire release integrations into current Phase 4B app"
+          git push origin HEAD:chatgpt/sep2-expo-auth-smoke-2026-09-02
