@@ -1,0 +1,37 @@
+name: Sep 2 Scores Release Checks
+
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - .github/workflows/sep2-release-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  current-scores-release-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - name: Phase 4B API unit contract
+        run: node scripts/test_phase4b_scores_api.mjs
+      - name: Product-boundary regression
+        run: node scripts/test_sep2_product_boundary.mjs
+      - name: Current Scores release source contract
+        run: node scripts/validate_sep2_scores_release.mjs
+      - name: Android production JS export
+        env:
+          EXPO_PUBLIC_MST_ENVIRONMENT: production
+        run: npx expo export --platform android --output-dir dist-release-android --clear
+      - name: iOS production JS export
+        env:
+          EXPO_PUBLIC_MST_ENVIRONMENT: production
+        run: npx expo export --platform ios --output-dir dist-release-ios --clear
