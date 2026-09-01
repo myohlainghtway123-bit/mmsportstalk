@@ -69,10 +69,12 @@ assert.match(api, /CANONICAL_MATCH_MISMATCH/);
 assert.match(api, /STAGING_TIMEOUT/);
 assert.match(api, /accessLevel !== "free" \|\| serverLocked/);
 assert.match(api, /selection: locked \? null/);
+assert.match(vote, /loadMatchVote\(matchId\)/);
+assert.match(vote, /saveMatchVote\(matchId, selection\)/);
+assert.match(vote, /match\?\.id/);
 assert.match(vote, /HOME/);
 assert.match(vote, /DRAW/);
 assert.match(vote, /AWAY/);
-assert.match(vote, /matchVoteProviderId/);
 
 const profile = eas.build?.["phase4b-internal"];
 assert.equal(profile?.distribution, "internal");
