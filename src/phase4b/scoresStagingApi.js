@@ -81,10 +81,9 @@ function validateSessionStore(sessionStore) {
 async function resolveSessionStore(sessionStore) {
   if (sessionStore !== undefined) return validateSessionStore(sessionStore);
 
-  // Keep the React Native account-storage module out of plain Node contract tests.
-  // Expo/Metro resolves this lazy import at runtime, preserving the existing
-  // SecureStore-backed session as the default in the real app.
-  const accountSession = await import("../services/accountApi.js");
+  // Keep React Native secure-storage dependencies out of plain Node contract
+  // tests while loading the same SecureStore-backed session in the real app.
+  const accountSession = await import("../services/sessionStore.js");
   return validateSessionStore(accountSession);
 }
 
