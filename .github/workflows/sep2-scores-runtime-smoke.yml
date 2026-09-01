@@ -1,0 +1,24 @@
+name: Sep 2 Scores Runtime Smoke
+
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - scripts/verify_sep2_scores_runtime.mjs
+      - .github/workflows/sep2-scores-runtime-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+      - name: Run read-only runtime integration smoke
+        run: node scripts/verify_sep2_scores_runtime.mjs
