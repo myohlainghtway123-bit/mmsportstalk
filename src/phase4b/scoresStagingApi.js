@@ -1,5 +1,3 @@
-import { getSessionToken, setSessionToken } from "../services/accountApi";
-
 export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -73,17 +71,42 @@ async function decode(response) {
   }
 }
 
+function validateSessionStore(sessionStore) {
+  if (!sessionStore || typeof sessionStore.getSessionToken !== "function" || typeof sessionStore.setSessionToken !== "function") {
+    throw new ScoresStagingError("Scores session storage is unavailable.", { code: "SCORES_SESSION_STORE_INVALID" });
+  }
+  return sessionStore;
+}
+
+async function resolveSessionStore(sessionStore) {
+  if (sessionStore !== undefined) return validateSessionStore(sessionStore);
+
+  // Keep the React Native account-storage module out of plain Node contract tests.
+  // Expo/Metro resolves this lazy import at runtime, preserving the existing
+  // SecureStore-backed session as the default in the real app.
+  const accountSession = await import("../services/accountApi.js");
+  return validateSessionStore(accountSession);
+}
+
 export async function scoresProductRequest(path, {
   method = "GET",
   body,
   fetchImpl = fetch,
   timeoutMs = SCORES_REQUEST_TIMEOUT_MS,
   token: explicitToken,
+  sessionStore: providedSessionStore,
 } = {}) {
   const origin = configuredScoresOrigin();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const storedToken = explicitToken === undefined ? await getSessionToken().catch(() => null) : explicitToken;
+  let sessionStore = null;
+  let storedToken = explicitToken;
+
+  if (explicitToken === undefined) {
+    sessionStore = await resolveSessionStore(providedSessionStore);
+    storedToken = await sessionStore.getSessionToken().catch(() => null);
+  }
+
   const headers = {
     Accept: "application/json",
     "x-mst-client": "mst-scores",
@@ -101,7 +124,10 @@ export async function scoresProductRequest(path, {
     const payload = await decode(response);
     const requestId = requestIdFrom(response, payload);
     if (!response.ok) {
-      if (response.status === 401 && storedToken) await setSessionToken(null).catch(() => {});
+      if (response.status === 401 && storedToken) {
+        sessionStore ||= await resolveSessionStore(providedSessionStore);
+        await sessionStore.setSessionToken(null).catch(() => {});
+      }
       throw new ScoresStagingError(
         payload?.error?.message || payload?.message || `Scores API returned ${response.status}.`,
         { code: payload?.error?.code || "STAGING_DEPENDENCY_ERROR", status: response.status, requestId },
@@ -132,15 +158,17 @@ export async function loginScoresAccount(identifier, password, options = {}) {
   });
   const token = String(result.data?.token || "").trim();
   if (!token) throw new ScoresStagingError("MST identity did not return a session token.", { code: "AUTH_TOKEN_MISSING" });
-  await setSessionToken(token);
+  const sessionStore = await resolveSessionStore(options.sessionStore);
+  await sessionStore.setSessionToken(token);
   return result.data;
 }
 
 export async function logoutScoresAccount(options = {}) {
+  const sessionStore = await resolveSessionStore(options.sessionStore);
   try {
     return (await scoresProductRequest("/v1/auth/logout", { ...options, method: "POST", body: {} })).data;
   } finally {
-    await setSessionToken(null).catch(() => {});
+    await sessionStore.setSessionToken(null).catch(() => {});
   }
 }
 
