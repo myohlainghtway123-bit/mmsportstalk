@@ -2,7 +2,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
-const roots = ['.github', 'App.js', 'app.config.js', '.env.example', 'eas.json', 'config', 'scripts', 'src', 'package.json'];
+const roots = [
+  '.github',
+  'App.js',
+  'README.md',
+  'MST_SCORE_PRODUCT_SPEC.md',
+  'SHARED_BACKEND_CONTRACT.md',
+  'docs/product',
+  'app.config.js',
+  '.env.example',
+  'eas.json',
+  'config',
+  'scripts',
+  'src',
+  'package.json',
+];
 const exactAllowlist = new Set(['scripts/validate-product-separation.js']);
 const ignoredPrefixes = ['docs/agent-runs/', 'node_modules/', 'android/', 'ios/', 'dist-ci/', '.expo/'];
 const textExtensions = new Set(['.js', '.cjs', '.mjs', '.json', '.md', '.yml', '.yaml', '.toml', '.ts', '.tsx']);
@@ -30,7 +44,16 @@ function collect(target, output) {
 
   const relativePath = rel(full);
   if (ignored(relativePath)) return;
-  const isKnownRootFile = ['App.js', 'app.config.js', '.env.example', 'eas.json', 'package.json'].includes(relativePath);
+  const isKnownRootFile = [
+    'App.js',
+    'README.md',
+    'MST_SCORE_PRODUCT_SPEC.md',
+    'SHARED_BACKEND_CONTRACT.md',
+    'app.config.js',
+    '.env.example',
+    'eas.json',
+    'package.json',
+  ].includes(relativePath);
   if (!isKnownRootFile && !textExtensions.has(path.extname(relativePath).toLowerCase())) return;
   output.push(relativePath);
 }
@@ -54,4 +77,4 @@ if (violations.length) {
   process.exit(1);
 }
 
-console.log(`MST Scores product separation OK: ${files.length} active source/config files scanned.`);
+console.log(`MST Scores product separation OK: ${files.length} active source/config/product files scanned.`);
