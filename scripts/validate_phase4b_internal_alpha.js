@@ -66,7 +66,7 @@ assert.match(screen, /No fake unlock is possible/);
 for (const contractRule of [
   "MST Scores = Follow the Game.",
   "Match Vote — MST Scores",
-  "Match Vote is NOT Prediction",
+  "Vote and Prediction are different systems",
   "MST Scores must not create, edit or submit user predictions.",
   "exact score = 3 points",
   "correct result only = 1 point",
