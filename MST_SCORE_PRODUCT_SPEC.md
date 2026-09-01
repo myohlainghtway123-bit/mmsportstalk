@@ -179,7 +179,7 @@ MST Scores consumes MST-owned APIs under `myanmarsportstalk.com` and the shared 
 - no provider secrets in APK/IPA;
 - no direct D1 access from the app;
 - no direct provider coupling when MST Platform owns the data contract;
-- no BetFlow identity/domain/API/data in active MST Scores code/config/docs;
+- no cross-product identity, domains, APIs or data in active MST Scores code/config/docs;
 - no new Worker for app convenience.
 
 Current staging Scores origin:
