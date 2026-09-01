@@ -32,23 +32,36 @@ for (const marker of [
   "Phase4BSearchPanel",
 ]) assert.match(phase, new RegExp(marker));
 
-assert.match(vote, /getMatchPoll/);
-assert.match(vote, /voteMatchPoll/);
-assert.match(vote, /matchVoteProviderId/);
-assert.match(vote, /provider_id/);
-assert.match(vote, /mst:match:af:/);
+// Match Vote now uses the canonical Scores Product API/BFF and the canonical
+// match.id directly. Provider-ID adaptation belongs behind the shared platform
+// boundary, not in the mobile client.
+assert.match(vote, /loadMatchVote\(matchId\)/);
+assert.match(vote, /saveMatchVote\(matchId, selection\)/);
+assert.match(vote, /match\?\.id/);
 assert.match(vote, /HOME/);
 assert.match(vote, /DRAW/);
 assert.match(vote, /AWAY/);
+assert.match(scoresApi, /\/v1\/matches\/\$\{encodeURIComponent\(String\(matchId\)\)\}\/vote/);
+assert.match(scoresApi, /method:\s*"PUT"/);
+
 assert.match(insights, /EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE/);
 assert.match(insights, /EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE/);
-assert.match(hub, /getTips/);
-assert.match(hub, /getTipsMe/);
-assert.match(hub, /getTipsters/);
-assert.match(hub, /getLeaderboard/);
+assert.match(insights, /full_analysis_url/);
+assert.match(insights, /prediction_app_url/);
+
+for (const marker of [
+  "loadTips",
+  "loadOwnPurchases",
+  "loadTipEntitlement",
+  "loadTipsters",
+  "loadTipsterLeaderboard",
+  "loadUserLeaderboard",
+]) assert.match(hub, new RegExp(marker));
+
 assert.match(favorites, /getFavorites/);
 assert.match(favorites, /toggleEntityFavorite/);
 assert.match(notifications, /getNotifications/);
+assert.match(notifications, /markAllNotificationsRead/);
 assert.match(notifications, /registerDeviceForPush/);
 assert.match(search, /searchFootballEntities/);
 
@@ -60,22 +73,32 @@ for (const forbidden of [
   /submitPrediction\s*\(/,
   /editPrediction\s*\(/,
   /\/v1\/predictions/,
-]) assert.doesNotMatch(phaseSources, forbidden, `Current Scores app contains forbidden prediction write surface: ${forbidden}`);
+  /betflow/i,
+]) assert.doesNotMatch(phaseSources, forbidden, `Current Scores app contains forbidden product surface: ${forbidden}`);
 
 assert.match(scoresApi, /SCORES_API_ORIGIN_REQUIRED/);
 assert.match(scoresApi, /PRODUCTION_STAGING_ORIGIN_BLOCKED/);
+assert.match(scoresApi, /\/v1\/auth\/login/);
+assert.match(scoresApi, /\/v1\/auth\/logout/);
+assert.match(scoresApi, /Authorization:\s*`Bearer/);
 
 const dependencies = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 const admobPackages = Object.keys(dependencies).filter((name) => /google-mobile-ads|admob/i.test(name));
 const blockers = [];
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim()) blockers.push("production Scores API origin is not configured");
 if (!admobPackages.length) blockers.push("AdMob SDK/package is not configured");
-if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) blockers.push("website full-analysis URL template is not configured (API-provided URL may still satisfy runtime)");
-if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) blockers.push("Prediction app deep-link template is not configured (API-provided URL may still satisfy runtime)");
 
-console.log("Current MST Scores source contract PASS: production entrypoint is Phase 4B; Match Vote/favorites/notifications/tips/leaderboards/search/read-only analysis integrations are present; Match Vote adapts canonical Scores IDs to provider IDs; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact.");
+const warnings = [];
+if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
+if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
+
+console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; canonical shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes and BetFlow are absent; iOS/Android identifiers and EAS projectId are intact.");
 if (blockers.length) {
   console.log("Release configuration blockers:");
   for (const blocker of blockers) console.log(`- ${blocker}`);
+}
+if (warnings.length) {
+  console.log("Runtime verification required:");
+  for (const warning of warnings) console.log(`- ${warning}`);
 }
 if (process.argv.includes("--strict-release") && blockers.length) process.exit(2);
