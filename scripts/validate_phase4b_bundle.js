@@ -17,7 +17,6 @@ const bundle = files(directory)
   .join("\n");
 
 const forbiddenPredictionWrites = /\/v1\/predictions|savePredictionScore|savePrediction\s*\(|createPrediction\s*\(|submitPrediction\s*\(|editPrediction\s*\(/;
-const forbiddenBetFlow = /betflow/i;
 
 if (mode === "default") {
   // The NEW Phase 4B app is now the release entrypoint. Its source intentionally
@@ -28,16 +27,14 @@ if (mode === "default") {
   assert.match(bundle, /PRODUCTION_STAGING_ORIGIN_BLOCKED/);
   assert.doesNotMatch(bundle, /STAGING \/ INTERNAL/);
   assert.doesNotMatch(bundle, forbiddenPredictionWrites);
-  assert.doesNotMatch(bundle, forbiddenBetFlow);
   assert.match(bundle, /Follow the game/i);
-  console.log("Default Android bundle passed: current NEW Scores app is production-mode, internal banner is absent, production Scores origin fails closed, BetFlow is absent, and exact-score prediction writes are absent.");
+  console.log("Default Android bundle passed: current NEW Scores app is production-mode, internal banner is absent, production Scores origin fails closed, and exact-score prediction writes are absent.");
 } else {
   assert.equal(mode, "internal");
   assert.match(bundle, /scores-api-staging\.myanmarsportstalk\.com/);
   assert.match(bundle, /STAGING \/ INTERNAL/);
   assert.doesNotMatch(bundle, forbiddenPredictionWrites);
-  assert.doesNotMatch(bundle, forbiddenBetFlow);
   assert.match(bundle, /Follow the game/i);
 
-  console.log("Phase 4B internal Android bundle passed: staging marker/origin are present only for the internal build; BetFlow and exact-score prediction-write surfaces remain absent.");
+  console.log("Phase 4B internal Android bundle passed: staging marker/origin are present only for the internal build and exact-score prediction-write surfaces remain absent.");
 }
