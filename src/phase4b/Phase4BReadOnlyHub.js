@@ -1,8 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getLeaderboard } from "../services/accountApi";
-import { getTips, getTipsMe, getTipsters } from "../services/tipsApi";
+import {
+  loadOwnPurchases,
+  loadTipEntitlement,
+  loadTips,
+  loadTipsterLeaderboard,
+  loadTipsters,
+  loadUserLeaderboard,
+} from "./scoresStagingApi";
 
 const C = { surface:"#101417", raised:"#171C20", border:"#293036", text:"#FFFFFF", secondary:"#D4D8DB", muted:"#929AA0", red:"#F3262D", amber:"#F4C84D", green:"#48C78E" };
 
@@ -19,15 +25,18 @@ function rows(payload) {
   return arrays(payload).sort((a, b) => b.length - a.length)[0] || [];
 }
 function label(row, fallback) {
-  return String(row?.displayName || row?.name || row?.username || row?.title || row?.tipsterName || row?.user?.displayName || row?.user?.name || row?.tipster?.name || fallback);
+  return String(row?.displayName || row?.display_name || row?.name || row?.username || row?.title || row?.tipsterName || row?.user?.displayName || row?.user?.name || row?.tipster?.name || fallback);
 }
 function meta(row) {
   const parts = [
     row?.rank != null ? `#${row.rank}` : null,
     row?.points != null ? `${row.points} pts` : row?.score != null ? `${row.score} pts` : null,
-    row?.wins != null ? `${row.wins} wins` : null,
-    row?.winRate != null ? `${row.winRate}% win` : null,
-    row?.price != null ? `${row.price} credits` : null,
+    row?.accuracy != null ? `${row.accuracy}% accuracy` : null,
+    row?.followers_count != null ? `${row.followers_count} followers` : null,
+    row?.correct_predictions != null ? `${row.correct_predictions} correct` : null,
+    row?.amountMinor != null ? `${row.amountMinor} ${row.currency || ""}`.trim() : null,
+    row?.status ? String(row.status).toUpperCase() : null,
+    row?.price_minor != null ? `${row.price_minor} ${row.currency || ""}`.trim() : null,
   ].filter(Boolean);
   return parts.join(" · ") || "Read-only MST data";
 }
@@ -39,38 +48,67 @@ function DataList({ title, eyebrow, data, empty }) {
       <Text style={s.eyebrow}>{eyebrow}</Text>
       <Text style={s.title}>{title}</Text>
       {list.length ? list.map((row, index) => (
-        <View key={String(row?.id || row?.userId || row?.tipsterId || `${title}-${index}`)} style={[s.row, index > 0 && s.rowBorder]}>
+        <View key={String(row?.id || row?.user_id || row?.userId || row?.tipsterId || `${title}-${index}`)} style={[s.row, index > 0 && s.rowBorder]}>
           <Text style={s.rank}>{row?.rank != null ? `#${row.rank}` : `${index + 1}`}</Text>
           <View style={s.flex}><Text numberOfLines={1} style={s.name}>{label(row, `Item ${index + 1}`)}</Text><Text numberOfLines={1} style={s.meta}>{meta(row)}</Text></View>
-          {row?.selection && !row?.locked ? <Text numberOfLines={1} style={s.selection}>{String(row.selection)}</Text> : null}
+          {row?.selection ? <Text numberOfLines={1} style={s.selection}>{String(row.selection)}</Text> : null}
         </View>
       )) : <Text style={s.empty}>{empty}</Text>}
     </View>
   );
 }
 
+async function entitledPurchaseRows(purchases, tips) {
+  const paid = (Array.isArray(purchases) ? purchases : [])
+    .filter((purchase) => purchase?.status === "paid" && purchase?.tipId)
+    .slice(0, 8);
+  const tipRows = Array.isArray(tips) ? tips : [];
+  const settled = await Promise.allSettled(paid.map(async (purchase) => {
+    const entitlement = await loadTipEntitlement(purchase.tipId);
+    if (!entitlement?.entitled) return null;
+    const tip = tipRows.find((item) => String(item?.id) === String(purchase.tipId));
+    return {
+      id: `entitlement-${purchase.tipId}`,
+      title: tip?.title || "Purchased MST Tip",
+      selection: entitlement.selection || null,
+      status: "entitled",
+      tipId: purchase.tipId,
+    };
+  }));
+  return settled.flatMap((entry) => entry.status === "fulfilled" && entry.value ? [entry.value] : []);
+}
+
 export default function Phase4BReadOnlyHub() {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState({ loading:true, tips:null, purchased:null, tipsters:null, leaderboard:null, warnings:[] });
+  const [state, setState] = useState({ loading:true, tips:null, purchased:null, tipsters:null, tipsterLeaderboard:null, leaderboard:null, warnings:[] });
   const retry = useCallback(() => setAttempt((v) => v + 1), []);
 
   useEffect(() => {
     let active = true;
     setState((current) => ({ ...current, loading:true, warnings:[] }));
     Promise.allSettled([
-      getTips({ limit: 20 }),
-      getTipsMe(),
-      getTipsters({ limit: 20 }),
-      getLeaderboard("all"),
-    ]).then((settled) => {
+      loadTips(),
+      loadOwnPurchases(),
+      loadTipsters(),
+      loadTipsterLeaderboard(),
+      loadUserLeaderboard(),
+    ]).then(async (settled) => {
       if (!active) return;
-      const [tips, purchased, tipsters, leaderboard] = settled;
-      const warnings = settled.flatMap((entry, index) => entry.status === "rejected" ? [entry.reason?.message || ["Tips", "Purchased tips", "Tipsters", "Prediction leaderboard"][index] + " unavailable"] : []);
+      const [tips, purchases, tipsters, tipsterLeaderboard, leaderboard] = settled;
+      const tipsData = tips.status === "fulfilled" ? tips.value : null;
+      const purchasesData = purchases.status === "fulfilled" ? purchases.value : null;
+      const purchased = purchases.status === "fulfilled"
+        ? await entitledPurchaseRows(purchasesData, tipsData).catch(() => [])
+        : [];
+      if (!active) return;
+      const names = ["Tips", "Purchased tips", "Tipsters", "Tipster leaderboard", "Prediction leaderboard"];
+      const warnings = settled.flatMap((entry, index) => entry.status === "rejected" ? [entry.reason?.message || `${names[index]} unavailable`] : []);
       setState({
         loading:false,
-        tips: tips.status === "fulfilled" ? tips.value : null,
-        purchased: purchased.status === "fulfilled" ? purchased.value : null,
+        tips: tipsData,
+        purchased,
         tipsters: tipsters.status === "fulfilled" ? tipsters.value : null,
+        tipsterLeaderboard: tipsterLeaderboard.status === "fulfilled" ? tipsterLeaderboard.value : null,
         leaderboard: leaderboard.status === "fulfilled" ? leaderboard.value : null,
         warnings,
       });
@@ -78,13 +116,14 @@ export default function Phase4BReadOnlyHub() {
     return () => { active = false; };
   }, [attempt]);
 
-  if (state.loading) return <View style={s.loading}><ActivityIndicator color={C.red}/><Text style={s.loadingText}>Loading read-only MST tips and leaderboards…</Text></View>;
+  if (state.loading) return <View style={s.loading}><ActivityIndicator color={C.red}/><Text style={s.loadingText}>Loading shared MST tips and leaderboards…</Text></View>;
   return (
     <View>
-      <View style={s.boundary}><Ionicons name="shield-checkmark-outline" size={18} color={C.green}/><Text style={s.boundaryText}>Read only. This Scores surface does not import or call prediction submission APIs.</Text></View>
-      <DataList title="Purchased / premium tips" eyebrow="ENTITLEMENTS" data={state.purchased} empty="No purchased or entitled tips are available for this account." />
+      <View style={s.boundary}><Ionicons name="shield-checkmark-outline" size={18} color={C.green}/><Text style={s.boundaryText}>Read only. This Scores surface uses the shared Scores Product API and never imports prediction submission APIs.</Text></View>
+      <DataList title="Purchased / entitled tips" eyebrow="ENTITLEMENTS" data={state.purchased} empty="No paid tip entitlement is available for this signed-in account." />
       <DataList title="Tips" eyebrow="MST TIPS" data={state.tips} empty="No readable tips are available." />
-      <DataList title="Tipster Leaderboard" eyebrow="TIPSTERS" data={state.tipsters} empty="No tipster leaderboard rows are available." />
+      <DataList title="Tipsters" eyebrow="TIPSTERS" data={state.tipsters} empty="No verified Tipsters are available." />
+      <DataList title="Tipster Leaderboard" eyebrow="TIPSTER LEADERBOARD" data={state.tipsterLeaderboard} empty="No Tipster leaderboard rows are available." />
       <DataList title="User Prediction Leaderboard" eyebrow="PREDICTION · READ ONLY" data={state.leaderboard} empty="No prediction leaderboard rows are available." />
       {state.warnings.map((warning, index) => <Text key={`${warning}-${index}`} style={s.warning}>{warning}</Text>)}
       <Pressable onPress={retry} style={s.retry}><Ionicons name="refresh" size={14} color={C.secondary}/><Text style={s.retryText}>Refresh</Text></Pressable>
