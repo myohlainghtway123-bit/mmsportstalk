@@ -12,6 +12,11 @@ function data(payload) { return payload?.data ?? payload; }
 function assert(condition, message) { if (!condition) throw new Error(message); }
 function keys(value) { return value && typeof value === "object" ? Object.keys(value).sort() : []; }
 function errorMessage(payload) { return payload?.error?.message || payload?.message || payload?.detail || payload?.error || null; }
+function arrayCount(value) {
+  if (Array.isArray(value)) return value.length;
+  if (!value || typeof value !== "object") return 0;
+  return Math.max(0, ...Object.values(value).map(arrayCount));
+}
 
 const health = await json(`${SCORES}/health`);
 assert(health.response.ok, `Scores staging health ${health.response.status}`);
@@ -34,7 +39,7 @@ const detail = await json(`${SCORES}/v1/matches/${encodeURIComponent(sample.id)}
 assert(detail.response.ok, `Match detail returned ${detail.response.status}`);
 const match = data(detail.payload);
 assert(String(match?.id || "") === String(sample.id), "Match detail changed canonical identity");
-console.log("match-detail", JSON.stringify({ status: detail.response.status, id: match.id, keys: keys(match) }));
+console.log("match-detail", JSON.stringify({ status: detail.response.status, id: match.id, providerId:match.provider_id || null, competitionId:match.competition_id || null, season:match.season || null, keys: keys(match) }));
 
 const sectionGroups = {
   stats: ["statistics", "stats", "match_statistics"],
@@ -46,6 +51,22 @@ const sectionGroups = {
 };
 for (const [name, candidates] of Object.entries(sectionGroups)) console.log(`section-${name}`, JSON.stringify({ present: candidates.some((key) => Object.prototype.hasOwnProperty.call(match || {}, key)), matched: candidates.filter((key) => Object.prototype.hasOwnProperty.call(match || {}, key)) }));
 
+const providerId = String(match?.provider_id || "").trim();
+if (providerId) {
+  for (const [name, path] of [
+    ["statistics", `/football/matches/${encodeURIComponent(providerId)}/statistics`],
+    ["h2h", `/football/matches/${encodeURIComponent(providerId)}/h2h`],
+  ]) {
+    const result = await json(`${APP}${path}`);
+    console.log(`existing-service-${name}`, JSON.stringify({ status:result.response.status, ok:result.response.ok, count:arrayCount(result.payload), message:errorMessage(result.payload), keys:keys(result.payload) }));
+  }
+}
+if (match?.competition_id) {
+  const season = match?.season ? `?season=${encodeURIComponent(match.season)}` : "";
+  const result = await json(`${APP}/football/competitions/${encodeURIComponent(match.competition_id)}/standings${season}`);
+  console.log("existing-service-standings", JSON.stringify({ status:result.response.status, ok:result.response.ok, count:arrayCount(result.payload), message:errorMessage(result.payload), keys:keys(result.payload) }));
+}
+
 const tips = await json(`${SCORES}/v1/tips?matchId=${encodeURIComponent(sample.id)}&limit=10`);
 assert(tips.response.ok, `Scores tips returned ${tips.response.status}`);
 console.log("scores-tips", JSON.stringify({ status: tips.response.status, count: Array.isArray(data(tips.payload)) ? data(tips.payload).length : 0 }));
@@ -55,7 +76,7 @@ let pollWorkingId = null;
 let pollWorkingCanonical = null;
 for (const pollSample of pollSamples) {
   const canonical = String(pollSample.id);
-  const numericSuffix = canonical.match(/(\d+)$/)?.[1] || null;
+  const numericSuffix = canonical.match(/^mst:match:af:(\d+)$/i)?.[1] || null;
   for (const candidate of [...new Set([canonical, numericSuffix].filter(Boolean))]) {
     const poll = await json(`${APP}/football/poll?matchId=${encodeURIComponent(candidate)}`);
     console.log("match-vote-candidate", JSON.stringify({ canonical, candidate, status: poll.response.status, ok: poll.response.ok, message:errorMessage(poll.payload) }));
