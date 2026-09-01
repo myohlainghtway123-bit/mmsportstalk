@@ -1,3 +1,5 @@
+import { getSessionToken, setSessionToken } from "../services/accountApi";
+
 export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -21,7 +23,7 @@ export class ScoresStagingError extends Error {
   }
 }
 
-function configuredScoresOrigin() {
+export function configuredScoresOrigin() {
   if (!MST_SCORES_API_ORIGIN) {
     throw new ScoresStagingError(
       "Production Scores API origin is not configured. Release is blocked rather than falling back to staging.",
@@ -71,41 +73,116 @@ async function decode(response) {
   }
 }
 
-export async function scoresStagingGet(path, {
+export async function scoresProductRequest(path, {
+  method = "GET",
+  body,
   fetchImpl = fetch,
   timeoutMs = SCORES_REQUEST_TIMEOUT_MS,
+  token: explicitToken,
 } = {}) {
   const origin = configuredScoresOrigin();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const storedToken = explicitToken === undefined ? await getSessionToken().catch(() => null) : explicitToken;
+  const headers = {
+    Accept: "application/json",
+    "x-mst-client": "mst-scores",
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
+  };
 
   try {
     const response = await fetchImpl(`${origin}${path}`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
     const payload = await decode(response);
     const requestId = requestIdFrom(response, payload);
     if (!response.ok) {
+      if (response.status === 401 && storedToken) await setSessionToken(null).catch(() => {});
       throw new ScoresStagingError(
         payload?.error?.message || payload?.message || `Scores API returned ${response.status}.`,
-        { status: response.status, requestId },
+        { code: payload?.error?.code || "STAGING_DEPENDENCY_ERROR", status: response.status, requestId },
       );
     }
     return { data: payload?.data ?? null, requestId };
   } catch (error) {
     if (error instanceof ScoresStagingError) throw error;
     if (controller.signal.aborted || error?.name === "AbortError") {
-      throw new ScoresStagingError("The Scores API timed out. Please retry.", {
-        code: "STAGING_TIMEOUT",
-      });
+      throw new ScoresStagingError("The Scores API timed out. Please retry.", { code: "STAGING_TIMEOUT" });
     }
     throw new ScoresStagingError("The Scores API is unavailable. Please retry.");
   } finally {
     clearTimeout(timer);
   }
 }
+
+export async function scoresStagingGet(path, options = {}) {
+  return scoresProductRequest(path, { ...options, method: "GET" });
+}
+
+export async function loginScoresAccount(identifier, password, options = {}) {
+  const result = await scoresProductRequest("/v1/auth/login", {
+    ...options,
+    method: "POST",
+    token: null,
+    body: { identifier: String(identifier || "").trim(), password: String(password || "") },
+  });
+  const token = String(result.data?.token || "").trim();
+  if (!token) throw new ScoresStagingError("MST identity did not return a session token.", { code: "AUTH_TOKEN_MISSING" });
+  await setSessionToken(token);
+  return result.data;
+}
+
+export async function logoutScoresAccount(options = {}) {
+  try {
+    return (await scoresProductRequest("/v1/auth/logout", { ...options, method: "POST", body: {} })).data;
+  } finally {
+    await setSessionToken(null).catch(() => {});
+  }
+}
+
+export const loadMatchVote = async (matchId, options = {}) => (
+  await scoresStagingGet(`/v1/matches/${encodeURIComponent(String(matchId))}/vote`, options)
+).data;
+
+export const saveMatchVote = async (matchId, selection, options = {}) => (
+  await scoresProductRequest(`/v1/matches/${encodeURIComponent(String(matchId))}/vote`, {
+    ...options,
+    method: "PUT",
+    body: { selection: String(selection || "").toUpperCase() },
+  })
+).data;
+
+export const loadPreview = async (matchId, options = {}) => (
+  await scoresStagingGet(`/v1/matches/${encodeURIComponent(String(matchId))}/preview`, options)
+).data;
+
+export const loadUserLeaderboard = async (options = {}) => (
+  await scoresStagingGet("/v1/leaderboards/users?limit=25", options)
+).data;
+
+export const loadTipsterLeaderboard = async (options = {}) => (
+  await scoresStagingGet("/v1/leaderboards/tipsters?limit=25", options)
+).data;
+
+export const loadTipsters = async (options = {}) => (
+  await scoresStagingGet("/v1/tipsters?limit=25", options)
+).data;
+
+export const loadTips = async (options = {}) => (
+  await scoresStagingGet("/v1/tips?limit=25", options)
+).data;
+
+export const loadOwnPurchases = async (options = {}) => (
+  await scoresStagingGet("/v1/purchases/me", options)
+).data;
+
+export const loadTipEntitlement = async (tipId, options = {}) => (
+  await scoresStagingGet(`/v1/entitlements/tips/${encodeURIComponent(String(tipId))}`, options)
+).data;
 
 export function canonicalMatchId(match) {
   const value = String(match?.id ?? "").trim();
@@ -185,23 +262,23 @@ export async function loadMatchCenter(matchId, options) {
     });
   }
 
-  try {
-    const tips = await scoresStagingGet(
-      `/v1/tips?matchId=${encodeURIComponent(canonicalId)}&limit=10`,
-      options,
-    );
-    return {
-      match: detail.data,
-      tips: Array.isArray(tips.data) ? tips.data.map(normalizeTipPreview) : [],
-      tipsError: null,
-      requestIds: { match: detail.requestId, tips: tips.requestId },
-    };
-  } catch (error) {
-    return {
-      match: detail.data,
-      tips: [],
-      tipsError: error?.message || "Tip preview is unavailable.",
-      requestIds: { match: detail.requestId, tips: error?.requestId || null },
-    };
-  }
+  const [tipsResult, previewResult] = await Promise.allSettled([
+    scoresStagingGet(`/v1/tips?matchId=${encodeURIComponent(canonicalId)}&limit=10`, options),
+    scoresStagingGet(`/v1/matches/${encodeURIComponent(canonicalId)}/preview`, options),
+  ]);
+
+  return {
+    match: detail.data,
+    tips: tipsResult.status === "fulfilled" && Array.isArray(tipsResult.value.data)
+      ? tipsResult.value.data.map(normalizeTipPreview)
+      : [],
+    tipsError: tipsResult.status === "rejected" ? tipsResult.reason?.message || "Tip preview is unavailable." : null,
+    preview: previewResult.status === "fulfilled" ? previewResult.value.data : null,
+    previewError: previewResult.status === "rejected" ? previewResult.reason?.message || "Premium preview is unavailable." : null,
+    requestIds: {
+      match: detail.requestId,
+      tips: tipsResult.status === "fulfilled" ? tipsResult.value.requestId : tipsResult.reason?.requestId || null,
+      preview: previewResult.status === "fulfilled" ? previewResult.value.requestId : previewResult.reason?.requestId || null,
+    },
+  };
 }
