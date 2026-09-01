@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Linking,
   PanResponder,
   Pressable,
   ScrollView,
@@ -1477,6 +1478,39 @@ function MatchInfo({ match, my, colors }) {
   );
 }
 
+function MatchLinksCard({ match, my, colors }) {
+  const matchUrl = `https://myanmarsportstalk.com/match/${match?.id || ""}`;
+  const predictUrl = "https://myanmarsportstalk.com/predictions";
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.cardTitle, { color: colors.text }]}>{tx(my, "Analysis & Prediction", "သုံးသပ်ချက်နှင့် ခန့်မှန်းချက်")}</Text>
+      
+      <Pressable
+        style={[styles.linkRow, { borderBottomColor: colors.border2, borderBottomWidth: 1 }]}
+        onPress={() => Linking.openURL(matchUrl).catch(() => {})}
+      >
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={[styles.linkTitle, { color: colors.text }]}>{tx(my, "Deep Match Analysis on Website", "ဝဘ်ဆိုက်တွင် ပွဲစဉ်သုံးသပ်ချက် အပြည့်အစုံဖတ်ရန်")}</Text>
+          <Text style={[styles.linkSubtitle, { color: colors.muted }]}>{tx(my, "Detailed tactical preview, lineups & stats", "ပွဲကြိုသုံးသပ်ချက်၊ လူစာရင်းနှင့် အချက်အလက်များ")}</Text>
+        </View>
+        <Ionicons name="open-outline" size={18} color={colors.red} />
+      </Pressable>
+
+      <Pressable
+        style={styles.linkRow}
+        onPress={() => Linking.openURL(predictUrl).catch(() => {})}
+      >
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={[styles.linkTitle, { color: colors.text }]}>{tx(my, "MST Prediction Hub & Leaderboard", "MST ခန့်မှန်း Hub နှင့် အဆင့်ဇယား")}</Text>
+          <Text style={[styles.linkSubtitle, { color: colors.muted }]}>{tx(my, "Official MST scoring rules and global rankings", "တရားဝင် အမှတ်ပေးစနစ်နှင့် ကမ္ဘာလုံးဆိုင်ရာ အဆင့်")}</Text>
+        </View>
+        <Ionicons name="trophy-outline" size={18} color="#F4C84D" />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function NativeMatchScreenV5({ match, goBack, language = "my" }) {
   const { colors } = useTheme();
   const my = language !== "en";
@@ -1717,6 +1751,7 @@ export default function NativeMatchScreenV5({ match, goBack, language = "my" }) 
             <NextMatches my={my} current={current} homeMatches={state.homeMatches} awayMatches={state.awayMatches} colors={colors} />
             <PollCard match={current} my={my} colors={colors} />
             <MatchInfo match={current} my={my} colors={colors} />
+            <MatchLinksCard match={current} my={my} colors={colors} />
           </>
         ) : null}
 
@@ -1957,5 +1992,8 @@ const styles = StyleSheet.create({
   infoRow: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   infoLabel: { fontSize: 9.5 },
   infoValue: { flex: 1, fontSize: 10.5, fontWeight: "700", textAlign: "right" },
+  linkRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, justifyContent: "space-between" },
+  linkTitle: { fontSize: 12.5, fontWeight: "750" },
+  linkSubtitle: { fontSize: 10.5, marginTop: 2 },
   error: { fontSize: 9.5, textAlign: "center", marginTop: 8 },
 });
