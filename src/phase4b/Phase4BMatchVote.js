@@ -29,23 +29,31 @@ function teamName(match, pick) {
   return "Draw";
 }
 
+export function matchVoteProviderId(match) {
+  const explicit = String(match?.provider_id ?? match?.provider_match_id ?? "").trim();
+  if (/^\d{1,12}$/.test(explicit)) return explicit;
+  const canonical = String(match?.id || "").trim();
+  const apiFootball = canonical.match(/^mst:match:af:(\d{1,12})$/i);
+  return apiFootball?.[1] || "";
+}
+
 export default function Phase4BMatchVote({ match }) {
-  const matchId = String(match?.id || "").trim();
+  const pollMatchId = matchVoteProviderId(match);
   const [state, setState] = useState({ loading: true, data: null, error: "" });
 
   const load = useCallback(async (silent = false) => {
-    if (!matchId) {
-      setState({ loading: false, data: null, error: "Match Vote is unavailable because the canonical match ID is missing." });
+    if (!pollMatchId) {
+      setState({ loading: false, data: null, error: "Match Vote is unavailable because this match has no compatible provider ID." });
       return;
     }
     if (!silent) setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const data = await getMatchPoll(matchId);
+      const data = await getMatchPoll(pollMatchId);
       setState({ loading: false, data, error: "" });
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error?.message || "Match Vote is unavailable." }));
     }
-  }, [matchId]);
+  }, [pollMatchId]);
 
   useEffect(() => {
     load(false);
@@ -54,10 +62,10 @@ export default function Phase4BMatchVote({ match }) {
   }, [load]);
 
   const vote = async (pick) => {
-    if (!matchId || state.loading || state.data?.locked || isLocallyLocked(match)) return;
+    if (!pollMatchId || state.loading || state.data?.locked || isLocallyLocked(match)) return;
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const data = await voteMatchPoll(matchId, pick);
+      const data = await voteMatchPoll(pollMatchId, pick);
       setState({ loading: false, data, error: "" });
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error?.message || "Sign in to vote." }));
