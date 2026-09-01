@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getAuthStatus, getFavorites, normalizeFavoritePayload } from "../services/accountApi";
-import { readEntityFavorite, toggleEntityFavorite } from "../services/entityFavorite";
+import {
+  getAuthStatus,
+  getFavorites,
+  normalizeFavoritePayload,
+  readEntityFavorite,
+  toggleEntityFavorite,
+} from "./scoresFavoritesApi";
 
 const C = { surface:"#101417", raised:"#171C20", border:"#293036", text:"#FFFFFF", secondary:"#D4D8DB", muted:"#929AA0", red:"#F3262D", amber:"#F4C84D", green:"#48C78E" };
 
