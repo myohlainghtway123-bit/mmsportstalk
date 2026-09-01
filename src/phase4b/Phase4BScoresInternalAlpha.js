@@ -19,6 +19,9 @@ import {
 import Phase4BMatchVote from "./Phase4BMatchVote";
 import Phase4BMatchInsights from "./Phase4BMatchInsights";
 import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";
+import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";
+import Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";
+import Phase4BSearchPanel from "./Phase4BSearchPanel";
 
 const T = Object.freeze({
   color: {
@@ -393,7 +396,7 @@ function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
   return (
     <ShellScreen title="Favorites" eyebrow="TEAMS · COMPETITIONS" active="favorites" onSelect={onSelect}>
       <View style={s.segmented}><View style={[s.segment, s.segmentActive]}><Text style={s.segmentActiveText}>All</Text></View><View style={s.segment}><Text style={s.segmentText}>Teams</Text></View><View style={s.segment}><Text style={s.segmentText}>Competitions</Text></View></View>
-      <DependencyCard icon="heart-outline" title="Favorite teams and competitions" text="Account-backed favorites are not connected to this current Scores screen yet. Nothing has been fabricated or persisted." action="NOT CONNECTED" />
+      <Phase4BFavoritesPanel />
       <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Real matches</Text><Text style={s.matchCount}>Not personalized</Text></View>
       {realMatches.length ? <View style={s.leagueCard}>{realMatches.map((match) => <MatchRow key={canonicalMatchId(match)} match={match} onOpen={onOpenMatch} />)}</View> : <TerminalState empty emptyTitle="No matches" emptyText="There are no real matches to show here." />}
     </ShellScreen>
@@ -435,7 +438,9 @@ function MoreScreen({ onSelect }) {
   ];
   return (
     <ShellScreen title="More" eyebrow="SETTINGS · SUPPORT" active="more" onSelect={onSelect}>
-      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="person-outline" size={28} color={T.color.muted} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>Internal tester</Text><Text style={s.dependencyText}>Profile/account service is not connected in this Phase 4B build.</Text></View></View>
+      <Phase4BSearchPanel />
+      <Phase4BNotificationsPanel />
+      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>
       <View style={s.menuCard}>{rows.map(([icon, title, detail]) => <View key={title} style={s.menuRow}><Ionicons name={icon} size={19} color={T.color.secondary} /><Text style={s.menuTitle}>{title}</Text><Text style={s.menuDetail}>{detail}</Text><Ionicons name="chevron-forward" size={16} color={T.color.muted} /></View>)}</View>
     </ShellScreen>
   );
@@ -497,6 +502,7 @@ function MatchCenter({ selectedMatch, onBack }) {
                 <View style={s.heroTeam}><TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={52} /><Text style={s.heroTeamName}>{match?.away_team_name || "Away"}</Text></View>
               </View>
             </View>
+            <Phase4BMatchFavorites match={match} />
             <Phase4BMatchVote match={match} />
             <Phase4BMatchInsights match={match} />
             <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real Scores response</Text></View>
