@@ -34,6 +34,9 @@ for (const marker of [
 
 assert.match(vote, /getMatchPoll/);
 assert.match(vote, /voteMatchPoll/);
+assert.match(vote, /matchVoteProviderId/);
+assert.match(vote, /provider_id/);
+assert.match(vote, /mst:match:af:/);
 assert.match(vote, /HOME/);
 assert.match(vote, /DRAW/);
 assert.match(vote, /AWAY/);
@@ -70,7 +73,7 @@ if (!admobPackages.length) blockers.push("AdMob SDK/package is not configured");
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) blockers.push("website full-analysis URL template is not configured (API-provided URL may still satisfy runtime)");
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) blockers.push("Prediction app deep-link template is not configured (API-provided URL may still satisfy runtime)");
 
-console.log("Current MST Scores source contract PASS: production entrypoint is Phase 4B; Match Vote/favorites/notifications/tips/leaderboards/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact.");
+console.log("Current MST Scores source contract PASS: production entrypoint is Phase 4B; Match Vote/favorites/notifications/tips/leaderboards/search/read-only analysis integrations are present; Match Vote adapts canonical Scores IDs to provider IDs; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact.");
 if (blockers.length) {
   console.log("Release configuration blockers:");
   for (const blocker of blockers) console.log(`- ${blocker}`);
