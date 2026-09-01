@@ -69,7 +69,7 @@ Matches is the default destination.
 - fake rewarded-ad unlock;
 - provider secrets in the mobile package;
 - direct D1 access;
-- BetFlow identity/domains/APIs/data in active MST product code/config/docs.
+- cross-product identity, domains, APIs or data in active MST product code/config/docs.
 
 ## Current staging boundary
 
