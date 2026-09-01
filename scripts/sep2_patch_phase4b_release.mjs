@@ -20,11 +20,27 @@ replaceOnce(
   'import Phase4BMatchInsights from "./Phase4BMatchInsights";\nimport Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";\n',
   "read-only hub import",
 );
+replaceOnce(
+  'import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";\n',
+  'import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";\nimport Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";\nimport Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";\nimport Phase4BSearchPanel from "./Phase4BSearchPanel";\n',
+  "favorites notifications search imports",
+);
 
 replaceOnce(
   '<View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real staging response</Text></View>',
   '<Phase4BMatchVote match={match} />\n            <Phase4BMatchInsights match={match} />\n            <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real Scores response</Text></View>',
   "Match Center release integrations",
+);
+replaceOnce(
+  '            <Phase4BMatchVote match={match} />',
+  '            <Phase4BMatchFavorites match={match} />\n            <Phase4BMatchVote match={match} />',
+  "Match Center favorite controls",
+);
+
+replaceOnce(
+  '      <DependencyCard icon="heart-outline" title="Favorite teams and competitions" text="Account-backed favorites are not connected to this current Scores screen yet. Nothing has been fabricated or persisted." action="NOT CONNECTED" />',
+  '      <Phase4BFavoritesPanel />',
+  "Favorites screen integration",
 );
 
 replaceOnce(
@@ -40,6 +56,17 @@ replaceOnce(
 );
 
 replaceOnce(
+  '    ["notifications-outline", "Notifications", "Not connected"],\n',
+  '',
+  "obsolete notifications placeholder",
+);
+replaceOnce(
+  '      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="person-outline" size={28} color={T.color.muted} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>Internal tester</Text><Text style={s.dependencyText}>Profile/account service is not connected in this Phase 4B build.</Text></View></View>\n      <View style={s.menuCard}>',
+  '      <Phase4BSearchPanel />\n      <Phase4BNotificationsPanel />\n      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>\n      <View style={s.menuCard}>',
+  "More search notifications integration",
+);
+
+replaceOnce(
   '      <EnvironmentBanner />',
   '      {process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "production" ? <EnvironmentBanner /> : null}',
   "production environment banner",
@@ -51,7 +78,7 @@ const replacements = new Map([
   ["The request stops after 8 seconds if staging does not respond.", "The request stops after 8 seconds if the Scores service does not respond."],
   ["The selected staging view is honestly empty.", "The selected match view is empty."],
   ["No real staging match is scheduled for this date. Choose another date or retry.", "No real match is scheduled for this date. Choose another date or retry."],
-  ["Account-backed favorites are not available from the current staging Scores API. Nothing has been fabricated or persisted.", "Account-backed favorites are not connected to this current Scores screen yet. Nothing has been fabricated or persisted."],
+  ["Account-backed favorites are not available from the current staging Scores API. Nothing has been fabricated or persisted.", "Account-backed favorites are connected through the existing MST account service."],
   ["Real staging matches", "Real matches"],
   ["No staging matches", "No matches"],
   ["Real staging match · prediction remains locked until an authorized rewarded-video service exists.", "Real match · prediction remains read-only in MST Scores."],
@@ -63,10 +90,22 @@ const replacements = new Map([
 
 for (const [from, to] of replacements) source = source.split(from).join(to);
 
-if (!source.includes('import Phase4BMatchVote from "./Phase4BMatchVote";')) throw new Error("Match Vote import was not applied");
-if (!source.includes("<Phase4BMatchVote match={match} />")) throw new Error("Match Vote render was not applied");
-if (!source.includes("<Phase4BMatchInsights match={match} />")) throw new Error("Match insights render was not applied");
-if (!source.includes("<Phase4BReadOnlyHub />")) throw new Error("Read-only hub render was not applied");
+for (const marker of [
+  'import Phase4BMatchVote from "./Phase4BMatchVote";',
+  'import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";',
+  'import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";',
+  'import Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";',
+  'import Phase4BSearchPanel from "./Phase4BSearchPanel";',
+  '<Phase4BMatchVote match={match} />',
+  '<Phase4BMatchFavorites match={match} />',
+  '<Phase4BMatchInsights match={match} />',
+  '<Phase4BReadOnlyHub />',
+  '<Phase4BFavoritesPanel />',
+  '<Phase4BNotificationsPanel />',
+  '<Phase4BSearchPanel />',
+]) {
+  if (!source.includes(marker)) throw new Error(`Release integration missing: ${marker}`);
+}
 if (source.includes('require("./src/AppFinalShell")')) throw new Error("Old AppFinalShell reference unexpectedly found in Phase 4B source");
 
 fs.writeFileSync(path, source);
