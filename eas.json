@@ -22,7 +22,10 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_MST_ENVIRONMENT": "production"
+      }
     }
   }
 }
