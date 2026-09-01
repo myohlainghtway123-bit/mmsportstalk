@@ -64,14 +64,16 @@ assert.match(screen, /No fake purchase or paid-tip access/);
 assert.match(screen, /No fake unlock is possible/);
 
 for (const contractRule of [
-  "a live-score app first",
-  "Matches | News | Favorites | Tips + Prediction | More",
-  "does **not** create, edit, or submit user predictions",
-  "exact score: **3 points**",
-  "correct result: **1 point**",
-  "wrong result: **0 points**",
-  "MST Scores -> MST Prediction App -> Tipster Program",
-  "Phase 13 remains responsible",
+  "MST Scores = Follow the Game.",
+  "Match Vote — MST Scores",
+  "Match Vote is NOT Prediction",
+  "MST Scores must not create, edit or submit user predictions.",
+  "exact score = 3 points",
+  "correct result only = 1 point",
+  "wrong result = 0 points",
+  "Premium Tips / Buy Tip / purchased-tip access when entitled",
+  "premium Match Preview summary",
+  "Read Full Analysis on Website",
 ]) {
   assert.ok(productContract.includes(contractRule), `missing locked product rule: ${contractRule}`);
 }
@@ -95,4 +97,4 @@ assert.match(workflow, /scores-api-staging\.myanmarsportstalk\.com/);
 assert.match(workflow, /dist-ci-default default/);
 assert.match(workflow, /EXPO_PUBLIC_MST_INTERNAL:\s*"true"/);
 
-console.log("Phase 4B isolation contract passed: AppFinalShell is the default, the internal alpha requires the exact true flag, both API checks remain in CI, and the internal APK profile is enforced.");
+console.log("Phase 4B isolation contract passed: AppFinalShell is the default, the internal alpha requires the exact true flag, both API checks remain in CI, and the current Match Vote vs Prediction contract is enforced.");
