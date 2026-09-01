@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { getMatchPoll, voteMatchPoll } from "../services/matchEngagementApi";
+import { loadMatchVote, saveMatchVote } from "./scoresStagingApi";
 
 const C = {
   surface: "#101417",
@@ -16,44 +16,29 @@ const C = {
   green: "#48C78E",
 };
 
-function isLocallyLocked(match) {
-  const status = String(match?.status || "").toLowerCase();
-  if (["live", "in_play", "1h", "2h", "ht", "halftime", "finished", "ft"].includes(status)) return true;
-  const kickoff = new Date(match?.kickoff_at || 0).getTime();
-  return Number.isFinite(kickoff) && kickoff > 0 && Date.now() >= kickoff;
-}
-
 function teamName(match, pick) {
-  if (pick === "home") return match?.home_team_name || "Home";
-  if (pick === "away") return match?.away_team_name || "Away";
+  if (pick === "HOME") return match?.home_team_name || "Home";
+  if (pick === "AWAY") return match?.away_team_name || "Away";
   return "Draw";
 }
 
-export function matchVoteProviderId(match) {
-  const explicit = String(match?.provider_id ?? match?.provider_match_id ?? "").trim();
-  if (/^\d{1,12}$/.test(explicit)) return explicit;
-  const canonical = String(match?.id || "").trim();
-  const apiFootball = canonical.match(/^mst:match:af:(\d{1,12})$/i);
-  return apiFootball?.[1] || "";
-}
-
 export default function Phase4BMatchVote({ match }) {
-  const pollMatchId = matchVoteProviderId(match);
+  const matchId = String(match?.id || "").trim();
   const [state, setState] = useState({ loading: true, data: null, error: "" });
 
   const load = useCallback(async (silent = false) => {
-    if (!pollMatchId) {
-      setState({ loading: false, data: null, error: "Match Vote is unavailable because this match has no compatible provider ID." });
+    if (!matchId) {
+      setState({ loading: false, data: null, error: "Match Vote is unavailable because the canonical MST match ID is missing." });
       return;
     }
     if (!silent) setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const data = await getMatchPoll(pollMatchId);
+      const data = await loadMatchVote(matchId);
       setState({ loading: false, data, error: "" });
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error?.message || "Match Vote is unavailable." }));
     }
-  }, [pollMatchId]);
+  }, [matchId]);
 
   useEffect(() => {
     load(false);
@@ -61,25 +46,24 @@ export default function Phase4BMatchVote({ match }) {
     return () => clearInterval(timer);
   }, [load]);
 
-  const vote = async (pick) => {
-    if (!pollMatchId || state.loading || state.data?.locked || isLocallyLocked(match)) return;
+  const vote = async (selection) => {
+    if (!matchId || state.loading || state.data?.votingOpen === false) return;
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const data = await voteMatchPoll(pollMatchId, pick);
+      const data = await saveMatchVote(matchId, selection);
       setState({ loading: false, data, error: "" });
     } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: error?.message || "Sign in to vote." }));
+      setState((current) => ({ ...current, loading: false, error: error?.message || "Sign in with your MST account to vote." }));
     }
   };
 
   const data = state.data || {};
-  const locked = Boolean(data.locked || isLocallyLocked(match));
-  const total = Number(data.total || 0);
-  const choices = [
-    ["home", "HOME", Number(data.percentages?.home || 0)],
-    ["draw", "DRAW", Number(data.percentages?.draw || 0)],
-    ["away", "AWAY", Number(data.percentages?.away || 0)],
-  ];
+  const locked = data.votingOpen === false;
+  const total = Number(data.totalVotes || 0);
+  const choices = useMemo(() => ["HOME", "DRAW", "AWAY"].map((pick) => {
+    const count = Number(data.choices?.[pick] || 0);
+    return [pick, count, total > 0 ? (100 * count) / total : 0];
+  }), [data.choices, total]);
 
   return (
     <View style={s.card}>
@@ -97,12 +81,12 @@ export default function Phase4BMatchVote({ match }) {
 
       {state.loading && !state.data ? <ActivityIndicator color={C.red} style={s.loader} /> : (
         <View style={s.choices}>
-          {choices.map(([pick, role, percentage]) => {
-            const selected = data.myPick === pick;
+          {choices.map(([pick, count, percentage]) => {
+            const selected = data.selection === pick;
             return (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Vote ${role}`}
+                accessibilityLabel={`Vote ${pick}`}
                 disabled={locked || state.loading}
                 key={pick}
                 onPress={() => vote(pick)}
@@ -110,14 +94,14 @@ export default function Phase4BMatchVote({ match }) {
               >
                 <Text numberOfLines={1} style={s.team}>{teamName(match, pick)}</Text>
                 <Text style={s.percentage}>{Math.round(percentage)}%</Text>
-                <Text style={s.role}>{selected ? "VOTED" : role}</Text>
+                <Text style={s.role}>{selected ? "VOTED" : `${pick} · ${count}`}</Text>
               </Pressable>
             );
           })}
         </View>
       )}
 
-      <Text style={s.boundary}>Match Vote is HOME / DRAW / AWAY only. Exact-score prediction is not available in MST Scores.</Text>
+      <Text style={s.boundary}>Match Vote is HOME / DRAW / AWAY engagement state from the shared MST backend. Exact-score prediction is not available in MST Scores.</Text>
       {state.error ? <Text style={s.error}>{state.error}</Text> : null}
     </View>
   );
