@@ -1,5 +1,5 @@
 const SCORES = "https://scores-api-staging.myanmarsportstalk.com";
-const APP = "https://app-api.myanmarsportstalk.com";
+const APP = "https://app-api.myanmarsportstalk.com/api";
 
 async function json(url) {
   const response = await fetch(url, { headers: { Accept: "application/json", "x-mst-client": "sep2-release-smoke" } });
