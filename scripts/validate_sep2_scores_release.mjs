@@ -6,6 +6,7 @@ const app = read("App.js");
 const eas = JSON.parse(read("eas.json"));
 const expo = JSON.parse(read("app.json")).expo;
 const phase = read("src/phase4b/Phase4BScoresInternalAlpha.js");
+const news = read("src/phase4b/Phase4BNewsPanel.js");
 const vote = read("src/phase4b/Phase4BMatchVote.js");
 const insights = read("src/phase4b/Phase4BMatchInsights.js");
 const hub = read("src/phase4b/Phase4BReadOnlyHub.js");
@@ -19,11 +20,17 @@ assert.match(app, /Phase4BScoresInternalAlpha/);
 assert.doesNotMatch(app, /AppFinalShell/);
 assert.equal(eas?.build?.production?.autoIncrement, true);
 assert.equal(eas?.build?.production?.env?.EXPO_PUBLIC_MST_ENVIRONMENT, "production");
+assert.equal(
+  eas?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN,
+  "https://scores-api.myanmarsportstalk.com",
+  "production EAS profile must bind the verified MST-owned Scores API origin",
+);
 assert.equal(expo?.ios?.bundleIdentifier, "com.myanmarsportstalk.mst");
 assert.equal(expo?.android?.package, "com.myanmarsportstalk.mst");
 assert.ok(String(expo?.extra?.eas?.projectId || "").trim(), "EAS projectId must exist");
 
 for (const marker of [
+  "Phase4BNewsPanel",
   "Phase4BMatchVote",
   "Phase4BMatchInsights",
   "Phase4BReadOnlyHub",
@@ -32,7 +39,22 @@ for (const marker of [
   "Phase4BSearchPanel",
 ]) assert.match(phase, new RegExp(marker));
 
-// Match Vote now uses the canonical Scores Product API/BFF and the canonical
+assert.match(phase, /EXPO_PUBLIC_MST_ENVIRONMENT !== "production" \? <EnvironmentBanner \/> : null/);
+for (const forbiddenPublicCopy of [
+  "Phase 4B staging build",
+  "Real staging matches",
+  "No staging matches",
+  "staging record",
+  "staging field",
+  "staging deep-link contract",
+]) assert.doesNotMatch(phase, new RegExp(forbiddenPublicCopy, "i"), `Public Scores source still contains release-placeholder copy: ${forbiddenPublicCopy}`);
+
+assert.match(news, /fetchArticles/);
+assert.match(news, /formatContentDate/);
+assert.match(news, /READ ON MST/);
+assert.doesNotMatch(news, /DEMO_NEWS|placeholder stor/i);
+
+// Match Vote uses the canonical Scores Product API/BFF and the canonical
 // match.id directly. Provider-ID adaptation belongs behind the shared platform
 // boundary, not in the mobile client.
 assert.match(vote, /loadMatchVote\(matchId\)/);
@@ -65,7 +87,7 @@ assert.match(notifications, /markAllNotificationsRead/);
 assert.match(notifications, /registerDeviceForPush/);
 assert.match(search, /searchFootballEntities/);
 
-const phaseSources = [phase, vote, insights, hub, favorites, notifications, search].join("\n");
+const phaseSources = [phase, news, vote, insights, hub, favorites, notifications, search].join("\n");
 for (const forbidden of [
   /savePredictionScore\s*\(/,
   /savePrediction\s*\(/,
@@ -91,7 +113,7 @@ const warnings = [];
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
 
-console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; canonical shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
+console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, canonical Scores origin, real MST News, shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
 if (blockers.length) {
   console.log("Release configuration blockers:");
   for (const blocker of blockers) console.log(`- ${blocker}`);
