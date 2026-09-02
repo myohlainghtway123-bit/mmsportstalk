@@ -404,22 +404,10 @@ function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
 
 function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
   return (
-    <ShellScreen title="Tips" eyebrow="READ ONLY IN MST SCORES" active="tips" onSelect={onSelect}>
-      <View style={s.safetyBanner}><Ionicons name="shield-checkmark-outline" size={20} color={T.color.green} /><View style={s.dependencyCopy}><Text style={s.safetyTitle}>No prediction writes</Text><Text style={s.safetyText}>MST Scores can consume authorized predictions and tips, but cannot create, edit, or submit them.</Text></View></View>
-      {featuredMatch ? (
-        <View style={s.featuredPrediction}>
-          <Text style={s.sectionEyebrow}>MST PREDICTION UNLOCK</Text>
-          <Text style={s.featuredPredictionTitle}>{featuredMatch.home_team_name} vs {featuredMatch.away_team_name}</Text>
-          <Text style={s.dependencyText}>Real match · prediction remains read-only in MST Scores.</Text>
-          <View style={s.actionRow}>
-            <View style={s.disabledAction}><Ionicons name="play-circle-outline" size={18} color={T.color.muted} /><Text style={s.disabledActionText}>Watch Video unavailable</Text></View>
-            <Pressable style={s.outlineAction} onPress={() => onOpenMatch(featuredMatch)}><Text style={s.outlineActionText}>View match</Text></Pressable>
-          </View>
-        </View>
-      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real match is available for a read-only preview." />}
+    <ShellScreen title="Tips" eyebrow="TIPS · ENTITLEMENTS · LEADERBOARDS" active="tips" onSelect={onSelect}>
+      <View style={s.safetyBanner}><Ionicons name="shield-checkmark-outline" size={20} color={T.color.green} /><View style={s.dependencyCopy}><Text style={s.safetyTitle}>No prediction writes</Text><Text style={s.safetyText}>MST Scores can show the read-only Prediction leaderboard and MST Tips, but exact-score prediction creation, editing and submission stay in MST Prediction.</Text></View></View>
       <Phase4BReadOnlyHub />
       {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}
-      <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>
     </ShellScreen>
   );
 }
@@ -504,9 +492,8 @@ function MatchCenter({ selectedMatch, onBack }) {
                 <View style={s.infoCell}><Text style={s.infoLabel}>FRESHNESS</Text><Text style={s.infoValue}>{String(match?.freshness_state || "unknown").toUpperCase()}</Text></View>
               </View>
             </View>
-            <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>Prediction / Tip preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
+            <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>MST Tip Preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
             {state.data?.tipsError ? <View style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{state.data.tipsError}</Text></View> : state.data?.tips?.length ? state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />) : <View style={s.stateCard}><Ionicons name="shield-checkmark-outline" size={26} color={T.color.muted} /><Text style={s.stateTitle}>No permitted tips for this match</Text><Text style={s.stateText}>The real tips response is empty. No selection was invented.</Text></View>}
-            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video unlock is not connected yet. No fake unlock is possible." action="DISABLED" />
             <RequestId label="match" value={state.data?.requestIds?.match} />
             <RequestId label="tips" value={state.data?.requestIds?.tips} />
           </>
