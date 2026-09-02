@@ -35,9 +35,10 @@ for (const marker of [
   "Phase4BSearchPanel",
 ]) assert.match(phase, new RegExp(marker));
 
+assert.match(phase, /label: "Tips \+ Prediction"/);
+assert.match(phase, /title="Tips \+ Prediction"/);
 assert.match(phase, /EXPO_PUBLIC_MST_ENVIRONMENT !== "production" \? <EnvironmentBanner \/> : null/);
 for (const forbiddenPublicCopy of [
-  "Tips + Prediction",
   "Phase 4B staging build",
   "Real staging matches",
   "No staging matches",
@@ -50,7 +51,10 @@ for (const forbiddenPublicCopy of [
   "Product shell",
   "Become a Tipster",
   "Internal tester",
-]) assert.doesNotMatch(phase, new RegExp(forbiddenPublicCopy, "i"), `Public Scores source still contains release-placeholder or boundary copy: ${forbiddenPublicCopy}`);
+  "Watch Video unavailable",
+  "Watch Video to unlock MST prediction",
+  "Rewarded-video unlock is not connected",
+]) assert.doesNotMatch(phase, new RegExp(forbiddenPublicCopy, "i"), `Public Scores source still contains release-placeholder or fake-unlock copy: ${forbiddenPublicCopy}`);
 
 assert.match(news, /fetchArticles/);
 assert.match(news, /formatContentDate/);
@@ -81,6 +85,7 @@ for (const marker of [
   "loadUserLeaderboard",
 ]) assert.match(hub, new RegExp(marker));
 assert.match(hub, /BUY TIP/);
+assert.match(hub, /User Prediction Leaderboard/);
 assert.match(scoresApi, /\/v1\/purchases\/tips\/\$\{encodeURIComponent\(canonicalTipId\)\}/);
 assert.match(scoresApi, /Price, currency, ownership, payment state and entitlement are server-owned/);
 
@@ -123,17 +128,16 @@ if (!/react-native-google-mobile-ads/.test(appConfig)) blockers.push("AdMob Expo
 for (const [key, label] of [
   ["MST_ADMOB_ANDROID_APP_ID", "Android AdMob App ID"],
   ["MST_ADMOB_IOS_APP_ID", "iOS AdMob App ID"],
-  ["EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID", "Android rewarded AdMob unit ID"],
-  ["EXPO_PUBLIC_MST_ADMOB_IOS_REWARDED_UNIT_ID", "iOS rewarded AdMob unit ID"],
 ]) {
   if (!String(productionEnv[key] || "").trim()) blockers.push(`${label} is not configured`);
 }
 
 const warnings = [];
+warnings.push("Rewarded-video official Prediction unlock stays disabled until a real ad + entitlement path is connected; rewarded ad unit IDs are therefore not a current Scores release requirement.");
 if (!String(productionEnv.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
 if (!String(productionEnv.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
 
-console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, fail-closed Scores origin handling, cleaned public release surface, real MST News, shared-auth/Match Vote/tips/tip-purchase/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
+console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; locked Tips + Prediction consume/read surface is preserved; production/staging UI separation, fail-closed Scores origin handling, real MST News, shared-auth/Match Vote/tips/tip-purchase/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; fake rewarded unlocks and exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
 if (blockers.length) {
   console.log("Release configuration blockers:");
   for (const blocker of blockers) console.log(`- ${blocker}`);
