@@ -419,27 +419,17 @@ function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
       ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real match is available for a read-only preview." />}
       <Phase4BReadOnlyHub />
       {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}
-      <DependencyCard icon="ribbon-outline" title="Become a Tipster" text="Final path starts in MST Prediction, continues to the MST website, and is reviewed in Web Admin." action="LINK UNAVAILABLE" />
       <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>
     </ShellScreen>
   );
 }
 
 function MoreScreen({ onSelect }) {
-  const rows = [
-    ["language-outline", "Language", "Burmese / English"],
-    ["moon-outline", "Appearance", "Dark / light / system"],
-    ["card-outline", "Payments & cards", "Not connected"],
-    ["document-text-outline", "Terms, Privacy & Policies", "Final content pending"],
-    ["information-circle-outline", "About MST", "Product shell"],
-    ["help-circle-outline", "Support / Help", "Integration pending"],
-  ];
   return (
-    <ShellScreen title="More" eyebrow="SETTINGS · SUPPORT" active="more" onSelect={onSelect}>
+    <ShellScreen title="More" eyebrow="SEARCH · NOTIFICATIONS" active="more" onSelect={onSelect}>
       <Phase4BSearchPanel />
       <Phase4BNotificationsPanel />
       <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>
-      <View style={s.menuCard}>{rows.map(([icon, title, detail]) => <View key={title} style={s.menuRow}><Ionicons name={icon} size={19} color={T.color.secondary} /><Text style={s.menuTitle}>{title}</Text><Text style={s.menuDetail}>{detail}</Text><Ionicons name="chevron-forward" size={16} color={T.color.muted} /></View>)}</View>
     </ShellScreen>
   );
 }
