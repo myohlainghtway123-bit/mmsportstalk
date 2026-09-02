@@ -33,15 +33,15 @@ jobs:
         run: node scripts/test_phase4b_scores_api.mjs
       - name: Product separation regression
         run: node scripts/validate-product-separation.js
-      - name: Current Scores strict release source contract
-        run: node scripts/validate_sep2_scores_release.mjs --strict-release
-      - name: Android production JS export
+      - name: Current Scores source contract
+        run: node scripts/validate_sep2_scores_release.mjs
+      - name: Android production-mode JS export
         env:
           EXPO_PUBLIC_MST_ENVIRONMENT: production
-          EXPO_PUBLIC_MST_SCORES_API_ORIGIN: https://scores-api.myanmarsportstalk.com
         run: npx expo export --platform android --output-dir dist-release-android --clear && node scripts/validate_phase4b_bundle.js dist-release-android default
-      - name: iOS production JS export
+      - name: iOS production-mode JS export
         env:
           EXPO_PUBLIC_MST_ENVIRONMENT: production
-          EXPO_PUBLIC_MST_SCORES_API_ORIGIN: https://scores-api.myanmarsportstalk.com
         run: npx expo export --platform ios --output-dir dist-release-ios --clear && node scripts/validate_phase4b_bundle.js dist-release-ios default
+      - name: Strict launch gate
+        run: node scripts/validate_sep2_scores_release.mjs --strict-release
