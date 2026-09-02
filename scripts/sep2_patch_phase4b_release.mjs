@@ -4,9 +4,12 @@ const path = "src/phase4b/Phase4BScoresInternalAlpha.js";
 let source = fs.readFileSync(path, "utf8");
 
 function replaceOnce(from, to, label) {
-  if (source.includes(to)) return;
+  if (to && source.includes(to)) return;
   const index = source.indexOf(from);
-  if (index === -1) throw new Error(`Patch anchor missing: ${label}`);
+  if (index === -1) {
+    if (!to) return;
+    throw new Error(`Patch anchor missing: ${label}`);
+  }
   source = source.slice(0, index) + to + source.slice(index + from.length);
 }
 
@@ -41,31 +44,26 @@ replaceOnce(
   '            <Phase4BMatchFavorites match={match} />\n            <Phase4BMatchVote match={match} />',
   "Match Center favorite controls",
 );
-
 replaceOnce(
   '      <DependencyCard icon="heart-outline" title="Favorite teams and competitions" text="Account-backed favorites are not connected to this current Scores screen yet. Nothing has been fabricated or persisted." action="NOT CONNECTED" />',
   '      <Phase4BFavoritesPanel />',
   "Favorites screen integration",
 );
-
 replaceOnce(
   '      <DependencyCard icon="cart-outline" title="Buy Tipster Tip" text="Purchase and entitlement services are not connected. No fake purchase or paid-tip access is offered." action="DISABLED" />\n      <View style={s.twoColumns}>\n        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Tipster Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>\n        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Prediction Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>\n      </View>\n      <DependencyCard icon="open-outline" title="Open MST Prediction App" text="The staging deep-link contract is not configured. Prediction creation stays in MST Prediction." action="LINK UNAVAILABLE" />',
   '      <Phase4BReadOnlyHub />\n      {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}',
   "Tips, purchased tips, leaderboards and Prediction app handoff",
 );
-
 replaceOnce(
   'function NewsScreen({ onSelect }) {\n  return (\n    <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>\n      <View style={s.placeholderHero}><Ionicons name="newspaper-outline" size={34} color={T.color.red} /><Text style={s.placeholderTitle}>News structure confirmed</Text><Text style={s.placeholderText}>The authorized editorial feed is not connected to this Phase 4B staging build. No fake articles are shown.</Text></View>\n      <DependencyCard icon="server-outline" title="Latest football news" text="Waiting for the authorized MST web/editorial product API." action="UNAVAILABLE" />\n      <DependencyCard icon="bookmark-outline" title="Saved stories" text="Persistence is intentionally deferred; this shell does not pretend stories are saved." action="PHASE 13" />\n    </ShellScreen>\n  );\n}',
   'function NewsScreen({ onSelect }) {\n  return (\n    <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>\n      <Phase4BNewsPanel />\n    </ShellScreen>\n  );\n}',
   "real MST News feed",
 );
-
 replaceOnce(
   '            <DependencyCard icon="open-outline" title="Open MST Prediction App" text="Staging deep-link contract is not configured. MST Scores cannot submit predictions." action="LINK UNAVAILABLE" />\n',
   '',
   "duplicate Match Center Prediction app placeholder",
 );
-
 replaceOnce(
   '    ["notifications-outline", "Notifications", "Not connected"],\n',
   '',
@@ -76,7 +74,6 @@ replaceOnce(
   '      <Phase4BSearchPanel />\n      <Phase4BNotificationsPanel />\n      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>\n      <View style={s.menuCard}>',
   "More search notifications integration",
 );
-
 replaceOnce(
   '      <EnvironmentBanner />',
   '      {process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "production" ? <EnvironmentBanner /> : null}',
@@ -103,7 +100,6 @@ const replacements = new Map([
   ["Burmese / English · Phase 13", "Burmese / English"],
   ["Dark / light / system · Phase 13", "Dark / light / system"],
 ]);
-
 for (const [from, to] of replacements) source = source.split(from).join(to);
 
 for (const marker of [
@@ -123,6 +119,12 @@ for (const marker of [
   '<Phase4BSearchPanel />',
 ]) {
   if (!source.includes(marker)) throw new Error(`Release integration missing: ${marker}`);
+}
+for (const forbidden of [
+  "staging deep-link contract",
+  '["notifications-outline", "Notifications", "Not connected"]',
+]) {
+  if (source.includes(forbidden)) throw new Error(`Release cleanup failed: ${forbidden}`);
 }
 if (source.includes('require("./src/AppFinalShell")')) throw new Error("Old AppFinalShell reference unexpectedly found in Phase 4B source");
 
