@@ -25,6 +25,11 @@ replaceOnce(
   'import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";\nimport Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";\nimport Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";\nimport Phase4BSearchPanel from "./Phase4BSearchPanel";\n',
   "favorites notifications search imports",
 );
+replaceOnce(
+  'import Phase4BSearchPanel from "./Phase4BSearchPanel";\n',
+  'import Phase4BSearchPanel from "./Phase4BSearchPanel";\nimport Phase4BNewsPanel from "./Phase4BNewsPanel";\n',
+  "news panel import",
+);
 
 replaceOnce(
   '<View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real staging response</Text></View>',
@@ -47,6 +52,12 @@ replaceOnce(
   '      <DependencyCard icon="cart-outline" title="Buy Tipster Tip" text="Purchase and entitlement services are not connected. No fake purchase or paid-tip access is offered." action="DISABLED" />\n      <View style={s.twoColumns}>\n        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Tipster Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>\n        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Prediction Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>\n      </View>\n      <DependencyCard icon="open-outline" title="Open MST Prediction App" text="The staging deep-link contract is not configured. Prediction creation stays in MST Prediction." action="LINK UNAVAILABLE" />',
   '      <Phase4BReadOnlyHub />\n      {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}',
   "Tips, purchased tips, leaderboards and Prediction app handoff",
+);
+
+replaceOnce(
+  'function NewsScreen({ onSelect }) {\n  return (\n    <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>\n      <View style={s.placeholderHero}><Ionicons name="newspaper-outline" size={34} color={T.color.red} /><Text style={s.placeholderTitle}>News structure confirmed</Text><Text style={s.placeholderText}>The authorized editorial feed is not connected to this Phase 4B staging build. No fake articles are shown.</Text></View>\n      <DependencyCard icon="server-outline" title="Latest football news" text="Waiting for the authorized MST web/editorial product API." action="UNAVAILABLE" />\n      <DependencyCard icon="bookmark-outline" title="Saved stories" text="Persistence is intentionally deferred; this shell does not pretend stories are saved." action="PHASE 13" />\n    </ShellScreen>\n  );\n}',
+  'function NewsScreen({ onSelect }) {\n  return (\n    <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>\n      <Phase4BNewsPanel />\n    </ShellScreen>\n  );\n}',
+  "real MST News feed",
 );
 
 replaceOnce(
@@ -86,6 +97,11 @@ const replacements = new Map([
   ["The current staging Match detail response does not provide", "The current Match detail response does not provide"],
   ["The real staging tips response is empty. No selection was invented.", "The real tips response is empty. No selection was invented."],
   ["Could not load staging matches.", "Could not load matches."],
+  ["staging record", "record"],
+  ["staging field", "field"],
+  ["Rewarded-video service is not connected in Phase 4B. No fake unlock is possible.", "Rewarded-video unlock is not connected yet. No fake unlock is possible."],
+  ["Burmese / English · Phase 13", "Burmese / English"],
+  ["Dark / light / system · Phase 13", "Dark / light / system"],
 ]);
 
 for (const [from, to] of replacements) source = source.split(from).join(to);
@@ -96,6 +112,8 @@ for (const marker of [
   'import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";',
   'import Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";',
   'import Phase4BSearchPanel from "./Phase4BSearchPanel";',
+  'import Phase4BNewsPanel from "./Phase4BNewsPanel";',
+  '<Phase4BNewsPanel />',
   '<Phase4BMatchVote match={match} />',
   '<Phase4BMatchFavorites match={match} />',
   '<Phase4BMatchInsights match={match} />',
