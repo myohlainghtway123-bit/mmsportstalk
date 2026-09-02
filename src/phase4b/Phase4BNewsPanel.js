@@ -98,7 +98,7 @@ export default function Phase4BNewsPanel() {
         <View style={s.stateCard}>
           <Ionicons name="newspaper-outline" size={26} color={C.muted} />
           <Text style={s.stateTitle}>No published articles</Text>
-          <Text style={s.stateText}>The MST content API returned no articles. No placeholder stories are shown.</Text>
+          <Text style={s.stateText}>The MST content API returned no articles. No fabricated stories are shown.</Text>
         </View>
       ) : state.articles.map((article) => <ArticleCard key={article.id || article.slug} article={article} />)}
     </View>
