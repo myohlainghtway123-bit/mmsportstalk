@@ -5,6 +5,7 @@ const read = (path) => fs.readFileSync(path, "utf8");
 const app = read("App.js");
 const eas = JSON.parse(read("eas.json"));
 const expo = JSON.parse(read("app.json")).expo;
+const appConfig = fs.existsSync("app.config.js") ? read("app.config.js") : "";
 const phase = read("src/phase4b/Phase4BScoresInternalAlpha.js");
 const news = read("src/phase4b/Phase4BNewsPanel.js");
 const vote = read("src/phase4b/Phase4BMatchVote.js");
@@ -101,21 +102,31 @@ assert.match(scoresApi, /\/v1\/auth\/login/);
 assert.match(scoresApi, /\/v1\/auth\/logout/);
 assert.match(scoresApi, /Authorization:\s*`Bearer/);
 
+const productionEnv = eas?.build?.production?.env || {};
 const dependencies = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 const admobPackages = Object.keys(dependencies).filter((name) => /google-mobile-ads|admob/i.test(name));
 const blockers = [];
-const productionOrigin = String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim();
+const productionOrigin = String(productionEnv.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim();
 if (!productionOrigin) {
   blockers.push("production Scores API origin is not verified/configured");
 } else {
   assert.match(productionOrigin, /^https:\/\//, "production Scores API origin must use HTTPS");
   assert.doesNotMatch(productionOrigin, /staging/i, "production Scores API origin must not be a staging endpoint");
 }
-if (!admobPackages.length) blockers.push("AdMob SDK/package is not configured");
+if (!admobPackages.length) blockers.push("AdMob SDK/package is not installed");
+if (!/react-native-google-mobile-ads/.test(appConfig)) blockers.push("AdMob Expo native config plugin is not configured");
+for (const [key, label] of [
+  ["MST_ADMOB_ANDROID_APP_ID", "Android AdMob App ID"],
+  ["MST_ADMOB_IOS_APP_ID", "iOS AdMob App ID"],
+  ["EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID", "Android rewarded AdMob unit ID"],
+  ["EXPO_PUBLIC_MST_ADMOB_IOS_REWARDED_UNIT_ID", "iOS rewarded AdMob unit ID"],
+]) {
+  if (!String(productionEnv[key] || "").trim()) blockers.push(`${label} is not configured`);
+}
 
 const warnings = [];
-if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
-if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
+if (!String(productionEnv.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
+if (!String(productionEnv.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
 
 console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, fail-closed Scores origin handling, cleaned public release surface, real MST News, shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
 if (blockers.length) {
