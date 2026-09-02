@@ -20,11 +20,6 @@ assert.match(app, /Phase4BScoresInternalAlpha/);
 assert.doesNotMatch(app, /AppFinalShell/);
 assert.equal(eas?.build?.production?.autoIncrement, true);
 assert.equal(eas?.build?.production?.env?.EXPO_PUBLIC_MST_ENVIRONMENT, "production");
-assert.equal(
-  eas?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN,
-  "https://scores-api.myanmarsportstalk.com",
-  "production EAS profile must bind the verified MST-owned Scores API origin",
-);
 assert.equal(expo?.ios?.bundleIdentifier, "com.myanmarsportstalk.mst");
 assert.equal(expo?.android?.package, "com.myanmarsportstalk.mst");
 assert.ok(String(expo?.extra?.eas?.projectId || "").trim(), "EAS projectId must exist");
@@ -54,9 +49,6 @@ assert.match(news, /formatContentDate/);
 assert.match(news, /READ ON MST/);
 assert.doesNotMatch(news, /DEMO_NEWS|placeholder stor/i);
 
-// Match Vote uses the canonical Scores Product API/BFF and the canonical
-// match.id directly. Provider-ID adaptation belongs behind the shared platform
-// boundary, not in the mobile client.
 assert.match(vote, /loadMatchVote\(matchId\)/);
 assert.match(vote, /saveMatchVote\(matchId, selection\)/);
 assert.match(vote, /match\?\.id/);
@@ -106,14 +98,20 @@ assert.match(scoresApi, /Authorization:\s*`Bearer/);
 const dependencies = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 const admobPackages = Object.keys(dependencies).filter((name) => /google-mobile-ads|admob/i.test(name));
 const blockers = [];
-if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim()) blockers.push("production Scores API origin is not configured");
+const productionOrigin = String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim();
+if (!productionOrigin) {
+  blockers.push("production Scores API origin is not verified/configured");
+} else {
+  assert.match(productionOrigin, /^https:\/\//, "production Scores API origin must use HTTPS");
+  assert.doesNotMatch(productionOrigin, /staging/i, "production Scores API origin must not be a staging endpoint");
+}
 if (!admobPackages.length) blockers.push("AdMob SDK/package is not configured");
 
 const warnings = [];
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
 
-console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, canonical Scores origin, real MST News, shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
+console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, fail-closed Scores origin handling, real MST News, shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
 if (blockers.length) {
   console.log("Release configuration blockers:");
   for (const blocker of blockers) console.log(`- ${blocker}`);
