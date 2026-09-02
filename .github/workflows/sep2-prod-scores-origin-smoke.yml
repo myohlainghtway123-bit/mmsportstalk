@@ -6,6 +6,9 @@ on:
       - chatgpt/sep2-expo-auth-smoke-2026-09-02
     paths:
       - .github/workflows/sep2-prod-scores-origin-smoke.yml
+      - eas.json
+      - src/phase4b/scoresStagingApi.js
+  workflow_dispatch:
 
 permissions:
   contents: read
