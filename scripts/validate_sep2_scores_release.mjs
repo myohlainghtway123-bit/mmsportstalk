@@ -37,6 +37,7 @@ for (const marker of [
 
 assert.match(phase, /EXPO_PUBLIC_MST_ENVIRONMENT !== "production" \? <EnvironmentBanner \/> : null/);
 for (const forbiddenPublicCopy of [
+  "Tips + Prediction",
   "Phase 4B staging build",
   "Real staging matches",
   "No staging matches",
@@ -49,7 +50,7 @@ for (const forbiddenPublicCopy of [
   "Product shell",
   "Become a Tipster",
   "Internal tester",
-]) assert.doesNotMatch(phase, new RegExp(forbiddenPublicCopy, "i"), `Public Scores source still contains release-placeholder copy: ${forbiddenPublicCopy}`);
+]) assert.doesNotMatch(phase, new RegExp(forbiddenPublicCopy, "i"), `Public Scores source still contains release-placeholder or boundary copy: ${forbiddenPublicCopy}`);
 
 assert.match(news, /fetchArticles/);
 assert.match(news, /formatContentDate/);
