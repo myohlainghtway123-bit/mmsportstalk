@@ -22,6 +22,7 @@ import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";
 import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";
 import Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";
 import Phase4BSearchPanel from "./Phase4BSearchPanel";
+import Phase4BNewsPanel from "./Phase4BNewsPanel";
 
 const T = Object.freeze({
   color: {
@@ -152,8 +153,8 @@ function firstSectionValue(match, keys) {
 }
 
 function sectionSummary(value) {
-  if (Array.isArray(value)) return `${value.length} staging record${value.length === 1 ? "" : "s"} available.`;
-  if (value && typeof value === "object") return `${Object.keys(value).length} staging field${Object.keys(value).length === 1 ? "" : "s"} available.`;
+  if (Array.isArray(value)) return `${value.length} record${value.length === 1 ? "" : "s"} available.`;
+  if (value && typeof value === "object") return `${Object.keys(value).length} field${Object.keys(value).length === 1 ? "" : "s"} available.`;
   return value == null ? "" : String(value);
 }
 
@@ -384,9 +385,7 @@ function ShellScreen({ title, eyebrow, active, onSelect, children }) {
 function NewsScreen({ onSelect }) {
   return (
     <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>
-      <View style={s.placeholderHero}><Ionicons name="newspaper-outline" size={34} color={T.color.red} /><Text style={s.placeholderTitle}>News structure confirmed</Text><Text style={s.placeholderText}>The authorized editorial feed is not connected to this Phase 4B staging build. No fake articles are shown.</Text></View>
-      <DependencyCard icon="server-outline" title="Latest football news" text="Waiting for the authorized MST web/editorial product API." action="UNAVAILABLE" />
-      <DependencyCard icon="bookmark-outline" title="Saved stories" text="Persistence is intentionally deferred; this shell does not pretend stories are saved." action="PHASE 13" />
+      <Phase4BNewsPanel />
     </ShellScreen>
   );
 }
@@ -428,8 +427,8 @@ function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
 
 function MoreScreen({ onSelect }) {
   const rows = [
-    ["language-outline", "Language", "Burmese / English · Phase 13"],
-    ["moon-outline", "Appearance", "Dark / light / system · Phase 13"],
+    ["language-outline", "Language", "Burmese / English"],
+    ["moon-outline", "Appearance", "Dark / light / system"],
     ["notifications-outline", "Notifications", "Not connected"],
     ["card-outline", "Payments & cards", "Not connected"],
     ["document-text-outline", "Terms, Privacy & Policies", "Final content pending"],
@@ -518,7 +517,7 @@ function MatchCenter({ selectedMatch, onBack }) {
             </View>
             <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>Prediction / Tip preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
             {state.data?.tipsError ? <View style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{state.data.tipsError}</Text></View> : state.data?.tips?.length ? state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />) : <View style={s.stateCard}><Ionicons name="shield-checkmark-outline" size={26} color={T.color.muted} /><Text style={s.stateTitle}>No permitted tips for this match</Text><Text style={s.stateText}>The real tips response is empty. No selection was invented.</Text></View>}
-            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video service is not connected in Phase 4B. No fake unlock is possible." action="DISABLED" />
+            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video unlock is not connected yet. No fake unlock is possible." action="DISABLED" />
             <DependencyCard icon="open-outline" title="Open MST Prediction App" text="Staging deep-link contract is not configured. MST Scores cannot submit predictions." action="LINK UNAVAILABLE" />
             <RequestId label="match" value={state.data?.requestIds?.match} />
             <RequestId label="tips" value={state.data?.requestIds?.tips} />
