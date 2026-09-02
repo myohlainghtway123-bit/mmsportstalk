@@ -13,6 +13,14 @@ function replaceOnce(from, to, label) {
   source = source.slice(0, index) + to + source.slice(index + from.length);
 }
 
+function removeBlock(start, end, label) {
+  const startIndex = source.indexOf(start);
+  if (startIndex === -1) return;
+  const endIndex = source.indexOf(end, startIndex);
+  if (endIndex === -1) throw new Error(`Patch end anchor missing: ${label}`);
+  source = source.slice(0, startIndex) + source.slice(endIndex + end.length);
+}
+
 replaceOnce(
   '} from "./scoresStagingApi";\n',
   '} from "./scoresStagingApi";\nimport Phase4BMatchVote from "./Phase4BMatchVote";\nimport Phase4BMatchInsights from "./Phase4BMatchInsights";\n',
@@ -65,6 +73,11 @@ replaceOnce(
   "duplicate Match Center Prediction app placeholder",
 );
 replaceOnce(
+  '            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video unlock is not connected yet. No fake unlock is possible." action="DISABLED" />\n',
+  '',
+  "legacy rewarded Prediction unlock",
+);
+replaceOnce(
   '    ["notifications-outline", "Notifications", "Not connected"],\n',
   '',
   "obsolete notifications placeholder",
@@ -85,8 +98,22 @@ replaceOnce(
   "production environment banner",
 );
 
+removeBlock(
+  '      {featuredMatch ? (\n        <View style={s.featuredPrediction}>',
+  '      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real match is available for a read-only preview." />}\n',
+  "legacy featured Prediction unlock block",
+);
+replaceOnce(
+  '      <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>\n',
+  '',
+  "legacy Prediction scoring card",
+);
+
 const replacements = new Map([
   ["Tips + Prediction", "Tips"],
+  ["Prediction / Tip preview", "MST Tip Preview"],
+  ["READ ONLY IN MST SCORES", "TIPS · ENTITLEMENTS · LEADERBOARDS"],
+  ["MST Scores can consume authorized predictions and tips, but cannot create, edit, or submit them.", "MST Scores can show the read-only Prediction leaderboard and MST Tips, but exact-score prediction creation, editing and submission stay in MST Prediction."],
   ["Loading staging data…", "Loading match data…"],
   ["Staging dependency unavailable", "Scores service unavailable"],
   ["The request stops after 8 seconds if staging does not respond.", "The request stops after 8 seconds if the Scores service does not respond."],
@@ -95,14 +122,12 @@ const replacements = new Map([
   ["Account-backed favorites are not available from the current staging Scores API. Nothing has been fabricated or persisted.", "Account-backed favorites are connected through the existing MST account service."],
   ["Real staging matches", "Real matches"],
   ["No staging matches", "No matches"],
-  ["Real staging match · prediction remains locked until an authorized rewarded-video service exists.", "Real match · prediction remains read-only in MST Scores."],
   ["No real staging match is available for a read-only preview.", "No real match is available for a read-only preview."],
   ["The current staging Match detail response does not provide", "The current Match detail response does not provide"],
   ["The real staging tips response is empty. No selection was invented.", "The real tips response is empty. No selection was invented."],
   ["Could not load staging matches.", "Could not load matches."],
   ["staging record", "record"],
   ["staging field", "field"],
-  ["Rewarded-video service is not connected in Phase 4B. No fake unlock is possible.", "Rewarded-video unlock is not connected yet. No fake unlock is possible."],
   ["Burmese / English · Phase 13", "Burmese / English"],
   ["Dark / light / system · Phase 13", "Dark / light / system"],
 ]);
@@ -128,6 +153,12 @@ for (const marker of [
 }
 for (const forbidden of [
   "Tips + Prediction",
+  "Prediction / Tip preview",
+  "MST PREDICTION UNLOCK",
+  "Watch Video to unlock MST prediction",
+  "Watch Video unavailable",
+  "SHARED SCORING",
+  "Rewarded-video unlock",
   "staging deep-link contract",
   '["notifications-outline", "Notifications", "Not connected"]',
   "Payments & cards",
