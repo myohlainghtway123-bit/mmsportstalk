@@ -80,11 +80,6 @@ replaceOnce(
   "remove unfinished public More controls",
 );
 replaceOnce(
-  '      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="person-outline" size={28} color={T.color.muted} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>Internal tester</Text><Text style={s.dependencyText}>Profile/account service is not connected in this Phase 4B build.</Text></View></View>\n      <View style={s.menuCard}>',
-  '      <Phase4BSearchPanel />\n      <Phase4BNotificationsPanel />\n      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>\n      <View style={s.menuCard}>',
-  "More search notifications integration",
-);
-replaceOnce(
   '      <EnvironmentBanner />',
   '      {process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "production" ? <EnvironmentBanner /> : null}',
   "production environment banner",
