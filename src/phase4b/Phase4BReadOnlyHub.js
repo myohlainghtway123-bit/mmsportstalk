@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  createTipPurchase,
   loadOwnPurchases,
   loadTipEntitlement,
   loadTips,
@@ -38,7 +39,7 @@ function meta(row) {
     row?.status ? String(row.status).toUpperCase() : null,
     row?.price_minor != null ? `${row.price_minor} ${row.currency || ""}`.trim() : null,
   ].filter(Boolean);
-  return parts.join(" · ") || "Read-only MST data";
+  return parts.join(" · ") || "MST data";
 }
 
 function DataList({ title, eyebrow, data, empty }) {
@@ -54,6 +55,38 @@ function DataList({ title, eyebrow, data, empty }) {
           {row?.selection ? <Text numberOfLines={1} style={s.selection}>{String(row.selection)}</Text> : null}
         </View>
       )) : <Text style={s.empty}>{empty}</Text>}
+    </View>
+  );
+}
+
+function TipList({ data, onPurchase, purchaseState }) {
+  const list = rows(data).slice(0, 8);
+  return (
+    <View style={s.card}>
+      <Text style={s.eyebrow}>MST TIPS</Text>
+      <Text style={s.title}>Tips</Text>
+      {list.length ? list.map((row, index) => {
+        const tipId = String(row?.id || "").trim();
+        const accessLevel = String(row?.access_level || row?.accessLevel || "").toLowerCase();
+        const paid = accessLevel === "paid";
+        const busy = paid && purchaseState.tipId === tipId && purchaseState.loading;
+        return (
+          <View key={tipId || `tip-${index}`} style={[s.row, index > 0 && s.rowBorder]}>
+            <Text style={s.rank}>{index + 1}</Text>
+            <View style={s.flex}>
+              <Text numberOfLines={1} style={s.name}>{label(row, `Tip ${index + 1}`)}</Text>
+              <Text numberOfLines={1} style={s.meta}>{meta(row)}</Text>
+            </View>
+            {row?.selection ? <Text numberOfLines={1} style={s.selection}>{String(row.selection)}</Text> : null}
+            {paid && tipId ? (
+              <Pressable disabled={busy} onPress={() => onPurchase(row)} style={[s.buyButton, busy && s.buyButtonDisabled]}>
+                {busy ? <ActivityIndicator size="small" color={C.text}/> : <Text style={s.buyText}>BUY TIP</Text>}
+              </Pressable>
+            ) : accessLevel === "free" ? <Text style={s.freeTag}>FREE</Text> : null}
+          </View>
+        );
+      }) : <Text style={s.empty}>No readable tips are available.</Text>}
+      {purchaseState.message ? <Text style={purchaseState.error ? s.purchaseError : s.purchaseSuccess}>{purchaseState.message}</Text> : null}
     </View>
   );
 }
@@ -81,7 +114,29 @@ async function entitledPurchaseRows(purchases, tips) {
 export default function Phase4BReadOnlyHub() {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState({ loading:true, tips:null, purchased:null, tipsters:null, tipsterLeaderboard:null, leaderboard:null, warnings:[] });
+  const [purchaseState, setPurchaseState] = useState({ tipId:null, loading:false, message:null, error:false });
   const retry = useCallback(() => setAttempt((v) => v + 1), []);
+
+  const buyTip = useCallback(async (tip) => {
+    const tipId = String(tip?.id || "").trim();
+    if (!tipId) return;
+    setPurchaseState({ tipId, loading:true, message:null, error:false });
+    try {
+      const result = await createTipPurchase(tipId);
+      const message = result?.entitled
+        ? "Tip access is unlocked."
+        : result?.purchaseRequired
+          ? "Purchase created. Complete payment to unlock this tip."
+          : "No purchase is required for this tip.";
+      setPurchaseState({ tipId, loading:false, message, error:false });
+      setAttempt((v) => v + 1);
+    } catch (error) {
+      const message = error?.status === 401
+        ? "Sign in to buy this tip."
+        : error?.message || "Tip purchase is unavailable. Please retry.";
+      setPurchaseState({ tipId, loading:false, message, error:true });
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -119,9 +174,9 @@ export default function Phase4BReadOnlyHub() {
   if (state.loading) return <View style={s.loading}><ActivityIndicator color={C.red}/><Text style={s.loadingText}>Loading shared MST tips and leaderboards…</Text></View>;
   return (
     <View>
-      <View style={s.boundary}><Ionicons name="shield-checkmark-outline" size={18} color={C.green}/><Text style={s.boundaryText}>Read only. This Scores surface uses the shared Scores Product API and never imports prediction submission APIs.</Text></View>
+      <View style={s.boundary}><Ionicons name="shield-checkmark-outline" size={18} color={C.green}/><Text style={s.boundaryText}>Prediction submission stays outside Scores. Tip purchases use the shared MST Commerce path; exact-score prediction writes remain unavailable here.</Text></View>
       <DataList title="Purchased / entitled tips" eyebrow="ENTITLEMENTS" data={state.purchased} empty="No paid tip entitlement is available for this signed-in account." />
-      <DataList title="Tips" eyebrow="MST TIPS" data={state.tips} empty="No readable tips are available." />
+      <TipList data={state.tips} onPurchase={buyTip} purchaseState={purchaseState} />
       <DataList title="Tipsters" eyebrow="TIPSTERS" data={state.tipsters} empty="No verified Tipsters are available." />
       <DataList title="Tipster Leaderboard" eyebrow="TIPSTER LEADERBOARD" data={state.tipsterLeaderboard} empty="No Tipster leaderboard rows are available." />
       <DataList title="User Prediction Leaderboard" eyebrow="PREDICTION · READ ONLY" data={state.leaderboard} empty="No prediction leaderboard rows are available." />
@@ -150,4 +205,10 @@ const s = StyleSheet.create({
   warning:{ color:C.amber, fontSize:8.5, lineHeight:13, marginBottom:5 },
   retry:{ alignSelf:"flex-start", minHeight:31, borderRadius:8, borderWidth:1, borderColor:C.border, backgroundColor:C.raised, paddingHorizontal:10, flexDirection:"row", alignItems:"center", gap:5 },
   retryText:{ color:C.secondary, fontSize:8.5, fontWeight:"800" },
+  buyButton:{ minHeight:30, minWidth:62, borderRadius:8, backgroundColor:C.red, paddingHorizontal:9, alignItems:"center", justifyContent:"center" },
+  buyButtonDisabled:{ opacity:.6 },
+  buyText:{ color:C.text, fontSize:7.5, fontWeight:"900", letterSpacing:.3 },
+  freeTag:{ color:C.green, fontSize:7.5, fontWeight:"900" },
+  purchaseSuccess:{ color:C.green, fontSize:8.5, lineHeight:13, marginTop:7 },
+  purchaseError:{ color:C.amber, fontSize:8.5, lineHeight:13, marginTop:7 },
 });
