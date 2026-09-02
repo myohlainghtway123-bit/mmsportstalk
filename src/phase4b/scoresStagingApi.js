@@ -211,6 +211,19 @@ export const loadTipEntitlement = async (tipId, options = {}) => (
   await scoresStagingGet(`/v1/entitlements/tips/${encodeURIComponent(String(tipId))}`, options)
 ).data;
 
+export async function createTipPurchase(tipId, options = {}) {
+  const canonicalTipId = String(tipId || "").trim();
+  if (!canonicalTipId) {
+    throw new ScoresStagingError("Tip ID is required for purchase.", { code: "TIP_ID_REQUIRED" });
+  }
+  return (await scoresProductRequest(`/v1/purchases/tips/${encodeURIComponent(canonicalTipId)}`, {
+    ...options,
+    method: "POST",
+    // Price, currency, ownership, payment state and entitlement are server-owned.
+    body: {},
+  })).data;
+}
+
 export function canonicalMatchId(match) {
   const value = String(match?.id ?? "").trim();
   return value || null;
