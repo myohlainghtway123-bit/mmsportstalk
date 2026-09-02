@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   MST_SCORES_STAGING_ORIGIN,
   canonicalMatchId,
+  createTipPurchase,
   loadMatchCenter,
   loadScoresFeed,
   loadScoresOverview,
@@ -150,6 +151,35 @@ async function testSharedSessionContract() {
   assert.equal(sessionStore.current(), null, "logout must clear the local shared session even after the API call succeeds");
 }
 
+async function testTipPurchaseContract() {
+  const sessionStore = createSessionStore("buyer-session-token");
+  const observed = [];
+  const result = await createTipPurchase("tip paid/42", {
+    sessionStore,
+    timeoutMs: 50,
+    fetchImpl: async (url, init) => {
+      observed.push({ url, init });
+      return jsonResponse({
+        purchaseRequired: true,
+        entitled: false,
+        purchase: { id: "purchase-42", tipId: "tip paid/42", status: "pending" },
+      }, { status: 201, requestId: "purchase-request" });
+    },
+  });
+
+  assert.equal(observed[0].url, `${MST_SCORES_STAGING_ORIGIN}/v1/purchases/tips/${encodeURIComponent("tip paid/42")}`);
+  assert.equal(observed[0].init.method, "POST");
+  assert.equal(observed[0].init.headers.Authorization, "Bearer buyer-session-token");
+  assert.equal(observed[0].init.body, "{}", "Scores must not send price, currency, user ownership, payment state or entitlement fields");
+  assert.equal(result.purchase.id, "purchase-42");
+  assert.equal(result.purchaseRequired, true);
+
+  await assert.rejects(
+    () => createTipPurchase("", { sessionStore, timeoutMs: 50, fetchImpl: async () => { throw new Error("must not fetch"); } }),
+    (error) => error.code === "TIP_ID_REQUIRED",
+  );
+}
+
 async function testFailClosedIdentityAndErrors() {
   const sessionStore = createSessionStore();
   assert.deepEqual(normalizeTipPreview({ access_level: "subscriber", locked: 0, selection: "DRAW" }), {
@@ -198,5 +228,6 @@ await testReadOnlyFeed();
 await testOverviewCombinesRealReadFeeds();
 await testCanonicalMatchFlow();
 await testSharedSessionContract();
+await testTipPurchaseContract();
 await testFailClosedIdentityAndErrors();
-console.log("Phase 4B Scores API tests passed: canonical reads, shared auth/session handling, request correlation, timeout handling, and locked-tip protection are enforced.");
+console.log("Phase 4B Scores API tests passed: canonical reads, shared auth/session handling, server-owned tip purchase intent, request correlation, timeout handling, and locked-tip protection are enforced.");
