@@ -429,7 +429,6 @@ function MoreScreen({ onSelect }) {
   const rows = [
     ["language-outline", "Language", "Burmese / English"],
     ["moon-outline", "Appearance", "Dark / light / system"],
-    ["notifications-outline", "Notifications", "Not connected"],
     ["card-outline", "Payments & cards", "Not connected"],
     ["document-text-outline", "Terms, Privacy & Policies", "Final content pending"],
     ["information-circle-outline", "About MST", "Product shell"],
@@ -518,7 +517,6 @@ function MatchCenter({ selectedMatch, onBack }) {
             <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>Prediction / Tip preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
             {state.data?.tipsError ? <View style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{state.data.tipsError}</Text></View> : state.data?.tips?.length ? state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />) : <View style={s.stateCard}><Ionicons name="shield-checkmark-outline" size={26} color={T.color.muted} /><Text style={s.stateTitle}>No permitted tips for this match</Text><Text style={s.stateText}>The real tips response is empty. No selection was invented.</Text></View>}
             <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video unlock is not connected yet. No fake unlock is possible." action="DISABLED" />
-            <DependencyCard icon="open-outline" title="Open MST Prediction App" text="Staging deep-link contract is not configured. MST Scores cannot submit predictions." action="LINK UNAVAILABLE" />
             <RequestId label="match" value={state.data?.requestIds?.match} />
             <RequestId label="tips" value={state.data?.requestIds?.tips} />
           </>
