@@ -86,6 +86,7 @@ replaceOnce(
 );
 
 const replacements = new Map([
+  ["Tips + Prediction", "Tips"],
   ["Loading staging data…", "Loading match data…"],
   ["Staging dependency unavailable", "Scores service unavailable"],
   ["The request stops after 8 seconds if staging does not respond.", "The request stops after 8 seconds if the Scores service does not respond."],
@@ -126,6 +127,7 @@ for (const marker of [
   if (!source.includes(marker)) throw new Error(`Release integration missing: ${marker}`);
 }
 for (const forbidden of [
+  "Tips + Prediction",
   "staging deep-link contract",
   '["notifications-outline", "Notifications", "Not connected"]',
   "Payments & cards",
