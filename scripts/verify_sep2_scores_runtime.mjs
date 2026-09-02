@@ -25,6 +25,10 @@ function arrayCount(value) {
   if (!value || typeof value !== "object") return 0;
   return Math.max(0, ...Object.values(value).map(arrayCount));
 }
+function apiFootballId(value, kind) {
+  const match = String(value || "").trim().match(new RegExp(`^mst:${kind}:af:(\\d+)$`, "i"));
+  return match?.[1] || null;
+}
 
 const health = await json(`${SCORES}/health`);
 assert(health.response.ok, `Scores staging health ${health.response.status}`);
@@ -74,9 +78,10 @@ if (providerId) {
     console.log(`existing-service-${name}`, JSON.stringify({ status:result.response.status, ok:result.response.ok, count:arrayCount(result.payload), message:errorMessage(result.payload), keys:keys(result.payload) }));
   }
 }
-if (match?.competition_id) {
+const competitionProviderId = apiFootballId(match?.competition_id, "competition");
+if (competitionProviderId) {
   const season = match?.season ? `?season=${encodeURIComponent(match.season)}` : "";
-  const result = await json(`${APP}/football/competitions/${encodeURIComponent(match.competition_id)}/standings${season}`);
+  const result = await json(`${APP}/football/competitions/${encodeURIComponent(competitionProviderId)}/standings${season}`);
   console.log("existing-service-standings", JSON.stringify({ status:result.response.status, ok:result.response.ok, count:arrayCount(result.payload), message:errorMessage(result.payload), keys:keys(result.payload) }));
 }
 
@@ -86,22 +91,17 @@ const tipRows = data(tips.payload);
 assert(Array.isArray(tipRows), "Scores tips must return an array data payload");
 console.log("scores-tips", JSON.stringify({ status: tips.response.status, count: tipRows.length }));
 
-const pollSamples = [...feedResults.fixtures.slice(0,3), ...feedResults.live.slice(0,2), ...feedResults.results.slice(0,2)].filter((row) => row?.id);
-let pollWorkingId = null;
-let pollWorkingCanonical = null;
-for (const pollSample of pollSamples) {
-  const canonical = String(pollSample.id);
-  const numericSuffix = canonical.match(/^mst:match:af:(\d+)$/i)?.[1] || null;
-  for (const candidate of [...new Set([canonical, numericSuffix].filter(Boolean))]) {
-    const poll = await json(`${APP}/football/poll?matchId=${encodeURIComponent(candidate)}`);
-    console.log("match-vote-candidate", JSON.stringify({ canonical, candidate, status: poll.response.status, ok: poll.response.ok, message:errorMessage(poll.payload) }));
-    if (poll.response.ok && !pollWorkingId) {
-      pollWorkingId = candidate;
-      pollWorkingCanonical = canonical;
-    }
-  }
+const voteSamples = [...feedResults.fixtures, ...feedResults.live, ...feedResults.results]
+  .filter((row) => /^mst:match:af:\d+$/i.test(String(row?.id || "")))
+  .slice(0, 6);
+let voteVerified = null;
+for (const voteSample of voteSamples) {
+  const canonical = String(voteSample.id);
+  const vote = await json(`${SCORES}/v1/matches/${encodeURIComponent(canonical)}/vote`);
+  console.log("scores-match-vote", JSON.stringify({ canonical, status: vote.response.status, ok: vote.response.ok, message:errorMessage(vote.payload), keys:keys(data(vote.payload)) }));
+  if (vote.response.ok && !voteVerified) voteVerified = canonical;
 }
-console.log("match-vote", JSON.stringify({ verifiedReadId: pollWorkingId, canonicalId: pollWorkingCanonical, canonicalWorks: Boolean(pollWorkingId && pollWorkingId === pollWorkingCanonical) }));
+assert(voteVerified, "Scores Match Vote GET rejected every tested canonical current match ID; the app-facing Match Vote BFF contract is not verified.");
 
 for (const [name, url] of [
   ["tips", `${APP}/tips?limit=2`],
@@ -113,5 +113,4 @@ for (const [name, url] of [
   console.log(`existing-service-${name}`, JSON.stringify({ status: result.response.status, ok: result.response.ok, message:errorMessage(result.payload), keys: keys(result.payload) }));
 }
 
-assert(pollWorkingId, "Existing Match Vote GET rejected every tested current Scores match ID/provider suffix; Scores↔Match Vote runtime contract is not verified.");
-console.log("Sep 2 read-only runtime smoke PASS: canonical MST staging Scores API identity, health contract, feed shapes, canonical Match Center identity, tips and Match Vote read compatibility verified. No vote, favorite, prediction, notification, purchase, build, deploy, or store write was performed.");
+console.log("Sep 2 read-only runtime smoke PASS: canonical MST staging Scores API identity, health contract, feed shapes, canonical Match Center identity, tips and app-facing Match Vote BFF read compatibility verified. No vote, favorite, prediction, notification, purchase, build, deploy, or store write was performed.");
