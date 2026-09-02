@@ -43,6 +43,16 @@ replaceOnce(
 );
 
 replaceOnce(
+  '  { id: "tips", label: "Tips", icon: "radio-outline", activeIcon: "radio" },',
+  '  { id: "tips", label: "Tips + Prediction", icon: "radio-outline", activeIcon: "radio" },',
+  "locked Tips + Prediction primary navigation",
+);
+replaceOnce(
+  '<ShellScreen title="Tips" eyebrow="TIPS · ENTITLEMENTS · LEADERBOARDS" active="tips" onSelect={onSelect}>',
+  '<ShellScreen title="Tips + Prediction" eyebrow="TIPS · ENTITLEMENTS · LEADERBOARDS" active="tips" onSelect={onSelect}>',
+  "locked Tips + Prediction screen title",
+);
+replaceOnce(
   '<View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real staging response</Text></View>',
   '<Phase4BMatchVote match={match} />\n            <Phase4BMatchInsights match={match} />\n            <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real Scores response</Text></View>',
   "Match Center release integrations",
@@ -75,7 +85,7 @@ replaceOnce(
 replaceOnce(
   '            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video unlock is not connected yet. No fake unlock is possible." action="DISABLED" />\n',
   '',
-  "legacy rewarded Prediction unlock",
+  "legacy fake rewarded Prediction unlock",
 );
 replaceOnce(
   '    ["notifications-outline", "Notifications", "Not connected"],\n',
@@ -101,16 +111,15 @@ replaceOnce(
 removeBlock(
   '      {featuredMatch ? (\n        <View style={s.featuredPrediction}>',
   '      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real match is available for a read-only preview." />}\n',
-  "legacy featured Prediction unlock block",
+  "legacy fake featured Prediction unlock block",
 );
 replaceOnce(
   '      <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>\n',
   '',
-  "legacy Prediction scoring card",
+  "legacy inline Prediction scoring card",
 );
 
 const replacements = new Map([
-  ["Tips + Prediction", "Tips"],
   ["Prediction / Tip preview", "MST Tip Preview"],
   ["READ ONLY IN MST SCORES", "TIPS · ENTITLEMENTS · LEADERBOARDS"],
   ["MST Scores can consume authorized predictions and tips, but cannot create, edit, or submit them.", "MST Scores can show the read-only Prediction leaderboard and MST Tips, but exact-score prediction creation, editing and submission stay in MST Prediction."],
@@ -134,6 +143,7 @@ const replacements = new Map([
 for (const [from, to] of replacements) source = source.split(from).join(to);
 
 for (const marker of [
+  'label: "Tips + Prediction"',
   'import Phase4BMatchVote from "./Phase4BMatchVote";',
   'import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";',
   'import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";',
@@ -152,7 +162,6 @@ for (const marker of [
   if (!source.includes(marker)) throw new Error(`Release integration missing: ${marker}`);
 }
 for (const forbidden of [
-  "Tips + Prediction",
   "Prediction / Tip preview",
   "MST PREDICTION UNLOCK",
   "Watch Video to unlock MST prediction",
