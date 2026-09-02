@@ -1,5 +1,6 @@
 name: Sep 2 Expo Auth Smoke
 
+# Retriggered after repository EXPO_TOKEN setup on Sep 2, 2026.
 on:
   push:
     branches:
