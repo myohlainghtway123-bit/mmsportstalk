@@ -1,0 +1,54 @@
+name: Sep 2 AdMob Config Smoke
+
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - .github/workflows/sep2-admob-config-smoke.yml
+      - app.config.js
+      - src/phase4b/Phase4BAdBanner.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admob-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      MST_ADMOB_ANDROID_APP_ID: ${{ secrets.MST_ADMOB_ANDROID_APP_ID }}
+      MST_ADMOB_IOS_APP_ID: ${{ secrets.MST_ADMOB_IOS_APP_ID }}
+      EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID }}
+      EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify release AdMob values exist without printing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            MST_ADMOB_ANDROID_APP_ID \
+            MST_ADMOB_IOS_APP_ID \
+            EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID \
+            EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured for this repository."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 2
+
+      - name: Validate AdMob identifier shapes without logging values
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$MST_ADMOB_ANDROID_APP_ID" =~ ^ca-app-pub-[0-9]+~[0-9]+$ ]] || { echo "::error::Android AdMob App ID has an invalid shape."; exit 2; }
+          [[ "$MST_ADMOB_IOS_APP_ID" =~ ^ca-app-pub-[0-9]+~[0-9]+$ ]] || { echo "::error::iOS AdMob App ID has an invalid shape."; exit 2; }
+          [[ "$EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID" =~ ^ca-app-pub-[0-9]+/[0-9]+$ ]] || { echo "::error::Android banner unit ID has an invalid shape."; exit 2; }
+          [[ "$EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID" =~ ^ca-app-pub-[0-9]+/[0-9]+$ ]] || { echo "::error::iOS banner unit ID has an invalid shape."; exit 2; }
+          echo "AdMob release configuration smoke passed; no ad request or build was started."
