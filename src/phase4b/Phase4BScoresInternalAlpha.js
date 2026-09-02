@@ -46,7 +46,7 @@ const NAV_ITEMS = [
   { id: "matches", label: "Matches", icon: "football-outline", activeIcon: "football" },
   { id: "news", label: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
   { id: "favorites", label: "Favorites", icon: "star-outline", activeIcon: "star" },
-  { id: "tips", label: "Tips", icon: "radio-outline", activeIcon: "radio" },
+  { id: "tips", label: "Tips + Prediction", icon: "radio-outline", activeIcon: "radio" },
   { id: "more", label: "More", icon: "ellipsis-horizontal", activeIcon: "ellipsis-horizontal-circle" },
 ];
 
@@ -404,7 +404,7 @@ function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
 
 function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
   return (
-    <ShellScreen title="Tips" eyebrow="TIPS · ENTITLEMENTS · LEADERBOARDS" active="tips" onSelect={onSelect}>
+    <ShellScreen title="Tips + Prediction" eyebrow="TIPS · ENTITLEMENTS · LEADERBOARDS" active="tips" onSelect={onSelect}>
       <View style={s.safetyBanner}><Ionicons name="shield-checkmark-outline" size={20} color={T.color.green} /><View style={s.dependencyCopy}><Text style={s.safetyTitle}>No prediction writes</Text><Text style={s.safetyText}>MST Scores can show the read-only Prediction leaderboard and MST Tips, but exact-score prediction creation, editing and submission stay in MST Prediction.</Text></View></View>
       <Phase4BReadOnlyHub />
       {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}
