@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/sep2-apply-phase4b-release.yml
       - scripts/sep2_patch_phase4b_release.mjs
+      - scripts/sep2_patch_ad_banner.mjs
 
 permissions:
   contents: write
@@ -21,8 +22,10 @@ jobs:
         with:
           ref: chatgpt/sep2-expo-auth-smoke-2026-09-02
 
-      - name: Apply narrow current-app patch
-        run: node scripts/sep2_patch_phase4b_release.mjs
+      - name: Apply narrow current-app patches
+        run: |
+          node scripts/sep2_patch_phase4b_release.mjs
+          node scripts/sep2_patch_ad_banner.mjs
 
       - name: Commit generated source change
         shell: bash
