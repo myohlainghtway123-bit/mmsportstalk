@@ -70,6 +70,16 @@ replaceOnce(
   "obsolete notifications placeholder",
 );
 replaceOnce(
+  '      <DependencyCard icon="ribbon-outline" title="Become a Tipster" text="Final path starts in MST Prediction, continues to the MST website, and is reviewed in Web Admin." action="LINK UNAVAILABLE" />\n',
+  '',
+  "unverified Become a Tipster handoff",
+);
+replaceOnce(
+  'function MoreScreen({ onSelect }) {\n  const rows = [\n    ["language-outline", "Language", "Burmese / English"],\n    ["moon-outline", "Appearance", "Dark / light / system"],\n    ["card-outline", "Payments & cards", "Not connected"],\n    ["document-text-outline", "Terms, Privacy & Policies", "Final content pending"],\n    ["information-circle-outline", "About MST", "Product shell"],\n    ["help-circle-outline", "Support / Help", "Integration pending"],\n  ];\n  return (\n    <ShellScreen title="More" eyebrow="SETTINGS · SUPPORT" active="more" onSelect={onSelect}>\n      <Phase4BSearchPanel />\n      <Phase4BNotificationsPanel />\n      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>\n      <View style={s.menuCard}>{rows.map(([icon, title, detail]) => <View key={title} style={s.menuRow}><Ionicons name={icon} size={19} color={T.color.secondary} /><Text style={s.menuTitle}>{title}</Text><Text style={s.menuDetail}>{detail}</Text><Ionicons name="chevron-forward" size={16} color={T.color.muted} /></View>)}</View>\n    </ShellScreen>\n  );\n}',
+  'function MoreScreen({ onSelect }) {\n  return (\n    <ShellScreen title="More" eyebrow="SEARCH · NOTIFICATIONS" active="more" onSelect={onSelect}>\n      <Phase4BSearchPanel />\n      <Phase4BNotificationsPanel />\n      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>\n    </ShellScreen>\n  );\n}',
+  "remove unfinished public More controls",
+);
+replaceOnce(
   '      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="person-outline" size={28} color={T.color.muted} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>Internal tester</Text><Text style={s.dependencyText}>Profile/account service is not connected in this Phase 4B build.</Text></View></View>\n      <View style={s.menuCard}>',
   '      <Phase4BSearchPanel />\n      <Phase4BNotificationsPanel />\n      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>\n      <View style={s.menuCard}>',
   "More search notifications integration",
@@ -123,6 +133,11 @@ for (const marker of [
 for (const forbidden of [
   "staging deep-link contract",
   '["notifications-outline", "Notifications", "Not connected"]',
+  "Payments & cards",
+  "Final content pending",
+  "Integration pending",
+  "Product shell",
+  "Become a Tipster",
 ]) {
   if (source.includes(forbidden)) throw new Error(`Release cleanup failed: ${forbidden}`);
 }
