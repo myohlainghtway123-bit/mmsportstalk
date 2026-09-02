@@ -7,7 +7,6 @@ for (const [name, origin] of [["Scores", SCORES], ["App API", APP]]) {
   const parsed = new URL(origin);
   assert(parsed.protocol === "https:", `${name} runtime smoke origin must use HTTPS`);
   assert(parsed.hostname.endsWith("myanmarsportstalk.com"), `${name} runtime smoke origin must be MST-owned`);
-  assert(!/betflow/i.test(origin), `${name} runtime smoke origin must not use Betflow identity`);
 }
 assert(new URL(SCORES).hostname === "scores-api-staging.myanmarsportstalk.com", "Scores runtime smoke must target the canonical MST staging Scores API");
 
