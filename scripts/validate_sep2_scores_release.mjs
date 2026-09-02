@@ -42,6 +42,12 @@ for (const forbiddenPublicCopy of [
   "staging record",
   "staging field",
   "staging deep-link contract",
+  "Payments & cards",
+  "Final content pending",
+  "Integration pending",
+  "Product shell",
+  "Become a Tipster",
+  "Internal tester",
 ]) assert.doesNotMatch(phase, new RegExp(forbiddenPublicCopy, "i"), `Public Scores source still contains release-placeholder copy: ${forbiddenPublicCopy}`);
 
 assert.match(news, /fetchArticles/);
@@ -111,7 +117,7 @@ const warnings = [];
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE || "").trim()) warnings.push("website full-analysis URL template is not configured; the shared match response must provide full_analysis_url/fullAnalysisUrl at runtime");
 if (!String(eas?.build?.production?.env?.EXPO_PUBLIC_MST_PREDICTION_APP_URL_TEMPLATE || "").trim()) warnings.push("Prediction app deep-link template is not configured; the shared match response must provide prediction_app_url/predictionAppUrl at runtime");
 
-console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, fail-closed Scores origin handling, real MST News, shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
+console.log("Current MST Scores source contract PASS: production entrypoint is the NEW Phase 4B app; production/staging UI separation, fail-closed Scores origin handling, cleaned public release surface, real MST News, shared-auth/Match Vote/tips/entitlements/leaderboards/favorites/notifications/search/read-only analysis integrations are present; exact-score prediction writes are absent; iOS/Android identifiers and EAS projectId are intact. Global product separation is enforced by validate-product-separation.js before this release contract runs.");
 if (blockers.length) {
   console.log("Release configuration blockers:");
   for (const blocker of blockers) console.log(`- ${blocker}`);
