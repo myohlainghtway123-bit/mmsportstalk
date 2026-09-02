@@ -23,6 +23,7 @@ import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavorites
 import Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";
 import Phase4BSearchPanel from "./Phase4BSearchPanel";
 import Phase4BNewsPanel from "./Phase4BNewsPanel";
+import Phase4BAdBanner from "./Phase4BAdBanner";
 
 const T = Object.freeze({
   color: {
@@ -386,6 +387,7 @@ function NewsScreen({ onSelect }) {
   return (
     <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>
       <Phase4BNewsPanel />
+      <Phase4BAdBanner />
     </ShellScreen>
   );
 }
