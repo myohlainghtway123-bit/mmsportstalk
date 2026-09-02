@@ -6,6 +6,7 @@ on:
       - chatgpt/sep2-expo-auth-smoke-2026-09-02
     paths:
       - scripts/verify_sep2_scores_runtime.mjs
+      - scripts/verify_sep2_scores_preview_runtime.mjs
       - .github/workflows/sep2-scores-runtime-smoke.yml
 
 permissions:
@@ -22,3 +23,5 @@ jobs:
           node-version: 22.18.0
       - name: Run read-only runtime integration smoke
         run: node scripts/verify_sep2_scores_runtime.mjs
+      - name: Verify professional preview runtime contract
+        run: node scripts/verify_sep2_scores_preview_runtime.mjs
