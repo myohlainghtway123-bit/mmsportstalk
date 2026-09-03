@@ -32,6 +32,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      MST_ADMOB_ANDROID_APP_ID: ${{ secrets.MST_ADMOB_ANDROID_APP_ID }}
+      MST_ADMOB_IOS_APP_ID: ${{ secrets.MST_ADMOB_IOS_APP_ID }}
+      EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID }}
+      EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -45,11 +51,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Production release preflight
+        if: ${{ (inputs.profile || 'preview') == 'production' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN" || { echo '::error::EXPO_TOKEN is missing.'; exit 2; }
+          for name in MST_ADMOB_ANDROID_APP_ID MST_ADMOB_IOS_APP_ID EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID; do
+            test -n "${!name:-}" || { echo "::error::$name is missing."; exit 2; }
+          done
+          origin="$(node -e 'const e=require("./eas.json"); process.stdout.write(String(e?.build?.production?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim())')"
+          test "$origin" = "https://scores-api.myanmarsportstalk.com" || { echo '::error::Production Scores API origin is not locked to the approved MST domain.'; exit 2; }
+          health="$(curl -fsS --retry 3 --retry-all-errors --retry-delay 2 --max-time 15 "$origin/health")"
+          node -e 'const p=JSON.parse(process.argv[1]); process.exit(p.service==="mst-scores-api" && p.environment==="production" && p.ok===true ? 0 : 1)' "$health"
+          fixtures="$(curl -fsS --retry 2 --retry-all-errors --retry-delay 2 --max-time 20 "$origin/v1/fixtures?limit=1")"
+          node -e 'const p=JSON.parse(process.argv[1]); process.exit(p.ok===true && Array.isArray(p.data) ? 0 : 1)' "$fixtures"
+          echo 'Production Scores backend and release configuration preflight passed.'
+
       - name: Build with EAS
         id: eas
         continue-on-error: true
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           PLATFORM: ${{ inputs.platform || 'android' }}
           PROFILE: ${{ inputs.profile || 'preview' }}
         shell: bash
@@ -66,8 +88,10 @@ jobs:
         run: |
           mkdir -p .release
           {
-            echo "MST FINAL ANDROID PREVIEW BUILD"
+            echo "MST EAS BUILD"
             echo "Commit: $GITHUB_SHA"
+            echo "Profile: ${{ inputs.profile || 'preview' }}"
+            echo "Platform: ${{ inputs.platform || 'android' }}"
             echo "Exit code: ${{ steps.eas.outputs.exit_code }}"
             echo ""
             cat eas-build-output.txt 2>/dev/null || true
@@ -75,7 +99,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .release/latest-build.txt
-          git commit -m "Record final EAS Android build result" || true
+          git commit -m "Record EAS build result" || true
           git push || true
 
       - name: Fail if EAS build failed
