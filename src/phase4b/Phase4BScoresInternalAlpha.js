@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   Pressable,
   RefreshControl,
@@ -526,6 +527,22 @@ export default function Phase4BScoresInternalAlpha() {
   const [selectedMatch, setSelectedMatch] = useState(null);
   const openMatch = useCallback((match) => setSelectedMatch(match), []);
   const selectNav = useCallback((next) => { setSelectedMatch(null); setActive(next); }, []);
+
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (selectedMatch) {
+        setSelectedMatch(null);
+        return true;
+      }
+      if (active !== "matches") {
+        setActive("matches");
+        return true;
+      }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener("hardwareBackPress", handleBackPress);
+    return () => subscription.remove();
+  }, [selectedMatch, active]);
 
   let screen;
   if (selectedMatch) screen = <MatchCenter selectedMatch={selectedMatch} onBack={() => setSelectedMatch(null)} />;
