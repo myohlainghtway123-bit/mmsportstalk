@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   BackHandler,
@@ -10,6 +10,8 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  ToastAndroid,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,23 +30,27 @@ import Phase4BNewsPanel from "./Phase4BNewsPanel";
 import Phase4BAdBanner from "./Phase4BAdBanner";
 import ScreenHeader from "../components/ScreenHeader";
 import SettingsScreenV2 from "../final/SettingsScreenV2";
+import Phase4BMatchPreviewScreen from "./Phase4BMatchPreviewScreen";
+import Phase4BSearchScreen from "./Phase4BSearchScreen";
+import Phase4BProfileScreen from "./Phase4BProfileScreen";
+import { getAuthStatus } from "../services/accountApi";
 
 const T = Object.freeze({
   color: {
     bg: "#080A0C",
     surface: "#101417",
-    raised: "#171C20",
-    border: "#293036",
+    raised: "#161B1F",
+    border: "#22272B",
     text: "#FFFFFF",
     secondary: "#D4D8DB",
-    muted: "#929AA0",
+    muted: "#88929A",
     red: "#F3262D",
-    redSoft: "rgba(243,38,45,0.14)",
+    redSoft: "rgba(243,38,45,0.12)",
     amber: "#F4C84D",
     green: "#48C78E",
   },
   space: { xs: 6, sm: 10, md: 16, lg: 22 },
-  radius: { sm: 8, md: 13, lg: 17 },
+  radius: { sm: 6, md: 12, lg: 16 },
 });
 
 const NAV_ITEMS = [
@@ -52,7 +58,7 @@ const NAV_ITEMS = [
   { id: "news", label: "News", icon: "newspaper-outline", activeIcon: "newspaper" },
   { id: "favorites", label: "Favorites", icon: "star-outline", activeIcon: "star" },
   { id: "tips", label: "Tips", icon: "diamond-outline", activeIcon: "diamond" },
-  { id: "more", label: "More", icon: "ellipsis-horizontal", activeIcon: "ellipsis-horizontal-circle" },
+  { id: "settings", label: "Settings", icon: "settings-outline", activeIcon: "settings" },
 ];
 
 const MATCH_SECTION_DEFS = [
@@ -73,10 +79,10 @@ function dateKey(value) {
 }
 
 function dateWindow(center = new Date()) {
-  return Array.from({ length: 10 }, (_, index) => {
+  return Array.from({ length: 14 }, (_, index) => {
     const date = new Date(center);
     date.setHours(12, 0, 0, 0);
-    date.setDate(date.getDate() + index - 4);
+    date.setDate(date.getDate() + index - 6);
     return date;
   });
 }
@@ -173,7 +179,7 @@ function EnvironmentBanner() {
   );
 }
 
-function HomeBrandHeader({ onOpenSettings }) {
+function HomeBrandHeader({ onOpenSearch, onOpenProfile, userAvatar }) {
   return (
     <View style={s.homeBrandHeader} accessibilityRole="header">
       <View style={s.brandBlock}>
@@ -188,12 +194,29 @@ function HomeBrandHeader({ onOpenSettings }) {
       <View style={s.headerActions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open settings"
+          accessibilityLabel="Search teams and players"
           hitSlop={10}
-          onPress={onOpenSettings}
+          onPress={onOpenSearch}
           style={s.headerBtn}
         >
-          <Ionicons name="settings-outline" size={20} color={T.color.secondary} />
+          <Ionicons name="search-outline" size={20} color={T.color.secondary} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open user profile"
+          hitSlop={10}
+          onPress={onOpenProfile}
+          style={s.headerBtn}
+        >
+          {userAvatar ? (
+            <Image
+              source={{ uri: userAvatar }}
+              style={s.headerAvatar}
+              resizeMode="cover"
+            />
+          ) : (
+            <Ionicons name="person-circle-outline" size={24} color={T.color.secondary} />
+          )}
         </Pressable>
       </View>
     </View>
@@ -323,11 +346,14 @@ function LeagueGroup({ group, onOpen }) {
   );
 }
 
-function BigMatchPreview({ match, onOpen }) {
+function BigMatchPreview({ match, onOpenPreview, onOpenMatch }) {
   if (!match) return null;
   return (
-    <Pressable accessibilityRole="button" onPress={() => onOpen(match)} style={s.bigMatchCard}>
-      <Text style={s.bigMatchEyebrow}>BIG MATCH PREVIEW</Text>
+    <View style={s.bigMatchCard}>
+      <View style={s.bigMatchHeaderRow}>
+        <Text style={s.bigMatchEyebrow}>BIG MATCH PREVIEW</Text>
+        <Text style={s.bigMatchComp}>{match?.competition_name || "Football"}</Text>
+      </View>
       <View style={s.bigMatchTeams}>
         <View style={s.bigTeam}>
           <TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={40} />
@@ -346,47 +372,106 @@ function BigMatchPreview({ match, onOpen }) {
           </Text>
         </View>
       </View>
-      <View style={s.previewCta}>
-        <Text style={s.previewCtaText}>MATCH CENTER</Text>
-        <Ionicons name="arrow-forward" size={14} color={T.color.text} />
+      <View style={s.bigMatchActions}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onOpenPreview(match)}
+          style={s.previewCta}
+        >
+          <Ionicons name="document-text-outline" size={14} color={T.color.text} />
+          <Text style={s.previewCtaText}>READ FULL PREVIEW</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onOpenMatch(match)}
+          style={s.matchCenterCta}
+        >
+          <Ionicons name="football-outline" size={14} color={T.color.secondary} />
+          <Text style={s.matchCenterCtaText}>MATCH CENTER</Text>
+        </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
 function DateNavigation({ selected, onSelect }) {
   const dates = useMemo(() => dateWindow(), []);
+
+  const handlePrev = useCallback(() => {
+    const parts = (selected || "").split("-").map(Number);
+    const d = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0) : new Date();
+    d.setDate(d.getDate() - 1);
+    onSelect(dateKey(d));
+  }, [selected, onSelect]);
+
+  const handleNext = useCallback(() => {
+    const parts = (selected || "").split("-").map(Number);
+    const d = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0) : new Date();
+    d.setDate(d.getDate() + 1);
+    onSelect(dateKey(d));
+  }, [selected, onSelect]);
+
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={s.dateStrip}
-    >
-      {dates.map((date) => {
-        const key = dateKey(date);
-        const active = selected === key;
-        return (
-          <Pressable
-            key={key}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            onPress={() => onSelect(key)}
-            style={[s.dateCell, active && s.dateCellActive]}
-          >
-            <Text style={[s.dateDay, active && s.dateActiveText]}>
-              {dayLabel(date).toUpperCase()}
-            </Text>
-            <Text style={[s.dateNumber, active && s.dateActiveText]}>
-              {date.getDate()}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <View style={s.compactDateContainer}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Previous date"
+        hitSlop={10}
+        onPress={handlePrev}
+        style={s.dateArrowBtn}
+      >
+        <Ionicons name="chevron-back" size={15} color={T.color.secondary} />
+      </Pressable>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.dateStrip}
+      >
+        {dates.map((date) => {
+          const key = dateKey(date);
+          const active = selected === key;
+          return (
+            <Pressable
+              key={key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              onPress={() => onSelect(key)}
+              style={[s.dateCell, active && s.dateCellActive]}
+            >
+              <Text style={[s.dateDay, active && s.dateActiveDay]}>
+                {dayLabel(date).toUpperCase()}
+              </Text>
+              <Text style={[s.dateNumber, active && s.dateActiveNumber]}>
+                {date.getDate()}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Next date"
+        hitSlop={10}
+        onPress={handleNext}
+        style={s.dateArrowBtn}
+      >
+        <Ionicons name="chevron-forward" size={15} color={T.color.secondary} />
+      </Pressable>
+    </View>
   );
 }
 
-function MatchesScreen({ overview, onOpenMatch, onRetry, onOpenSettings }) {
+function MatchesScreen({
+  overview,
+  onOpenMatch,
+  onOpenPreview,
+  onRetry,
+  onOpenSearch,
+  onOpenProfile,
+  userAvatar,
+}) {
   const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
   const [didSelectFallback, setDidSelectFallback] = useState(false);
 
@@ -406,9 +491,14 @@ function MatchesScreen({ overview, onOpenMatch, onRetry, onOpenSettings }) {
 
   return (
     <View style={s.flex}>
-      <HomeBrandHeader onOpenSettings={onOpenSettings} />
+      <HomeBrandHeader
+        onOpenSearch={onOpenSearch}
+        onOpenProfile={onOpenProfile}
+        userAvatar={userAvatar}
+      />
       <DateNavigation selected={selectedDate} onSelect={setSelectedDate} />
       <ScrollView
+        nestedScrollEnabled
         contentContainerStyle={s.scrollContent}
         refreshControl={
           <RefreshControl
@@ -444,7 +534,13 @@ function MatchesScreen({ overview, onOpenMatch, onRetry, onOpenSettings }) {
         {groups.map((group, index) => (
           <React.Fragment key={group.id}>
             <LeagueGroup group={group} onOpen={onOpenMatch} />
-            {index === 0 ? <BigMatchPreview match={group.matches[0]} onOpen={onOpenMatch} /> : null}
+            {index === 0 ? (
+              <BigMatchPreview
+                match={group.matches[0]}
+                onOpenPreview={onOpenPreview}
+                onOpenMatch={onOpenMatch}
+              />
+            ) : null}
           </React.Fragment>
         ))}
         <RequestId label="fixtures" value={overview.requestIds.fixtures} />
@@ -455,25 +551,60 @@ function MatchesScreen({ overview, onOpenMatch, onRetry, onOpenSettings }) {
   );
 }
 
-function NewsScreen({ onSelect }) {
+function NewsScreen({ onOpenSearch, onOpenProfile, userAvatar }) {
   return (
     <View style={s.flex}>
-      <ScreenHeader title="News" subtitle="MST FOOTBALL EDITORIAL" showMstBrand />
-      <ScrollView contentContainerStyle={s.scrollContent}>
+      <ScreenHeader
+        title="News"
+        subtitle="MST FOOTBALL EDITORIAL"
+        showMstBrand
+        rightElement={
+          <View style={s.headerActions}>
+            <Pressable hitSlop={8} onPress={onOpenSearch} style={s.headerActionBtn}>
+              <Ionicons name="search-outline" size={19} color={T.color.secondary} />
+            </Pressable>
+            <Pressable hitSlop={8} onPress={onOpenProfile} style={s.headerActionBtn}>
+              {userAvatar ? (
+                <Image source={{ uri: userAvatar }} style={s.headerAvatarSmall} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={22} color={T.color.secondary} />
+              )}
+            </Pressable>
+          </View>
+        }
+      />
+      <ScrollView nestedScrollEnabled contentContainerStyle={s.scrollContent}>
         <Phase4BNewsPanel />
         <Phase4BAdBanner />
       </ScrollView>
-      <BottomNavigation active="news" onSelect={onSelect} />
     </View>
   );
 }
 
-function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
+function FavoritesScreen({ matches, onOpenMatch, onOpenSearch, onOpenProfile, userAvatar }) {
   const realMatches = matches.slice(0, 2);
   return (
     <View style={s.flex}>
-      <ScreenHeader title="Favorites" subtitle="TEAMS · COMPETITIONS" showMstBrand />
-      <ScrollView contentContainerStyle={s.scrollContent}>
+      <ScreenHeader
+        title="Favorites"
+        subtitle="TEAMS · COMPETITIONS"
+        showMstBrand
+        rightElement={
+          <View style={s.headerActions}>
+            <Pressable hitSlop={8} onPress={onOpenSearch} style={s.headerActionBtn}>
+              <Ionicons name="search-outline" size={19} color={T.color.secondary} />
+            </Pressable>
+            <Pressable hitSlop={8} onPress={onOpenProfile} style={s.headerActionBtn}>
+              {userAvatar ? (
+                <Image source={{ uri: userAvatar }} style={s.headerAvatarSmall} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={22} color={T.color.secondary} />
+              )}
+            </Pressable>
+          </View>
+        }
+      />
+      <ScrollView nestedScrollEnabled contentContainerStyle={s.scrollContent}>
         <View style={s.segmented}>
           <View style={[s.segment, s.segmentActive]}>
             <Text style={s.segmentActiveText}>All</Text>
@@ -504,64 +635,36 @@ function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
           />
         )}
       </ScrollView>
-      <BottomNavigation active="favorites" onSelect={onSelect} />
     </View>
   );
 }
 
-function TipsScreen({ onSelect, featuredMatch }) {
+function TipsScreen({ featuredMatch, onOpenSearch, onOpenProfile, userAvatar }) {
   return (
     <View style={s.flex}>
-      <ScreenHeader title="Tips" subtitle="TIPS · TIPSTERS · LEADERBOARDS" showMstBrand />
+      <ScreenHeader
+        title="Tips"
+        subtitle="TIPS · TIPSTERS · LEADERBOARDS"
+        showMstBrand
+        rightElement={
+          <View style={s.headerActions}>
+            <Pressable hitSlop={8} onPress={onOpenSearch} style={s.headerActionBtn}>
+              <Ionicons name="search-outline" size={19} color={T.color.secondary} />
+            </Pressable>
+            <Pressable hitSlop={8} onPress={onOpenProfile} style={s.headerActionBtn}>
+              {userAvatar ? (
+                <Image source={{ uri: userAvatar }} style={s.headerAvatarSmall} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={22} color={T.color.secondary} />
+              )}
+            </Pressable>
+          </View>
+        }
+      />
       <ScrollView contentContainerStyle={s.scrollContent}>
         <Phase4BReadOnlyHub />
         {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}
       </ScrollView>
-      <BottomNavigation active="tips" onSelect={onSelect} />
-    </View>
-  );
-}
-
-function MoreScreen({ onSelect, onOpenSettings }) {
-  return (
-    <View style={s.flex}>
-      <ScreenHeader title="More" subtitle="SETTINGS · SEARCH · NOTIFICATIONS" showMstBrand />
-      <ScrollView contentContainerStyle={s.scrollContent}>
-        {/* Settings Entry Banner */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Settings"
-          onPress={onOpenSettings}
-          style={s.settingsBanner}
-        >
-          <View style={s.settingsBannerIcon}>
-            <Ionicons name="settings" size={22} color={T.color.red} />
-          </View>
-          <View style={s.flex}>
-            <Text style={s.settingsBannerTitle}>Settings & Preferences</Text>
-            <Text style={s.settingsBannerSub}>
-              Account, Official Socials, Privacy & Legal, Ad Choices
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={T.color.muted} />
-        </Pressable>
-
-        <Phase4BSearchPanel />
-        <Phase4BNotificationsPanel />
-
-        <View style={s.profileCard}>
-          <View style={s.profileAvatar}>
-            <Ionicons name="football-outline" size={28} color={T.color.red} />
-          </View>
-          <View style={s.dependencyCopy}>
-            <Text style={s.dependencyTitle}>Myanmar Sports Talk / MST Scores</Text>
-            <Text style={s.dependencyText}>
-              Follow the Game · Official fixtures, live stats, verified news, and read-only tip intelligence.
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-      <BottomNavigation active="more" onSelect={onSelect} />
     </View>
   );
 }
@@ -600,7 +703,7 @@ function TipPreview({ tip }) {
   );
 }
 
-function MatchCenter({ selectedMatch, onBack }) {
+function MatchCenter({ selectedMatch, onBack, onOpenPreview }) {
   const selectedId = canonicalMatchId(selectedMatch);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState({ loading: true, data: null, error: "", requestId: null });
@@ -650,6 +753,25 @@ function MatchCenter({ selectedMatch, onBack }) {
                 </View>
               </View>
             </View>
+
+            {/* In-App Professional Match Preview CTA */}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => onOpenPreview(match)}
+              style={s.matchCenterPreviewBanner}
+            >
+              <View style={s.matchCenterPreviewIcon}>
+                <Ionicons name="document-text" size={20} color={T.color.red} />
+              </View>
+              <View style={s.flex}>
+                <Text style={s.matchCenterPreviewTitle}>Read Professional Match Preview</Text>
+                <Text style={s.matchCenterPreviewSub}>
+                  Full in-app verified analysis, starting lineups, H2H facts and statistics
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={T.color.muted} />
+            </Pressable>
+
             <Phase4BMatchFavorites match={match} />
             <Phase4BMatchVote match={match} />
             <Phase4BMatchInsights match={match} />
@@ -731,63 +853,205 @@ function useScoresOverview() {
 
 export default function Phase4BScoresInternalAlpha() {
   const overview = useScoresOverview();
-  const [active, setActive] = useState("matches");
-  const [selectedMatch, setSelectedMatch] = useState(null);
-  const [subScreen, setSubScreen] = useState(null); // null | "settings"
-  const openMatch = useCallback((match) => { setSubScreen(null); setSelectedMatch(match); }, []);
-  const selectNav = useCallback((next) => { setSubScreen(null); setSelectedMatch(null); setActive(next); }, []);
-  const openSettings = useCallback(() => { setSelectedMatch(null); setSubScreen("settings"); }, []);
+  const { width: screenWidth } = useWindowDimensions();
+  const pagerRef = useRef(null);
+  const lastBackPressRef = useRef(0);
 
+  const [active, setActive] = useState("matches"); // "matches" | "news" | "favorites" | "tips" | "settings"
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [previewMatch, setPreviewMatch] = useState(null);
+  const [subScreen, setSubScreen] = useState(null); // null | "search" | "profile" | "settings"
+  const [userAvatar, setUserAvatar] = useState(null);
+
+  // Load user avatar for top header
   useEffect(() => {
-    const handleBackPress = () => {
+    getAuthStatus()
+      .then((status) => {
+        const avatar = status?.user?.avatar || status?.user?.avatarUrl;
+        if (avatar) setUserAvatar(avatar);
+      })
+      .catch(() => {});
+  }, [subScreen]);
+
+  const openMatch = useCallback((match) => {
+    setPreviewMatch(null);
+    setSubScreen(null);
+    setSelectedMatch(match);
+  }, []);
+
+  const openPreview = useCallback((match) => {
+    setSubScreen(null);
+    setPreviewMatch(match);
+  }, []);
+
+  const openSearch = useCallback(() => {
+    setSubScreen("search");
+  }, []);
+
+  const openProfile = useCallback(() => {
+    setSubScreen("profile");
+  }, []);
+
+  const selectNav = useCallback((next) => {
+    setPreviewMatch(null);
+    setSelectedMatch(null);
+    setSubScreen(null);
+    setActive(next);
+
+    // Scroll horizontal pager if navigating to core content screens
+    if (next === "matches") {
+      pagerRef.current?.scrollTo({ x: 0 * screenWidth, animated: true });
+    } else if (next === "news") {
+      pagerRef.current?.scrollTo({ x: 1 * screenWidth, animated: true });
+    } else if (next === "favorites") {
+      pagerRef.current?.scrollTo({ x: 2 * screenWidth, animated: true });
+    }
+  }, [screenWidth]);
+
+  // Global Android hardware Back navigation hierarchy & double-press root exit
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      // 1. In-App Match Preview open -> close preview
+      if (previewMatch) {
+        setPreviewMatch(null);
+        return true;
+      }
+      // 2. Secondary SubScreen (search, profile, settings) -> close subscreen
       if (subScreen) {
         setSubScreen(null);
         return true;
       }
+      // 3. Match Center open -> return to Matches
       if (selectedMatch) {
         setSelectedMatch(null);
         return true;
       }
+      // 4. Secondary main screens (news, favorites, tips, settings) -> return to Matches
       if (active !== "matches") {
-        setActive("matches");
+        selectNav("matches");
         return true;
       }
-      return false;
-    };
-    const subscription = BackHandler.addEventListener("hardwareBackPress", handleBackPress);
-    return () => subscription.remove();
-  }, [subScreen, selectedMatch, active]);
 
-  let screen;
-  if (subScreen === "settings") {
-    screen = <SettingsScreenV2 goBack={() => setSubScreen(null)} />;
-  } else if (selectedMatch) {
-    screen = <MatchCenter selectedMatch={selectedMatch} onBack={() => setSelectedMatch(null)} />;
-  } else if (active === "news") {
-    screen = <NewsScreen onSelect={selectNav} />;
-  } else if (active === "favorites") {
-    screen = <FavoritesScreen onSelect={selectNav} matches={overview.matches} onOpenMatch={openMatch} />;
-  } else if (active === "tips") {
-    screen = <TipsScreen onSelect={selectNav} featuredMatch={overview.matches[0]} />;
-  } else if (active === "more") {
-    screen = <MoreScreen onSelect={selectNav} onOpenSettings={openSettings} />;
-  } else {
-    screen = (
-      <MatchesScreen
-        overview={overview}
-        onOpenMatch={openMatch}
-        onRetry={overview.retry}
-        onOpenSettings={openSettings}
+      // 5. At TRUE ROOT (Matches screen with no overlays) -> Double-back exit behavior
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        return false; // Exit app on rapid second press
+      }
+      lastBackPressRef.current = now;
+      if (Platform.OS === "android") {
+        ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
+      }
+      return true; // Prevent immediate app exit
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
+    return () => subscription.remove();
+  }, [previewMatch, subScreen, selectedMatch, active, selectNav]);
+
+  // Render secondary screens if active
+  let content;
+  if (previewMatch) {
+    content = (
+      <Phase4BMatchPreviewScreen
+        match={previewMatch}
+        onBack={() => setPreviewMatch(null)}
+        onOpenMatchCenter={(m) => {
+          setPreviewMatch(null);
+          setSelectedMatch(m);
+        }}
       />
     );
+  } else if (subScreen === "search") {
+    content = <Phase4BSearchScreen onBack={() => setSubScreen(null)} />;
+  } else if (subScreen === "profile") {
+    content = <Phase4BProfileScreen onBack={() => setSubScreen(null)} />;
+  } else if (subScreen === "settings" || active === "settings") {
+    content = (
+      <SettingsScreenV2
+        goBack={() => {
+          if (subScreen === "settings") setSubScreen(null);
+          else selectNav("matches");
+        }}
+        openProfile={() => setSubScreen("profile")}
+      />
+    );
+  } else if (selectedMatch) {
+    content = (
+      <MatchCenter
+        selectedMatch={selectedMatch}
+        onBack={() => setSelectedMatch(null)}
+        onOpenPreview={openPreview}
+      />
+    );
+  } else if (active === "tips") {
+    content = (
+      <TipsScreen
+        featuredMatch={overview.matches[0]}
+        onOpenSearch={openSearch}
+        onOpenProfile={openProfile}
+        userAvatar={userAvatar}
+      />
+    );
+  } else {
+    // Primary swipe-enabled content sequence: Matches ↔ News ↔ Favorites
+    content = (
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        scrollEventThrottle={16}
+        nestedScrollEnabled
+        onMomentumScrollEnd={(event) => {
+          const offsetX = event.nativeEvent.contentOffset.x;
+          const pageIndex = Math.round(offsetX / screenWidth);
+          if (pageIndex === 0 && active !== "matches") setActive("matches");
+          else if (pageIndex === 1 && active !== "news") setActive("news");
+          else if (pageIndex === 2 && active !== "favorites") setActive("favorites");
+        }}
+        style={s.flex}
+        contentContainerStyle={{ width: screenWidth * 3 }}
+      >
+        <View style={{ width: screenWidth, flex: 1 }}>
+          <MatchesScreen
+            overview={overview}
+            onOpenMatch={openMatch}
+            onOpenPreview={openPreview}
+            onRetry={overview.retry}
+            onOpenSearch={openSearch}
+            onOpenProfile={openProfile}
+            userAvatar={userAvatar}
+          />
+        </View>
+        <View style={{ width: screenWidth, flex: 1 }}>
+          <NewsScreen
+            onOpenSearch={openSearch}
+            onOpenProfile={openProfile}
+            userAvatar={userAvatar}
+          />
+        </View>
+        <View style={{ width: screenWidth, flex: 1 }}>
+          <FavoritesScreen
+            matches={overview.matches}
+            onOpenMatch={openMatch}
+            onOpenSearch={openSearch}
+            onOpenProfile={openProfile}
+            userAvatar={userAvatar}
+          />
+        </View>
+      </ScrollView>
+    );
   }
+
+  const showFooter = !previewMatch && !selectedMatch && subScreen !== "search" && subScreen !== "profile";
 
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={T.color.bg} />
       {process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "production" ? <EnvironmentBanner /> : null}
-      {screen}
-      {!selectedMatch && !subScreen && active === "matches" ? (
+      <View style={s.flex}>{content}</View>
+      {showFooter ? (
         <BottomNavigation active={active} onSelect={selectNav} />
       ) : null}
     </View>
@@ -813,7 +1077,7 @@ const s = StyleSheet.create({
   environmentSub: { marginLeft: "auto", color: T.color.bg, fontSize: 8, fontWeight: "800" },
   homeBrandHeader: {
     height: 52,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: T.color.border,
     flexDirection: "row",
@@ -831,7 +1095,7 @@ const s = StyleSheet.create({
     borderColor: T.color.red,
   },
   brandMst: { color: T.color.red, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  brandTitle: { color: T.color.text, fontSize: 18, fontWeight: "900", letterSpacing: 0.3 },
+  brandTitle: { color: T.color.text, fontSize: 17.5, fontWeight: "900", letterSpacing: 0.3 },
   brandEyebrow: { color: T.color.muted, fontSize: 7.5, fontWeight: "800", letterSpacing: 0.8, marginTop: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
   headerBtn: {
@@ -842,47 +1106,79 @@ const s = StyleSheet.create({
     borderRadius: 8,
   },
   headerActionBtn: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
   },
-  dateStrip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    gap: 6,
+  headerAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: T.color.border,
+  },
+  headerAvatarSmall: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: T.color.border,
+  },
+  compactDateContainer: {
+    height: 38,
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: T.color.border,
     backgroundColor: T.color.bg,
+    paddingHorizontal: 4,
+  },
+  dateArrowBtn: {
+    width: 28,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 6,
+  },
+  dateStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 2,
+    gap: 5,
   },
   dateCell: {
-    width: 48,
-    minHeight: 46,
-    borderRadius: T.radius.sm,
+    width: 44,
+    height: 30,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: T.color.surface,
   },
-  dateCellActive: { borderColor: T.color.red, backgroundColor: T.color.redSoft },
-  dateDay: { color: T.color.muted, fontSize: 8, fontWeight: "800" },
-  dateNumber: { color: T.color.secondary, fontSize: 15, fontWeight: "900", lineHeight: 18, marginTop: 2 },
-  dateActiveText: { color: T.color.red },
-  scrollContent: { padding: T.space.md, paddingBottom: 95 },
+  dateCellActive: {
+    borderColor: T.color.red,
+    backgroundColor: T.color.red,
+  },
+  dateDay: { color: T.color.muted, fontSize: 7.5, fontWeight: "800" },
+  dateNumber: { color: T.color.secondary, fontSize: 12, fontWeight: "900", lineHeight: 14, marginTop: 1 },
+  dateActiveDay: { color: "rgba(255,255,255,0.85)" },
+  dateActiveNumber: { color: "#FFFFFF" },
+  scrollContent: { padding: T.space.md, paddingBottom: 90 },
   sectionHeadingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
     marginBottom: 10,
-    marginTop: 4,
+    marginTop: 2,
   },
-  sectionEyebrow: { color: T.color.red, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.8 },
+  sectionEyebrow: { color: T.color.muted, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.8 },
   sectionTitle: { color: T.color.text, fontSize: 14.5, fontWeight: "900", marginTop: 1 },
   matchCount: { color: T.color.muted, fontSize: 9.5 },
   stateCard: {
-    minHeight: 135,
+    minHeight: 125,
     borderRadius: T.radius.md,
     backgroundColor: T.color.surface,
     borderWidth: 1,
@@ -923,7 +1219,7 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   leagueHeader: {
-    minHeight: 40,
+    minHeight: 38,
     paddingHorizontal: 11,
     flexDirection: "row",
     alignItems: "center",
@@ -932,9 +1228,9 @@ const s = StyleSheet.create({
     borderBottomColor: T.color.border,
   },
   leagueName: { color: T.color.secondary, fontSize: 11, fontWeight: "900", flex: 1 },
-  viewAll: { color: T.color.red, fontSize: 8.5, fontWeight: "800" },
+  viewAll: { color: T.color.muted, fontSize: 8.5, fontWeight: "800" },
   matchRow: {
-    minHeight: 66,
+    minHeight: 64,
     paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
@@ -945,37 +1241,62 @@ const s = StyleSheet.create({
   matchStateText: { color: T.color.muted, fontSize: 8.5, fontWeight: "800", textAlign: "center" },
   liveText: { color: T.color.red },
   liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: T.color.red, marginTop: 3 },
-  matchTeams: { flex: 1, gap: 6 },
+  matchTeams: { flex: 1, gap: 5 },
   teamLine: { flexDirection: "row", alignItems: "center", gap: 7 },
   teamLineName: { color: T.color.secondary, fontSize: 10.5, fontWeight: "700", flex: 1 },
   rowScore: { width: 40, textAlign: "center", color: T.color.text, fontSize: 11.5, fontWeight: "900" },
   bigMatchCard: {
     borderRadius: T.radius.md,
     borderWidth: 1,
-    borderColor: T.color.red,
-    backgroundColor: "#160C0E",
-    padding: 14,
+    borderColor: T.color.border,
+    backgroundColor: T.color.surface,
+    padding: 13,
     marginBottom: 11,
   },
-  bigMatchEyebrow: { color: T.color.red, fontSize: 8.5, fontWeight: "900", textAlign: "center", letterSpacing: 0.8 },
-  bigMatchTeams: { flexDirection: "row", alignItems: "center", marginTop: 11 },
-  bigTeam: { flex: 1, alignItems: "center", gap: 5 },
-  bigTeamName: { color: T.color.text, fontSize: 10.5, fontWeight: "800", textAlign: "center" },
-  bigVersus: { width: 100, alignItems: "center" },
-  bigVs: { color: T.color.text, fontSize: 16, fontWeight: "900" },
-  bigKickoff: { color: T.color.muted, fontSize: 8, textAlign: "center", marginTop: 4 },
-  previewCta: {
-    alignSelf: "center",
-    backgroundColor: T.color.red,
-    borderRadius: 16,
-    paddingHorizontal: 15,
-    minHeight: 32,
+  bigMatchHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+  },
+  bigMatchEyebrow: { color: T.color.red, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.8 },
+  bigMatchComp: { color: T.color.muted, fontSize: 8.5, fontWeight: "700" },
+  bigMatchTeams: { flexDirection: "row", alignItems: "center", marginTop: 10 },
+  bigTeam: { flex: 1, alignItems: "center", gap: 5 },
+  bigTeamName: { color: T.color.text, fontSize: 10.5, fontWeight: "800", textAlign: "center" },
+  bigVersus: { width: 90, alignItems: "center" },
+  bigVs: { color: T.color.red, fontSize: 15, fontWeight: "900" },
+  bigKickoff: { color: T.color.muted, fontSize: 8, textAlign: "center", marginTop: 3 },
+  bigMatchActions: {
+    flexDirection: "row",
+    gap: 8,
     marginTop: 12,
   },
-  previewCtaText: { color: T.color.text, fontSize: 8.5, fontWeight: "900" },
+  previewCta: {
+    flex: 1,
+    backgroundColor: T.color.red,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  previewCtaText: { color: T.color.text, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.4 },
+  matchCenterCta: {
+    flex: 1,
+    backgroundColor: T.color.raised,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: T.color.border,
+    paddingHorizontal: 10,
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  matchCenterCtaText: { color: T.color.secondary, fontSize: 8.5, fontWeight: "800", letterSpacing: 0.4 },
   inlineWarning: {
     minHeight: 40,
     borderRadius: T.radius.sm,
@@ -991,21 +1312,21 @@ const s = StyleSheet.create({
   inlineWarningText: { flex: 1, color: T.color.muted, fontSize: 9.5, lineHeight: 14 },
   requestId: { color: T.color.muted, fontSize: 8, marginTop: 6 },
   bottomNav: {
-    height: Platform.OS === "ios" ? 74 : 62,
+    height: Platform.OS === "ios" ? 74 : 58,
     borderTopWidth: 1,
-    borderTopColor: T.color.border,
-    backgroundColor: "#0B0E10",
+    borderTopColor: "#1E2429",
+    backgroundColor: "#0A0D0F",
     flexDirection: "row",
     paddingBottom: Platform.OS === "ios" ? 14 : 4,
   },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 2 },
-  navLabel: { color: T.color.muted, fontSize: 7.5, fontWeight: "700", textAlign: "center" },
-  navLabelActive: { color: T.color.red },
+  navLabel: { color: "#7E8890", fontSize: 8, fontWeight: "700", textAlign: "center" },
+  navLabelActive: { color: T.color.red, fontWeight: "900" },
   dependencyCopy: { flex: 1 },
   dependencyTitle: { color: T.color.secondary, fontSize: 11.5, fontWeight: "800" },
   dependencyText: { color: T.color.muted, fontSize: 9.5, lineHeight: 14, marginTop: 3 },
   segmented: {
-    minHeight: 38,
+    minHeight: 36,
     flexDirection: "row",
     backgroundColor: T.color.surface,
     borderRadius: T.radius.sm,
@@ -1018,50 +1339,6 @@ const s = StyleSheet.create({
   segmentActive: { backgroundColor: T.color.red },
   segmentText: { color: T.color.muted, fontSize: 9.5, fontWeight: "800" },
   segmentActiveText: { color: T.color.text, fontSize: 9.5, fontWeight: "900" },
-  settingsBanner: {
-    borderRadius: T.radius.md,
-    backgroundColor: T.color.surface,
-    borderWidth: 1,
-    borderColor: T.color.red,
-    padding: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    marginBottom: 12,
-  },
-  settingsBannerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: T.color.redSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  settingsBannerTitle: { color: T.color.text, fontSize: 12, fontWeight: "900" },
-  settingsBannerSub: { color: T.color.muted, fontSize: 8.5, lineHeight: 13, marginTop: 2 },
-  profileCard: {
-    minHeight: 88,
-    borderRadius: T.radius.md,
-    backgroundColor: T.color.surface,
-    borderWidth: 1,
-    borderColor: T.color.border,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 12,
-    marginBottom: 12,
-  },
-  profileAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: T.color.raised,
-    borderWidth: 1,
-    borderColor: T.color.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   matchCenterContent: { padding: T.space.md, paddingBottom: 35 },
   matchHero: {
     borderRadius: T.radius.lg,
@@ -1069,16 +1346,37 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: T.color.border,
     padding: 14,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   heroCompetition: { color: T.color.secondary, fontSize: 11, fontWeight: "900", textAlign: "center" },
   heroKickoff: { color: T.color.muted, fontSize: 8.5, textAlign: "center", marginTop: 3 },
-  heroTeams: { flexDirection: "row", alignItems: "center", minHeight: 110, marginTop: 6 },
+  heroTeams: { flexDirection: "row", alignItems: "center", minHeight: 100, marginTop: 6 },
   heroTeam: { flex: 1, alignItems: "center", gap: 6 },
   heroTeamName: { color: T.color.text, fontSize: 11, fontWeight: "800", textAlign: "center" },
   heroScoreWrap: { width: 88, alignItems: "center" },
-  heroScore: { color: T.color.text, fontSize: 25, fontWeight: "900" },
+  heroScore: { color: T.color.text, fontSize: 24, fontWeight: "900" },
   heroStatus: { color: T.color.muted, fontSize: 8.5, fontWeight: "900", marginTop: 4 },
+  matchCenterPreviewBanner: {
+    borderRadius: T.radius.md,
+    backgroundColor: T.color.surface,
+    borderWidth: 1,
+    borderColor: T.color.border,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    marginBottom: 12,
+  },
+  matchCenterPreviewIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: T.color.redSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  matchCenterPreviewTitle: { color: T.color.text, fontSize: 11.5, fontWeight: "800" },
+  matchCenterPreviewSub: { color: T.color.muted, fontSize: 8.5, lineHeight: 12, marginTop: 2 },
   dataSection: {
     borderRadius: T.radius.md,
     backgroundColor: T.color.surface,
@@ -1105,11 +1403,11 @@ const s = StyleSheet.create({
   infoLabel: { color: T.color.muted, fontSize: 7.5, fontWeight: "900" },
   infoValue: { color: T.color.secondary, fontSize: 9, lineHeight: 13, marginTop: 2 },
   noWrites: {
-    color: T.color.red,
+    color: T.color.muted,
     fontSize: 7.5,
     fontWeight: "900",
     borderWidth: 1,
-    borderColor: T.color.red,
+    borderColor: T.color.border,
     borderRadius: 5,
     padding: 4,
   },

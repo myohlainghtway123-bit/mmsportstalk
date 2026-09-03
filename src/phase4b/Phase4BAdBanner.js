@@ -14,10 +14,11 @@ function configuredUnitId() {
 export default function Phase4BAdBanner() {
   const [failed, setFailed] = useState(false);
   const configured = configuredUnitId();
+  const effectiveId = ENVIRONMENT === "production" ? configured : (configured || "test");
 
   // Never let missing advertising configuration block Scores, live data, or
   // navigation at runtime. The release gate separately proves production IDs.
-  if (!configured || failed) return null;
+  if (!effectiveId || failed) return null;
 
   let ads;
   try {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   createTipPurchase,
@@ -271,6 +271,17 @@ export default function Phase4BReadOnlyHub() {
     };
   }, [attempt]);
 
+  useEffect(() => {
+    if (subTab !== "tips") {
+      const handleHardwareBack = () => {
+        setSubTab("tips");
+        return true;
+      };
+      const sub = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
+      return () => sub.remove();
+    }
+  }, [subTab]);
+
   if (state.loading) {
     return (
       <View style={s.loading}>
@@ -290,12 +301,12 @@ export default function Phase4BReadOnlyHub() {
         </Text>
       </View>
 
-      {/* Internal Navigation: Tips | Tipsters | Leaderboard */}
+      {/* Internal Navigation: Tips | Tipsters | Tipster Leaderboard */}
       <View style={s.segmentedNav} accessibilityRole="tablist">
         {[
           { id: "tips", label: "Tips", icon: "diamond-outline" },
           { id: "tipsters", label: "Tipsters", icon: "people-outline" },
-          { id: "leaderboard", label: "Leaderboard", icon: "trophy-outline" },
+          { id: "leaderboard", label: "Tipster Leaderboard", icon: "trophy-outline" },
         ].map((tab) => {
           const active = subTab === tab.id;
           return (
@@ -343,12 +354,12 @@ export default function Phase4BReadOnlyHub() {
         />
       ) : null}
 
-      {/* SUB-TAB 3: LEADERBOARD */}
+      {/* SUB-TAB 3: TIPSTER LEADERBOARD */}
       {subTab === "leaderboard" ? (
         <>
           <DataList
             title="Tipster Leaderboard"
-            eyebrow="TIPSTER RANKINGS"
+            eyebrow="TIPSTER RANKINGS · TIPS"
             data={state.tipsterLeaderboard}
             empty="No Tipster leaderboard rows are available."
           />

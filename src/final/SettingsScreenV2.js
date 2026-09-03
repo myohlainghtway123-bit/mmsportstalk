@@ -262,6 +262,7 @@ export default function SettingsScreenV2({
   goBack,
   openNotifications,
   openAccount,
+  openProfile,
   language = "my",
   setLanguage,
 }) {
@@ -408,7 +409,7 @@ export default function SettingsScreenV2({
                   ? "Favorites နှင့် Tips ဒေတာများ သိမ်းဆည်းရန်"
                   : "Sync favorites and tip entitlements across devices"
             }
-            onPress={openAccount}
+            onPress={openProfile || openAccount}
             tone={colors.red}
             colors={colors}
           />
