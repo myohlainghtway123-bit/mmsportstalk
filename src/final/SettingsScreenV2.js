@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,18 +20,18 @@ import {
   deleteAccount,
   getAuthStatus,
   logout,
-  MST_SITE_URL,
   submitSupportReport,
 } from "../services/accountApi";
 import { useTheme } from "../theme/ThemeContext";
 import PolicyScreen from "./PolicyScreens";
-import { handleRateNow } from "../services/appRatingService";
+import { MST_LEGAL_URLS, MST_OFFICIAL_SOCIALS } from "../config/mstSocialAndLegalConfig";
+import { showPrivacyOptionsForm } from "../services/adConsentService";
+import ScreenHeader from "../components/ScreenHeader";
 
 const SUPPORT_CATEGORIES = [
   ["score_incorrect", "Live score incorrect", "တိုက်ရိုက်ရလဒ်မှားယွင်းနေသည်"],
   ["match_data", "Match data incorrect", "ပွဲအချက်အလက်မှားယွင်းနေသည်"],
   ["account_auth", "Login / Account", "အကောင့်ဝင်ခြင်း / အကောင့်ပြဿနာ"],
-  ["prediction", "Prediction", "ခန့်မှန်းချက်"],
   ["tips", "Tips / Marketplace", "Tips / ဝယ်ယူမှု"],
   ["payment", "Payment / Credits", "ငွေပေးချေမှု / Credits"],
   ["notification", "Notification", "အသိပေးချက်"],
@@ -39,26 +39,37 @@ const SUPPORT_CATEGORIES = [
   ["other", "Other issue", "အခြားပြဿနာ"],
 ];
 
-function Header({ goBack, colors }) {
-  return (
-    <View style={[s.header, { borderBottomColor: colors.border2, backgroundColor: colors.bg }]}>
-      <Pressable hitSlop={10} onPress={goBack}>
-        <Ionicons name="chevron-back" size={27} color={colors.text} />
-      </Pressable>
-      <View style={s.headerCopy}>
-        <Text style={[s.title, { color: colors.text }]}>Settings</Text>
-        <Text style={[s.subtitle, { color: colors.muted }]}>MST Score Preferences & Support</Text>
-      </View>
-      <View style={{ width: 27 }} />
-    </View>
-  );
-}
+const FALLBACK_COLORS = {
+  bg: "#080A0C",
+  card: "#101417",
+  card2: "#171C20",
+  border: "#293036",
+  border2: "#1D2226",
+  text: "#FFFFFF",
+  text2: "#D4D8DB",
+  muted: "#929AA0",
+  red: "#F3262D",
+  redSoft: "rgba(243,38,45,0.14)",
+  green: "#48C78E",
+  amber: "#F4C84D",
+};
 
 function SectionTitle({ title, colors }) {
-  return <Text style={[s.section, { color: colors.text2 }]}>{title}</Text>;
+  return <Text style={[s.section, { color: colors.red }]}>{title}</Text>;
 }
 
-function Row({ icon, title, subtitle, onPress, tone, rightElement, colors, border = true }) {
+function Row({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  tone,
+  rightElement,
+  colors,
+  border = true,
+  external = false,
+  accessibilityLabel,
+}) {
   const content = (
     <>
       <View style={[s.icon, { backgroundColor: colors.card2 }]}>
@@ -76,15 +87,27 @@ function Row({ icon, title, subtitle, onPress, tone, rightElement, colors, borde
       </View>
       {rightElement ? (
         rightElement
+      ) : external ? (
+        <Ionicons name="open-outline" size={17} color={colors.muted} />
       ) : onPress ? (
         <Ionicons name="chevron-forward" size={18} color={colors.muted} />
       ) : null}
     </>
   );
 
-  const style = [s.row, border && { borderBottomWidth: 1, borderBottomColor: colors.border2 }];
+  const style = [
+    s.row,
+    border && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  ];
+
   return onPress ? (
-    <Pressable style={style} onPress={onPress} android_ripple={{ color: "rgba(255,255,255,0.05)" }}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      style={style}
+      onPress={onPress}
+      android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+    >
       {content}
     </Pressable>
   ) : (
@@ -135,7 +158,7 @@ function SupportModal({ visible, onClose, colors, language }) {
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.modalOverlay}>
-        <View style={[s.modalCard, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
+        <View style={[s.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={s.modalHeader}>
             <Text style={[s.modalTitle, { color: colors.text }]}>
               {my ? "ပြဿနာတိုင်ကြားရန်" : "Report a Problem / Support"}
@@ -156,7 +179,7 @@ function SupportModal({ visible, onClose, colors, language }) {
                     key={key}
                     style={[
                       s.categoryChip,
-                      { backgroundColor: colors.card2, borderColor: colors.border2 },
+                      { backgroundColor: colors.card2, borderColor: colors.border },
                       selected && { backgroundColor: colors.redSoft, borderColor: colors.red },
                     ]}
                     onPress={() => setCategory(key)}
@@ -242,7 +265,17 @@ export default function SettingsScreenV2({
   language = "my",
   setLanguage,
 }) {
-  const { colors, themeMode, setThemeMode } = useTheme();
+  let themeContext = null;
+  try {
+    themeContext = useTheme();
+  } catch {
+    // Render cleanly if ThemeProvider is not in tree
+  }
+
+  const colors = themeContext?.colors || FALLBACK_COLORS;
+  const themeMode = themeContext?.themeMode || "dark";
+  const setThemeMode = themeContext?.setThemeMode || (() => {});
+
   const my = language === "my";
   const [auth, setAuth] = useState(null);
   const [cacheStatus, setCacheStatus] = useState("");
@@ -263,7 +296,7 @@ export default function SettingsScreenV2({
     loadAuth();
   }, [loadAuth]);
 
-  const version = Constants?.expoConfig?.version || "1.5.1";
+  const version = Constants?.expoConfig?.version || "1.5.2";
   const build =
     Constants?.expoConfig?.android?.versionCode ??
     Constants?.expoConfig?.ios?.buildNumber ??
@@ -279,12 +312,45 @@ export default function SettingsScreenV2({
     setTimeout(() => setCacheStatus(""), 2500);
   };
 
+  const handleOpenLink = async (url, label) => {
+    if (!url) {
+      Alert.alert(
+        label || "Myanmar Sports Talk",
+        my
+          ? `တရားဝင် ${label} link သည် launch အချိန်တွင် ရရှိပါမည်။`
+          : `Official ${label} channel will be configured upon production release.`
+      );
+      return;
+    }
+    const supported = await Linking.canOpenURL(url).catch(() => false);
+    if (supported) {
+      await Linking.openURL(url).catch(() => {});
+    } else {
+      Alert.alert("Link unavailable", `Could not open ${url}`);
+    }
+  };
+
+  const handlePrivacyAdChoices = async () => {
+    const consentResult = await showPrivacyOptionsForm();
+    if (consentResult.shown) {
+      // User reviewed or changed their consent choices
+      return;
+    }
+
+    Alert.alert(
+      my ? "ကြော်ငြာနှင့် ကိုယ်ရေးကိုယ်တာ ရွေးချယ်မှု" : "Privacy & Ad Choices",
+      my
+        ? "MST Scores သည် ဒေသန္တရဥပဒေများနှင့်အညီ တရားဝင် Google Mobile Ads UMP စနစ်ကို အသုံးပြုထားသည်။ သင့်ဒေသအတွက် ရွေးချယ်ခွင့်ဖောင် မလိုအပ်ပါက non-personalized ကြော်ငြာများကိုသာ ပြသပါသည်။"
+        : consentResult.message || "Google UMP privacy choices form is active for applicable jurisdictions. Non-personalized ads are shown by default where consent is not required."
+    );
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       my ? "အကောင့်အပြီးတိုင် ဖျက်မည်လား?" : "Delete MST Account?",
       my
-        ? "အကောင့်ဖျက်လိုက်ပါက သင်၏ Favorites၊ Predictions၊ Tips ဒေတာများအားလုံး အပြီးတိုင် ဖျက်သိမ်းသွားမည်ဖြစ်သည်။"
-        : "This will permanently erase your profile, favorites, prediction history, and notification data. This action cannot be undone.",
+        ? "အကောင့်ဖျက်လိုက်ပါက သင်၏ Favorites၊ ပရိုဖိုင်၊ Tips နှင့် အသိပေးချက်ဒေတာများအားလုံး အပြီးတိုင် ဖျက်သိမ်းသွားမည်ဖြစ်သည်။ ဤလုပ်ဆောင်ချက်ကို ပြန်လည်ပြင်ဆင်၍ မရပါ။"
+        : "This will permanently erase your profile, favorites, tip history, and notification data. This action cannot be undone.",
       [
         { text: my ? "မလုပ်တော့ပါ" : "Cancel", style: "cancel" },
         {
@@ -297,7 +363,9 @@ export default function SettingsScreenV2({
               await loadAuth();
               Alert.alert(
                 my ? "အကောင့်ဖျက်ပြီးပါပြီ" : "Account Deleted",
-                my ? "သင့်အကောင့်ကို အောင်မြင်စွာ ဖျက်သိမ်းလိုက်ပါပြီ။" : "Your account data has been removed.",
+                my
+                  ? "သင့်အကောင့်ကို အောင်မြင်စွာ ဖျက်သိမ်းလိုက်ပါပြီ။"
+                  : "Your account data has been permanently removed."
               );
             } catch (e) {
               Alert.alert(my ? "အမှား" : "Error", e?.message || "Failed to delete account.");
@@ -306,44 +374,92 @@ export default function SettingsScreenV2({
             }
           },
         },
-      ],
+      ]
     );
   };
 
   return (
     <View style={[s.screen, { backgroundColor: colors.bg }]}>
-      <Header goBack={goBack} colors={colors} />
+      <ScreenHeader
+        title={my ? "ဆက်တင်များ" : "Settings"}
+        subtitle="PREFERENCES & LEGAL"
+        onBack={goBack}
+      />
+
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-        {/* ACCOUNT */}
-        <SectionTitle title={my ? "အကောင့် (ACCOUNT)" : "ACCOUNT & PROFILE"} colors={colors} />
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
+        {/* SECTION 1: ACCOUNT */}
+        <SectionTitle title={my ? "အကောင့် (ACCOUNT)" : "ACCOUNT"} colors={colors} />
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Row
             icon="person-circle-outline"
-            title={auth?.authenticated ? (auth.user?.displayName || auth.user?.email || "MST User") : (my ? "MST အကောင့်ဝင်ရန်" : "Sign in to MST")}
-            subtitle={auth?.authenticated ? (my ? "အကောင့်ဝင်ထားသည် · စက်ပစ္စည်းအားလုံးတွင် ချိတ်ဆက်ထားသည်" : "Signed in · synced across web & mobile") : (my ? "Favorites နှင့် Predictions ဒေတာများ သိမ်းဆည်းရန်" : "Sync favorites, predictions and alerts")}
+            title={
+              auth?.authenticated
+                ? auth.user?.displayName || auth.user?.email || "MST User"
+                : my
+                  ? "MST အကောင့်ဝင်ရန်"
+                  : "Sign in to MST"
+            }
+            subtitle={
+              auth?.authenticated
+                ? my
+                  ? "အကောင့်ဝင်ထားသည် · စက်ပစ္စည်းအားလုံးတွင် ချိတ်ဆက်ထားသည်"
+                  : "Signed in · synced across web & mobile"
+                : my
+                  ? "Favorites နှင့် Tips ဒေတာများ သိမ်းဆည်းရန်"
+                  : "Sync favorites and tip entitlements across devices"
+            }
             onPress={openAccount}
             tone={colors.red}
             colors={colors}
           />
           {auth?.authenticated ? (
-            <Row
-              icon="log-out-outline"
-              title={my ? "အကောင့်မှ ထွက်မည်" : "Sign Out"}
-              subtitle={my ? "လက်ရှိစက်ပစ္စည်းမှ အကောင့်ထွက်ရန်" : "Sign out of this device"}
-              onPress={async () => {
-                await logout();
-                await loadAuth();
-              }}
-              tone={colors.muted}
-              colors={colors}
-              border={false}
-            />
+            <>
+              <Row
+                icon="log-out-outline"
+                title={my ? "အကောင့်မှ ထွက်မည်" : "Log out"}
+                subtitle={my ? "လက်ရှိစက်ပစ္စည်းမှ အကောင့်ထွက်ရန်" : "Sign out of this device"}
+                onPress={async () => {
+                  await logout();
+                  await loadAuth();
+                }}
+                tone={colors.muted}
+                colors={colors}
+              />
+              <Row
+                icon="trash-outline"
+                title={my ? "အကောင့်အပြီးတိုင် ဖျက်သိမ်းရန်" : "Delete Account"}
+                subtitle={
+                  my
+                    ? "သင်၏ အကောင့်ဒေတာအားလုံးကို အပြီးတိုင် ဖျက်မည်"
+                    : "Permanently erase account profile and all user data"
+                }
+                onPress={handleDeleteAccount}
+                tone={colors.red}
+                colors={colors}
+                border={false}
+              />
+            </>
           ) : null}
         </View>
 
-        {/* APPEARANCE */}
-        <SectionTitle title={my ? "အသွင်အပြင် (APPEARANCE)" : "APPEARANCE & THEME"} colors={colors} />
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
+        {/* SECTION 2: PREFERENCES */}
+        <SectionTitle title={my ? "ရွေးချယ်မှုများ (PREFERENCES)" : "PREFERENCES"} colors={colors} />
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {openNotifications ? (
+            <Row
+              icon="notifications-outline"
+              title={my ? "အသိပေးချက် ဆက်တင်များ" : "Notifications"}
+              subtitle={
+                my
+                  ? "ပွဲစဉ်၊ သတင်းနှင့် အကြိုက်ဆုံး အသိပေးချက်များ"
+                  : "Match kickoff, goals, articles and favorites"
+              }
+              onPress={openNotifications}
+              colors={colors}
+            />
+          ) : null}
+
+          {/* Theme Switcher */}
           <View style={s.themeRow}>
             {[
               ["dark", my ? "Dark မုဒ်" : "Dark", "moon"],
@@ -356,14 +472,14 @@ export default function SettingsScreenV2({
                   key={mode}
                   style={[
                     s.themeButton,
-                    { backgroundColor: colors.card2, borderColor: colors.border2 },
+                    { backgroundColor: colors.card2, borderColor: colors.border },
                     selected && { backgroundColor: colors.redSoft, borderColor: colors.red },
                   ]}
                   onPress={() => setThemeMode(mode)}
                 >
                   <Ionicons
                     name={icon}
-                    size={17}
+                    size={16}
                     color={selected ? colors.red : colors.muted}
                   />
                   <Text
@@ -379,74 +495,157 @@ export default function SettingsScreenV2({
               );
             })}
           </View>
-        </View>
 
-        {/* LANGUAGE */}
-        {setLanguage ? (
-          <>
-            <SectionTitle title={my ? "ဘာသာစကား (LANGUAGE)" : "APP LANGUAGE"} colors={colors} />
-            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
-              <View style={s.langRow}>
-                <Pressable
+          {/* Language Toggle */}
+          {setLanguage ? (
+            <View style={[s.langRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+              <Pressable
+                style={[
+                  s.langOption,
+                  { backgroundColor: colors.card2, borderColor: colors.border },
+                  my && { backgroundColor: colors.redSoft, borderColor: colors.red },
+                ]}
+                onPress={() => setLanguage("my")}
+              >
+                <Text
                   style={[
-                    s.langOption,
-                    { backgroundColor: colors.card2, borderColor: colors.border2 },
-                    my && { backgroundColor: colors.redSoft, borderColor: colors.red },
+                    s.langOptionText,
+                    { color: colors.muted },
+                    my && { color: colors.red, fontWeight: "900" },
                   ]}
-                  onPress={() => setLanguage("my")}
                 >
-                  <Text style={[s.langOptionText, { color: colors.muted }, my && { color: colors.red, fontWeight: "900" }]}>
-                    မြန်မာ (Burmese)
-                  </Text>
-                  {my ? <Ionicons name="checkmark-circle" size={17} color={colors.red} /> : null}
-                </Pressable>
-                <Pressable
+                  မြန်မာ (Burmese)
+                </Text>
+                {my ? <Ionicons name="checkmark-circle" size={17} color={colors.red} /> : null}
+              </Pressable>
+              <Pressable
+                style={[
+                  s.langOption,
+                  { backgroundColor: colors.card2, borderColor: colors.border },
+                  !my && { backgroundColor: colors.redSoft, borderColor: colors.red },
+                ]}
+                onPress={() => setLanguage("en")}
+              >
+                <Text
                   style={[
-                    s.langOption,
-                    { backgroundColor: colors.card2, borderColor: colors.border2 },
-                    !my && { backgroundColor: colors.redSoft, borderColor: colors.red },
+                    s.langOptionText,
+                    { color: colors.muted },
+                    !my && { color: colors.red, fontWeight: "900" },
                   ]}
-                  onPress={() => setLanguage("en")}
                 >
-                  <Text style={[s.langOptionText, { color: colors.muted }, !my && { color: colors.red, fontWeight: "900" }]}>
-                    English (EN)
-                  </Text>
-                  {!my ? <Ionicons name="checkmark-circle" size={17} color={colors.red} /> : null}
-                </Pressable>
-              </View>
+                  English (EN)
+                </Text>
+                {!my ? <Ionicons name="checkmark-circle" size={17} color={colors.red} /> : null}
+              </Pressable>
             </View>
-          </>
-        ) : null}
+          ) : null}
 
-        {/* NOTIFICATIONS & PREFERENCES */}
-        <SectionTitle title={my ? "အသိပေးချက်များနှင့် ဒေတာ (NOTIFICATIONS)" : "NOTIFICATIONS & DATA"} colors={colors} />
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
-          <Row
-            icon="notifications-outline"
-            title={my ? "အသိပေးချက် ဆက်တင်များ" : "Notification Inbox & Alerts"}
-            subtitle={my ? "ပွဲစဉ်၊ သတင်းနှင့် အကြိုက်ဆုံး အသိပေးချက်များ" : "Match kickoff, goals, articles and favorites"}
-            onPress={openNotifications}
-            tone={colors.text2}
-            colors={colors}
-          />
           <Row
             icon="refresh-outline"
             title={my ? "ယာယီ Cache ဖျက်ရန်" : "Clear App Cache"}
-            subtitle={cacheStatus || (my ? "သိမ်းဆည်းထားသော အမြန်ဒေတာများကို ရှင်းလင်းမည်" : "Purge temporary cached football fixtures and news")}
+            subtitle={
+              cacheStatus ||
+              (my
+                ? "သိမ်းဆည်းထားသော အမြန်ဒေတာများကို ရှင်းလင်းမည်"
+                : "Purge temporary cached football fixtures and news")
+            }
             onPress={handleClearCache}
-            tone={colors.text2}
             colors={colors}
             border={false}
           />
         </View>
 
-        {/* SUPPORT & REPORT */}
-        <SectionTitle title={my ? "အကူအညီနှင့် တိုင်ကြားချက် (SUPPORT)" : "SUPPORT & FEEDBACK"} colors={colors} />
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
+        {/* SECTION 3: FOLLOW MYANMAR SPORTS TALK */}
+        <SectionTitle
+          title={my ? "MST ကို FOLLOW လုပ်ရန် (FOLLOW MST)" : "FOLLOW MYANMAR SPORTS TALK"}
+          colors={colors}
+        />
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {MST_OFFICIAL_SOCIALS.map((platform, index) => (
+            <Row
+              key={platform.id}
+              icon={platform.icon}
+              title={platform.name}
+              subtitle={platform.subtitle}
+              tone={platform.color}
+              external
+              onPress={() => handleOpenLink(platform.url, platform.name)}
+              colors={colors}
+              border={index < MST_OFFICIAL_SOCIALS.length - 1}
+            />
+          ))}
+        </View>
+
+        {/* SECTION 4: PRIVACY & LEGAL */}
+        <SectionTitle
+          title={my ? "မူဝါဒနှင့် ဥပဒေရေးရာ (PRIVACY & LEGAL)" : "PRIVACY & LEGAL"}
+          colors={colors}
+        />
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Row
+            icon="shield-checkmark-outline"
+            title={my ? "ကိုယ်ရေးအချက်အလက် မူဝါဒ" : "Privacy Policy"}
+            subtitle={
+              my
+                ? "ဒေတာလုံခြုံရေးနှင့် သိမ်းဆည်းမှု စည်းမျဉ်း"
+                : "Data collection, privacy & user rights"
+            }
+            onPress={() => setSelectedPolicy("privacy")}
+            colors={colors}
+          />
+          <Row
+            icon="document-text-outline"
+            title={my ? "ဝန်ဆောင်မှု စည်းမျဉ်းများ" : "Terms of Use"}
+            subtitle={
+              my
+                ? "MST Scores အသုံးပြုမှု အခြေခံစည်းမျဉ်းများ"
+                : "Terms of service and acceptable use"
+            }
+            onPress={() => setSelectedPolicy("terms")}
+            colors={colors}
+          />
+          <Row
+            icon="options-outline"
+            title={my ? "ကြော်ငြာနှင့် ရွေးချယ်ခွင့်" : "Privacy / Ad Choices"}
+            subtitle={
+              my
+                ? "Google Mobile Ads UMP consent ရွေးချယ်ခွင့်"
+                : "Manage advertising consent and data preferences"
+            }
+            onPress={handlePrivacyAdChoices}
+            colors={colors}
+          />
+          <Row
+            icon="trash-bin-outline"
+            title={my ? "အကောင့်နှင့် ဒေတာဖျက်သိမ်းမှု အချက်အလက်" : "Account / Data Deletion information"}
+            subtitle={
+              my
+                ? "GDPR ဒေတာဖျက်ပိုင်ခွင့်နှင့် အပြီးတိုင်ဖျက်သိမ်းပုံ"
+                : "How to request permanent user data erasure"
+            }
+            onPress={() => setSelectedPolicy("privacy")}
+            colors={colors}
+            border={false}
+          />
+        </View>
+
+        {/* SECTION 5: ABOUT */}
+        <SectionTitle title={my ? "အက်ပ် အချက်အလက် (ABOUT)" : "ABOUT"} colors={colors} />
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Row
+            icon="football-outline"
+            title="Myanmar Sports Talk / MST Scores"
+            subtitle={`Version ${version} (Build ${build}) · Android & iOS`}
+            colors={colors}
+          />
           <Row
             icon="chatbubble-ellipses-outline"
-            title={my ? "ပြဿနာတိုင်ကြားရန် / အကြံပြုချက်" : "Report a Problem / Support"}
-            subtitle={my ? "ရလဒ်မှားယွင်းမှု၊ အကောင့်၊ tips ပြဿနာများ တင်ပြရန်" : "Incorrect scores, login, payment, or abuse report"}
+            title={my ? "ပြဿနာတိုင်ကြားရန် / အကြံပြုချက်" : "Support / Contact Us"}
+            subtitle={
+              my
+                ? "ရလဒ်မှားယွင်းမှု၊ အကောင့်၊ tips ပြဿနာများ တင်ပြရန်"
+                : "Report scores, login, or general feedback"
+            }
             onPress={() => setSupportVisible(true)}
             tone={colors.red}
             colors={colors}
@@ -455,98 +654,15 @@ export default function SettingsScreenV2({
             icon="globe-outline"
             title="myanmarsportstalk.com"
             subtitle={my ? "တရားဝင် ဝဘ်ဆိုက်သို့ သွားရန်" : "Visit the official MST website"}
-            onPress={() => Linking.openURL(MST_SITE_URL).catch(() => {})}
-            tone={colors.text2}
-            colors={colors}
-            border={false}
-          />
-        </View>
-
-        {/* LEGAL & POLICIES (NATIVE IN-APP) */}
-        <SectionTitle title={my ? "မူဝါဒနှင့် စည်းမျဉ်းများ (POLICIES & RULES)" : "POLICIES & GUIDELINES"} colors={colors} />
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
-          <Row
-            icon="shield-checkmark-outline"
-            title={my ? "ကိုယ်ရေးအချက်အလက် မူဝါဒ" : "Privacy Policy"}
-            subtitle={my ? "ဒေတာလုံခြုံရေးနှင့် သိမ်းဆည်းမှု စည်းမျဉ်း" : "Data collection, privacy & deletion rights"}
-            onPress={() => setSelectedPolicy("privacy")}
-            colors={colors}
-          />
-          <Row
-            icon="document-text-outline"
-            title={my ? "ဝန်ဆောင်မှု စည်းမျဉ်းများ" : "Terms of Service"}
-            subtitle={my ? "MST Score အသုံးပြုမှု အခြေခံစည်းမျဉ်းများ" : "Official terms & user agreements"}
-            onPress={() => setSelectedPolicy("terms")}
-            colors={colors}
-          />
-          <Row
-            icon="chatbubbles-outline"
-            title={my ? "ကွန်မြူနတီနှင့် Live Chat စည်းမျဉ်း" : "Community & Chat Rules"}
-            subtitle={my ? "Live chat ဆွေးနွေးမှုနှင့် report စည်းကမ်းချက်" : "Chat guidelines & anti-abuse moderation"}
-            onPress={() => setSelectedPolicy("community")}
-            colors={colors}
-          />
-          <Row
-            icon="trophy-outline"
-            title={my ? "ခန့်မှန်းချက်နှင့် အမှတ်ပေးစည်းမျဉ်း" : "Prediction Competition Rules"}
-            subtitle={my ? "၃ မှတ် / ၁ မှတ် အမှတ်ပေးပုံစံနှင့် Kickoff lock" : "Scoring matrix & leaderboard settlement rules"}
-            onPress={() => setSelectedPolicy("predictions")}
-            colors={colors}
-          />
-          <Row
-            icon="diamond-outline"
-            title={my ? "Tipster 7/10 Qualification စည်းမျဉ်း" : "Tipster Qualification & Marketplace"}
-            subtitle={my ? "၁၀ ပွဲ ၇ ပွဲနိုင် gate နှင့် transparency မူဝါဒ" : "Private qualification gate & tipster standards"}
-            onPress={() => setSelectedPolicy("tipster")}
-            colors={colors}
-          />
-          <Row
-            icon="wallet-outline"
-            title={my ? "MST Credits & Wallet မူဝါဒ" : "Credits, Unlocks & Wallet Policy"}
-            subtitle={my ? "Credits အသုံးပြုပုံနှင့် ငွေပေးချေမှု လုံခြုံရေး" : "Instant tip unlocking & refund policies"}
-            onPress={() => setSelectedPolicy("credits")}
-            colors={colors}
-          />
-          <Row
-            icon="star-outline"
-            title={my ? "MST Score ကို Rate ပေးရန်" : "Rate MST Score"}
-            subtitle={my ? "ကြယ် ၅ ပွင့် အဆင့်သတ်မှတ်ချက် ပေးရန်" : "Leave a 5-star review on Google Play"}
-            onPress={() => handleRateNow()}
-            colors={colors}
-          />
-          {auth?.authenticated ? (
-            <Row
-              icon="trash-outline"
-              title={my ? "အကောင့်အပြီးတိုင် ဖျက်သိမ်းရန်" : "Delete MST Account"}
-              subtitle={my ? "သင်၏ အကောင့်ဒေတာအားလုံးကို အပြီးတိုင် ဖျက်မည်" : "Permanently erase account profile and all user data"}
-              onPress={handleDeleteAccount}
-              tone={colors.red}
-              colors={colors}
-              border={false}
-            />
-          ) : null}
-        </View>
-
-        {/* APP INFO */}
-        <SectionTitle title={my ? "အက်ပ် အချက်အလက် (APP INFO)" : "APP INFO"} colors={colors} />
-        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border2 }]}>
-          <Row
-            icon="phone-portrait-outline"
-            title="MST Score"
-            subtitle={`Version ${version} (Build ${build}) · Android & iOS`}
-            colors={colors}
-          />
-          <Row
-            icon="server-outline"
-            title={my ? "ဒေတာလုံခြုံရေး" : "Production Architecture"}
-            subtitle="Cloudflare edge → cached football/news/account services"
+            external
+            onPress={() => handleOpenLink(MST_LEGAL_URLS.website, "Website")}
             colors={colors}
             border={false}
           />
         </View>
 
         <Text style={[s.footer, { color: colors.muted }]}>
-          Myanmar Sports Talk · MST Score v{version}
+          Myanmar Sports Talk · MST Scores v{version}
         </Text>
       </ScrollView>
 
@@ -557,7 +673,11 @@ export default function SettingsScreenV2({
         language={language}
       />
 
-      <Modal visible={Boolean(selectedPolicy)} animationType="slide" onRequestClose={() => setSelectedPolicy(null)}>
+      <Modal
+        visible={Boolean(selectedPolicy)}
+        animationType="slide"
+        onRequestClose={() => setSelectedPolicy(null)}
+      >
         <PolicyScreen
           policyId={selectedPolicy}
           onBack={() => setSelectedPolicy(null)}
@@ -570,26 +690,23 @@ export default function SettingsScreenV2({
 
 const s = StyleSheet.create({
   screen: { flex: 1 },
-  header: {
-    minHeight: 64,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
+  content: { padding: 14, paddingBottom: 60 },
+  section: {
+    fontSize: 9.5,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    marginTop: 16,
+    marginBottom: 8,
+    textTransform: "uppercase",
   },
-  headerCopy: { flex: 1, paddingHorizontal: 11 },
-  title: { fontSize: 16, fontWeight: "900" },
-  subtitle: { fontSize: 9.2, marginTop: 2 },
-  content: { padding: 14, paddingBottom: 45 },
-  section: { fontSize: 10.5, fontWeight: "900", marginTop: 15, marginBottom: 8 },
   card: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 13,
     overflow: "hidden",
     marginBottom: 6,
   },
   row: {
-    minHeight: 64,
+    minHeight: 58,
     paddingHorizontal: 13,
     paddingVertical: 10,
     flexDirection: "row",
@@ -604,7 +721,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   rowTitle: { fontSize: 12.5, fontWeight: "800" },
-  rowSub: { fontSize: 9.3, marginTop: 3, lineHeight: 13 },
+  rowSub: { fontSize: 9.3, marginTop: 2, lineHeight: 13 },
   themeRow: {
     flexDirection: "row",
     gap: 8,
@@ -612,7 +729,7 @@ const s = StyleSheet.create({
   },
   themeButton: {
     flex: 1,
-    height: 44,
+    height: 40,
     borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
@@ -620,7 +737,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  themeButtonText: { fontSize: 10.5, fontWeight: "700" },
+  themeButtonText: { fontSize: 10, fontWeight: "700" },
   langRow: {
     flexDirection: "row",
     gap: 8,
@@ -628,7 +745,7 @@ const s = StyleSheet.create({
   },
   langOption: {
     flex: 1,
-    height: 44,
+    height: 40,
     borderRadius: 9,
     borderWidth: 1,
     flexDirection: "row",
@@ -637,11 +754,11 @@ const s = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 8,
   },
-  langOptionText: { fontSize: 10.5, fontWeight: "700" },
-  footer: { fontSize: 9, textAlign: "center", marginTop: 18 },
+  langOptionText: { fontSize: 10, fontWeight: "700" },
+  footer: { fontSize: 9, textAlign: "center", marginTop: 20, marginBottom: 12 },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.72)",
+    backgroundColor: "rgba(0,0,0,0.78)",
     justifyContent: "center",
     padding: 16,
   },

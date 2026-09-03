@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
@@ -12,11 +12,12 @@ function configuredUnitId() {
 }
 
 export default function Phase4BAdBanner() {
+  const [failed, setFailed] = useState(false);
   const configured = configuredUnitId();
 
   // Never let missing advertising configuration block Scores, live data, or
   // navigation at runtime. The release gate separately proves production IDs.
-  if (!configured) return null;
+  if (!configured || failed) return null;
 
   let ads;
   try {
@@ -37,6 +38,7 @@ export default function Phase4BAdBanner() {
         unitId={unitId}
         size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
         requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        onAdFailedToLoad={() => setFailed(true)}
       />
     </View>
   );
@@ -47,7 +49,7 @@ const s = StyleSheet.create({
     minHeight: 50,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: 8,
+    marginBottom: 16,
   },
 });
