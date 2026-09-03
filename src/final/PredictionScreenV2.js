@@ -19,8 +19,8 @@ import {
   normalizeLeaderboard,
   normalizePredictionPayload,
   PREDICTION_SCORING,
-  savePredictionScore,
 } from "../services/accountApi";
+import { savePredictionScore } from "../services/predictionApi";
 import {
   fetchFastFootballMatches,
   peekFastFootballMatches,

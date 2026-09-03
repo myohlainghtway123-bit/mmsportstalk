@@ -3,7 +3,8 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 import { Ionicons } from "@expo/vector-icons";
 import { extractArray, fetchMatchBundle, flattenDisplayRows, isLiveMatch } from "../services/footballApi";
 import { fetchPreferredOdds } from "../services/oddsApi";
-import { getAccountPredictions, getAuthStatus, normalizePredictionPayload, savePredictionScore } from "../services/accountApi";
+import { getAccountPredictions, getAuthStatus, normalizePredictionPayload } from "../services/accountApi";
+import { savePredictionScore } from "../services/predictionApi";
 
 const C={bg:"#07090B",panel:"#0D1013",card:"#111519",card2:"#151A1F",border:"#20262C",border2:"#181D22",red:"#F32735",redSoft:"rgba(243,39,53,.12)",text:"#F7F8F9",text2:"#D7DBDF",muted:"#858C93",muted2:"#5F666D",green:"#25C875",gold:"#F1C85B"};
 const TABS=["SUMMARY","STATS","LINEUPS","H2H","ODDS"];

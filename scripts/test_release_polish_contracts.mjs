@@ -17,8 +17,8 @@ assert.match(alpha, /compactDateContainer/, "Date container must use compact lay
 assert.match(alpha, /dateArrowBtn/, "Date selector must have prev/next arrow buttons");
 assert.match(alpha, /handlePrev/, "Date selector must support tapping prev date");
 assert.match(alpha, /handleNext/, "Date selector must support tapping next date");
-assert.match(alpha, /height:\s*38/, "Date selector container height must be 38px");
-assert.match(alpha, /width:\s*44,\s*height:\s*30/, "Date pills must have stable fixed dimensions (44x30)");
+assert.match(alpha, /height:\s*42/, "Date selector container height must be 42px");
+assert.match(alpha, /width:\s*48,\s*height:\s*34/, "Date pills must have stable fixed dimensions (48x34)");
 
 // 2. PRIMARY SWIPE NAVIGATION CONTRACT
 assert.match(alpha, /pagingEnabled/, "Horizontal pager must have pagingEnabled");

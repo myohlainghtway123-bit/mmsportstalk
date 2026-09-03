@@ -23,11 +23,11 @@ import {
   normalizeFavoritePayload,
   normalizeLeaderboard,
   normalizePredictionPayload,
-  savePrediction,
   setFavorite,
   startEmailLogin,
   verifyEmailLogin,
 } from "../services/accountApi";
+import { savePrediction } from "../services/predictionApi";
 import { fetchFootballMatches, isLiveMatch, offsetDateString } from "../services/footballApi";
 
 const C = {

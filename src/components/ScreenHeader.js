@@ -64,7 +64,7 @@ export default function ScreenHeader({
 
 const s = StyleSheet.create({
   header: {
-    height: 54,
+    height: 56,
     backgroundColor: C.bg,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
@@ -94,7 +94,7 @@ const s = StyleSheet.create({
   },
   brandMst: {
     color: C.red,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "900",
     letterSpacing: 1,
   },
@@ -105,13 +105,13 @@ const s = StyleSheet.create({
   },
   title: {
     color: C.text,
-    fontSize: 15.5,
+    fontSize: 17,
     fontWeight: "800",
     letterSpacing: 0.2,
   },
   subtitle: {
     color: C.red,
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.8,
     textTransform: "uppercase",

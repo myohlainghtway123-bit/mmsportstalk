@@ -69,7 +69,7 @@ function errorMessage(payload, fallback) {
   return payload.error?.message || (typeof payload.error === "string" ? payload.error : null) || payload.message || payload.detail || payload.reason || payload.errors?.[0]?.message || fallback;
 }
 
-async function api(path, { method = "GET", body, signal } = {}) {
+export async function api(path, { method = "GET", body, signal } = {}) {
   const token = await getSessionToken();
   const headers = {
     Accept: "application/json",
@@ -311,19 +311,6 @@ export async function deleteAvatar() {
   };
 }
 
-async function tryMutation(attempts) {
-  let lastError = null;
-  for (const attempt of attempts) {
-    try { return await api(attempt.path, attempt.options); }
-    catch (error) {
-      lastError = error;
-      if (!(error instanceof MstApiError) || error.status === 401 || error.status >= 500) throw error;
-      if (![400, 404, 405, 409, 422].includes(error.status)) throw error;
-    }
-  }
-  throw lastError || new MstApiError("MST API did not accept the request.");
-}
-
 function canonicalFavoriteKind(kind) {
   const value = String(kind || "").toLowerCase();
   if (value.startsWith("comp") || value.startsWith("league")) return "competition";
@@ -360,30 +347,6 @@ export async function setFavorite({ kind, id, name, imageUrl, logo, photo, count
       teamName: teamName || null,
     },
   });
-}
-
-function scoreNumber(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= 0 && n <= 20 ? n : null;
-}
-
-export async function savePredictionScore({ matchId, homeScore, awayScore }) {
-  const id = String(matchId || "").trim();
-  const home = scoreNumber(homeScore);
-  const away = scoreNumber(awayScore);
-  if (!/^\d{1,12}$/.test(id)) throw new MstApiError("Choose a valid match.");
-  if (home === null || away === null) throw new MstApiError("Enter a valid predicted score from 0 to 20.");
-  return api("/account/predictions", { method: "POST", body: { matchId: id, homeScore: home, awayScore: away } });
-}
-
-// Kept only for backwards compatibility with older screens. New prediction UI uses savePredictionScore.
-export async function savePrediction({ matchId, pick }) {
-  const id = String(matchId);
-  const choice = String(pick).toLowerCase();
-  return tryMutation([
-    { path: "/account/predictions", options: { method: "POST", body: { matchId: id, prediction: choice } } },
-    { path: "/account/predictions", options: { method: "POST", body: { fixtureId: id, prediction: choice } } },
-  ]);
 }
 
 function walkArrays(value, found = [], depth = 0) {
