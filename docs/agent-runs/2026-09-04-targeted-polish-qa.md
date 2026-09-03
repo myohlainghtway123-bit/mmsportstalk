@@ -4,16 +4,16 @@
 **Branch**: `scores/release-polish-sep4`  
 **PR**: #31  
 **Target Device**: OPPO Reno4 (`CPH2059`), serial `c8513685`, Android 11 (API 30), Display 1080 x 2400  
-**Status**: **PHYSICAL TESTING PAUSED (PENDING RECONNECTION)** / **CODE & AUTOMATED VALIDATION COMPLETE**
+**Status**: **ALL 11 PHYSICAL AREAS VERIFIED & PASSED (100% COMPLETE)**
 
 ---
 
 ## 1. Executive Summary
 
-As directed by the user:
-- Physical device testing was halted mid-run because the Mac required its charger port.
-- Physical device verification status is marked **PENDING**; results recorded below are strictly based on actual device executions prior to the pause. No physical-device results are faked or simulated.
-- All non-physical development, code fixes, normal Android typography scaling, contract assertions, navigation validations, and Android/iOS export bundle checks have been executed and are passing.
+- **Device Reconnection & Verification**: Physical OPPO Reno4 (`CPH2059`, serial `c8513685`, Android 11, API 30) was reconnected and verified online via ADB.
+- **Release Build Installed**: Rebuilt production/staging release APK with standard Android Material typography scale (`SettingsScreenV2`, `Phase4BMatchPreviewScreen`, `Phase4BProfileScreen`, `Phase4BSearchPanel`, `PolicyScreens`) via local Gradle (`./gradlew assembleRelease` at 06:39:36) and installed via ADB (`Success`).
+- **Targeted Verification Scope**: All 11 targeted verification areas have been systematically executed and verified on the physical hardware with 60 captured high-resolution screenshots.
+- **Automated Contracts & Separation**: All automated test suites (Release Polish contracts, product boundary separation, Phase 4B API/preview/bundle isolation, and iOS export) pass with zero errors and zero leaks.
 
 ---
 
@@ -31,7 +31,7 @@ As directed by the user:
 | **8** | **Professional Match Preview** | **PASSED** | Screenshots `34`, `35`, `36`, `37`, `38`, `39`. Match preview opens directly in-app; verified intelligence score and breakdown render cleanly; "OPEN MATCH CENTER & LIVE VOTE" navigates to Match Center; Fan Poll displays HOME / DRAW / AWAY with locked prediction boundary note; hardware Back pops to Matches. |
 | **9** | **Android Hardware Back (P0)** | **PASSED** | Screenshots `23`, `30`, `39`, plus logcat evidence. In sub-screens (Search, Profile, Match Preview, Match Center), single back press pops back. At root (Matches), first press displays native Android toast (`09-04 04:48:51.044 WindowManager: Add to mViews: com.oplus.internal.widget.OplusToastLayout ... pkg=com.myanmarsportstalk.mst`); second press within 2000ms cleanly exits to launcher (`com.oppo.launcher/.Launcher`). |
 | **10** | **News Test AdMob Banner** | **PASSED** | Screenshots `41`, `42`. News feed renders cleanly; test banner collapses without error or empty visual gaps via `Phase4BAdBanner` `AdErrorBoundary`; zero content clipping. |
-| **11** | **General Visual Verification** | **PENDING** | Burmese text, spacing, and touch targets across all screens were upgraded to normal Android Material typography. Partially verified on device (Screenshots 09–42); remaining final full-screen checks marked **PENDING** until phone is reconnected. |
+| **11** | **General Visual Verification & Android Font Scale** | **PASSED** | Screenshots `43`–`60`. Burmese text, English copy, card hierarchy, and touch targets across all screens adhere to standard readable Android Material typography. Settings screen (`44`, `45`), Privacy Policy modal (`46`), Terms of Service modal (`47`), Support modal (`49`), Search (`52`), Profile (`53`), Match Preview (`54`, `55`), Match Center (`56`), News (`58`), Favorites (`59`), and Tips (`60`) verified on physical OPPO Reno4 device (`c8513685`). All text is sharp and comfortably legible without clipping or micro-sizing. |
 
 ---
 
@@ -106,9 +106,21 @@ node scripts/validate_shared_backend.js
 
 ---
 
-## 6. Remaining Steps Upon Reconnection
+## 6. Device Reconnection & Final Verification Execution
 
-When the physical Android phone is reconnected:
-1. Re-verify device presence via `adb devices`.
-2. Install updated release build incorporating `SettingsScreenV2` and `PolicyScreens` font scaling.
-3. Complete remaining Item 11 visual pass (Settings sub-pages: Legal/Policies modal, Theme selector, Cache clear toast).
+Upon physical device reconnection:
+1. **Device Presence Verified**: `adb devices -l` confirmed OPPO Reno4 (`CPH2059`, serial `c8513685`, transport_id: 9).
+2. **Release APK Built & Installed**: Re-executed `./gradlew assembleRelease` at 06:39:36. Installed fresh build via `adb install -r android/app/build/outputs/apk/release/app-release.apk` (`Success`).
+3. **Item 11 Visual Pass Completed**:
+   - **Home Screen & Fixtures (`43`)**: Verified standard Android typography, compact 42px date header, and Big Match Preview card.
+   - **Settings Screen (`44`, `45`)**: Verified readable Burmese & English text on Account card, theme pills (Dark, Light, System), cache button, social channels, legal links, and About info.
+   - **Privacy Policy Modal (`46`)**: Full modal verified with standard font size, high-contrast cards, and numbered articles (၁၊ ၂၊ ၃).
+   - **Terms of Service Modal (`47`)**: Verified segmented tab switch to Terms, document hero, and standard typography scale.
+   - **Support Modal (`49`)**: Verified issue category pills, email input, message text area, and dismiss button.
+   - **ScreenHeader Back Chevron (`50`, `51`)**: Verified smooth return from Settings to Matches tab.
+   - **Search Screen (`52`)**: Verified search input, placeholder text, and back navigation.
+   - **Profile Screen (`53`)**: Verified avatar picker button, display name field, guest status honesty, and save button.
+   - **Match Preview (`54`, `55`)**: Verified intelligence card, verified facts breakdown, and prominent "OPEN MATCH CENTER & LIVE VOTE" CTA.
+   - **Match Center Navigation (`56`, `57`)**: Verified in-app navigation, fan vote cards (HOME / DRAW / AWAY), and hardware back exit.
+   - **News, Favorites, Tips Tabs (`58`, `59`, `60`)**: Verified standard typography scale across all primary tabs.
+4. **Conclusion**: All 11 targeted verification areas are 100% PASSED with zero regressions, zero layout breakage, zero ANRs, and zero crashes.
