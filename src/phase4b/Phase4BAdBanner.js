@@ -1,5 +1,5 @@
-import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import React, { useState } from "react";
+import { NativeModules, Platform, StyleSheet, TurboModuleRegistry, View } from "react-native";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const ANDROID_BANNER_UNIT_ID = String(process.env.EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID || "").trim();
@@ -11,12 +11,39 @@ function configuredUnitId() {
   return "";
 }
 
+class AdErrorBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch() {
+    // Silently collapse ad banner if native module fails or throws
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
 export default function Phase4BAdBanner() {
+  const [failed, setFailed] = useState(false);
   const configured = configuredUnitId();
+  const effectiveId = ENVIRONMENT === "production" ? configured : (configured || "test");
 
   // Never let missing advertising configuration block Scores, live data, or
   // navigation at runtime. The release gate separately proves production IDs.
-  if (!configured) return null;
+  if (!effectiveId || failed) return null;
+
+  // Verify native Google Mobile Ads module is actually linked in the native binary
+  // before attempting to instantiate BannerAd.
+  const hasNative = Boolean(
+    NativeModules?.RNGoogleMobileAdsModule ||
+    (typeof TurboModuleRegistry?.get === "function" && TurboModuleRegistry.get("RNGoogleMobileAdsModule"))
+  );
+  if (!hasNative) return null;
 
   let ads;
   try {
@@ -32,13 +59,16 @@ export default function Phase4BAdBanner() {
   const unitId = ENVIRONMENT === "production" ? configured : TestIds.BANNER;
 
   return (
-    <View style={s.wrap} accessibilityLabel="Advertisement">
-      <BannerAd
-        unitId={unitId}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-      />
-    </View>
+    <AdErrorBoundary>
+      <View style={s.wrap} accessibilityLabel="Advertisement">
+        <BannerAd
+          unitId={unitId}
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          onAdFailedToLoad={() => setFailed(true)}
+        />
+      </View>
+    </AdErrorBoundary>
   );
 }
 
@@ -47,7 +77,7 @@ const s = StyleSheet.create({
     minHeight: 50,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: 8,
+    marginBottom: 16,
   },
 });

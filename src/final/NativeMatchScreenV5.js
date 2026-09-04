@@ -39,8 +39,8 @@ import {
   getAccountPredictions,
   getAuthStatus,
   normalizePredictionPayload,
-  savePredictionScore,
 } from "../services/accountApi";
+import { savePredictionScore } from "../services/predictionApi";
 import {
   DEFAULT_MATCH_ALERTS,
   getMatchAlert,
