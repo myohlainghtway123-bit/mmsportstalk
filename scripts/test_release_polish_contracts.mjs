@@ -13,6 +13,7 @@ const adConsent = read("src/services/adConsentService.js");
 const settings = read("src/final/SettingsScreenV2.js");
 const policies = read("src/final/PolicyScreens.js");
 const legalConfig = read("src/config/mstSocialAndLegalConfig.js");
+const appConfig = read("app.config.js");
 const appJson = JSON.parse(read("app.json"));
 
 console.log("Validating NEW MST Scores Release-Polish Contracts...");
@@ -135,6 +136,21 @@ assert.match(
   adConsent,
   /available:\s*false,\s*canRequestAds:\s*false/,
   "Consent helper must fail closed when native UMP is unavailable",
+);
+assert.match(
+  adConsent,
+  /AdsConsent\.gatherConsent\(\)[\s\S]*currentConsentInfo\(AdsConsent\)/,
+  "UMP flow must gather consent before reading the latest consent info",
+);
+assert.match(
+  adConsent,
+  /getConsentInfo\?\.\(\)/,
+  "UMP flow must read canRequestAds from AdsConsent.getConsentInfo",
+);
+assert.match(
+  appConfig,
+  /delayAppMeasurementInit:\s*true/,
+  "Native Google Mobile Ads app measurement must remain delayed until consent readiness",
 );
 assert.doesNotMatch(
   adConsent,
