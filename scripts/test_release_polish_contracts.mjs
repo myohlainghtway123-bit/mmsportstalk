@@ -9,6 +9,7 @@ const profile = read("src/phase4b/Phase4BProfileScreen.js");
 const search = read("src/phase4b/Phase4BSearchScreen.js");
 const hub = read("src/phase4b/Phase4BReadOnlyHub.js");
 const settings = read("src/final/SettingsScreenV2.js");
+const legalConfig = read("src/config/mstSocialAndLegalConfig.js");
 
 console.log("Validating NEW MST Scores Release-Polish Contracts...");
 
@@ -68,5 +69,17 @@ assert.match(hub, /setSubTab\("tips"\)/, "Back press inside tipsters/leaderboard
 
 // 9. SETTINGS DIRECT ACCESS
 assert.match(settings, /openProfile/, "Settings must support opening profile");
+
+// 10. STORE-READINESS LEGAL RESOURCE
+assert.match(
+  legalConfig,
+  /dataDeletion:[\s\S]*https:\/\/myanmarsportstalk\.com\/account-deletion/,
+  "Data deletion must point to the dedicated public MST Scores account-deletion resource",
+);
+assert.doesNotMatch(
+  legalConfig,
+  /privacy#deletion/,
+  "Data deletion must not fall back to the old Privacy Policy anchor",
+);
 
 console.log("All NEW MST Scores Release-Polish Contracts PASS!");
