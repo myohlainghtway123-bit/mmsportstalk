@@ -56,8 +56,10 @@ That branch adds the public `/account-deletion` resource and uses the website's 
 - Apple: apps that support account creation must allow users to initiate account deletion within the app.
 - Google Play target API requirement effective 2026-08-31: new apps and app updates must target Android 16 / API level 36 or higher.
 - Expo's official SDK reference states Expo SDK 54 uses `compileSdkVersion 36` and `targetSdkVersion 36`.
+- Apple App Store Connect requires iOS uploads since 2026-04-28 to be built with Xcode 26 or later using the iOS 26 SDK or later.
+- Expo's official App Store minimum-SDK guidance states Expo SDK 54 and 55 are already covered because their default EAS Build image uses Xcode 26.
 
-Therefore the current `expo ~54.0.37` release line already meets the current Google Play target-API gate. The open Expo SDK 57 security-upgrade issue remains a separate dependency/security maintenance concern and is **not** a reason to force a risky major SDK upgrade solely for Play API-level compliance before this release.
+Therefore the current `expo ~54.0.37` release line already meets both the current Google Play target-API gate and the current Apple Xcode/iOS SDK upload gate when built through the default EAS SDK 54 production toolchain. The open Expo SDK 57 security-upgrade issue remains a separate dependency/security maintenance concern and is **not** a reason to force a risky major SDK upgrade solely for current store toolchain compliance before this release.
 
 The current MST Scores Settings screen already exposes in-app `Delete Account`; this task fixes the external web resource destination used for store-readiness.
 
@@ -81,7 +83,7 @@ The main `.github/workflows/validate-app.yml` validation job now explicitly runs
 
 Because this PR is currently stacked on PR #32 rather than targeting `main`, the repository's `pull_request: branches: [main]` trigger does not automatically execute for this PR in its current stacked form. This handoff does **not** claim that the newly added contracts have executed yet. They must run through the existing app validation lane before merge/release, for example once the stack is advanced/retargeted to the normal `main` release path.
 
-The native config changes also require artifact-specific verification on the later real Android/iOS production artifacts. They do not invalidate the previously recorded UI/Android physical QA, but the final store artifact must verify generated native permissions/config.
+The native config changes also require artifact-specific verification on the later real Android/iOS production artifacts. They do not invalidate the previously recorded UI/Android physical QA, but the final store artifact must verify generated native permissions/config and the expected SDK/toolchain metadata.
 
 ## Production actions
 
@@ -100,10 +102,12 @@ NONE. Real production AdMob IDs remain pending owner input.
 - merge/ship the public website deletion resource before using it as the Play Console deletion URL
 - merge this app config after the release-polish stack
 - execute the app validation lane for this branch/stack
-- verify generated native permission/config in real release artifacts
+- verify generated Android target API 36 and iOS Xcode 26/iOS 26 SDK metadata on the real production artifacts
+- verify generated native photo permission/config in real release artifacts
 - provide official Instagram and Threads URLs if still desired for launch
 - configure four real production AdMob values
 - build and verify real Android EAS production artifact
 - build and verify real iOS EAS production artifact
+- complete App Store Connect's current age-rating questions and both stores' privacy/data declarations during submission preparation
 - final artifact-specific QA
 - no store submission without fresh explicit owner approval
