@@ -10,11 +10,10 @@ import { NativeModules, TurboModuleRegistry } from "react-native";
  */
 export function isConsentAvailable() {
   try {
-    const hasNative = Boolean(
+    return Boolean(
       (TurboModuleRegistry?.get && TurboModuleRegistry.get("RNGoogleMobileAdsModule")) ||
       NativeModules?.RNGoogleMobileAdsModule
     );
-    return hasNative;
   } catch {
     return false;
   }
@@ -30,7 +29,7 @@ export async function showPrivacyOptionsForm() {
     return {
       available: false,
       shown: false,
-      message: "Privacy options form is active for applicable jurisdictions. Non-personalized ads are served by default.",
+      message: "Advertising privacy options are unavailable in this build. No ad request should be made until privacy readiness can be checked.",
     };
   }
 
@@ -40,7 +39,7 @@ export async function showPrivacyOptionsForm() {
       return {
         available: false,
         shown: false,
-        message: "Privacy options form is active for applicable jurisdictions. Non-personalized ads are served by default.",
+        message: "Advertising privacy options are unavailable in this build. No ad request should be made until privacy readiness can be checked.",
       };
     }
 
@@ -60,18 +59,45 @@ export async function showPrivacyOptionsForm() {
   }
 }
 
+async function currentConsentInfo(AdsConsent) {
+  const info = await AdsConsent?.getConsentInfo?.();
+  return {
+    available: Boolean(info),
+    ...(info || {}),
+    canRequestAds: Boolean(info?.canRequestAds),
+  };
+}
+
 /**
- * Requests consent information update and presents the consent form if required by law.
+ * Refreshes UMP consent information and presents a required form when applicable.
+ * The caller must inspect canRequestAds before initializing Mobile Ads or requesting an ad.
  */
 export async function gatherConsentIfRequired() {
-  if (!isConsentAvailable()) return null;
+  if (!isConsentAvailable()) {
+    return { available: false, canRequestAds: false };
+  }
 
+  let AdsConsent;
   try {
     const ads = require("react-native-google-mobile-ads");
-    if (!ads?.AdsConsent) return null;
-    const consentInfo = await ads.AdsConsent.gatherConsent();
-    return consentInfo;
-  } catch {
-    return null;
+    AdsConsent = ads?.AdsConsent;
+    if (!AdsConsent) return { available: false, canRequestAds: false };
+
+    // The library's documented flow is: gather consent, then query the latest
+    // AdsConsentInfo and read canRequestAds from that state.
+    await AdsConsent.gatherConsent();
+    return await currentConsentInfo(AdsConsent);
+  } catch (error) {
+    // UMP guidance allows a valid previous-session consent state to remain usable
+    // after a refresh error. Query it explicitly; never assume ad readiness.
+    try {
+      const previous = AdsConsent ? await currentConsentInfo(AdsConsent) : null;
+      return {
+        ...(previous || { available: false, canRequestAds: false }),
+        error,
+      };
+    } catch {
+      return { available: false, canRequestAds: false, error };
+    }
   }
 }

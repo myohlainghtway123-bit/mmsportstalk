@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NativeModules, Platform, StyleSheet, TurboModuleRegistry, View } from "react-native";
+import { gatherConsentIfRequired } from "../services/adConsentService";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const ANDROID_BANNER_UNIT_ID = String(process.env.EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID || "").trim();
@@ -30,26 +31,56 @@ class AdErrorBoundary extends React.Component {
 
 export default function Phase4BAdBanner() {
   const [failed, setFailed] = useState(false);
+  const [canRequestAds, setCanRequestAds] = useState(false);
   const configured = configuredUnitId();
   const effectiveId = ENVIRONMENT === "production" ? configured : (configured || "test");
 
-  // Never let missing advertising configuration block Scores, live data, or
-  // navigation at runtime. The release gate separately proves production IDs.
-  if (!effectiveId || failed) return null;
-
   // Verify native Google Mobile Ads module is actually linked in the native binary
-  // before attempting to instantiate BannerAd.
+  // before attempting consent or ad initialization.
   const hasNative = Boolean(
     NativeModules?.RNGoogleMobileAdsModule ||
     (typeof TurboModuleRegistry?.get === "function" && TurboModuleRegistry.get("RNGoogleMobileAdsModule"))
   );
-  if (!hasNative) return null;
+
+  useEffect(() => {
+    let active = true;
+
+    if (!effectiveId || !hasNative) {
+      setCanRequestAds(false);
+      return () => { active = false; };
+    }
+
+    // Fail closed until UMP says an ad request is allowed. The helper refreshes
+    // consent information and can fall back to a valid previous-session state
+    // after an update error, but it never fabricates ad readiness.
+    gatherConsentIfRequired().then(async (consentInfo) => {
+      if (!active || !consentInfo?.canRequestAds) {
+        if (active) setCanRequestAds(false);
+        return;
+      }
+
+      try {
+        const ads = require("react-native-google-mobile-ads");
+        if (typeof ads?.default === "function") {
+          await ads.default().initialize();
+        }
+        if (active) setCanRequestAds(true);
+      } catch {
+        if (active) setCanRequestAds(false);
+      }
+    }).catch(() => {
+      if (active) setCanRequestAds(false);
+    });
+
+    return () => { active = false; };
+  }, [effectiveId, hasNative]);
+
+  // Never let missing advertising configuration, consent readiness, or native
+  // initialization block Scores, live data, or navigation at runtime.
+  if (!effectiveId || failed || !hasNative || !canRequestAds) return null;
 
   let ads;
   try {
-    // Delay native-module access until an ad unit is actually configured. This
-    // keeps local/staging JS checks deterministic while production EAS builds
-    // include the native plugin through app.config.js.
     ads = require("react-native-google-mobile-ads");
   } catch {
     return null;

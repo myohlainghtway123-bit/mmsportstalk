@@ -11,6 +11,9 @@ import {
   loadUserLeaderboard,
 } from "./scoresStagingApi";
 
+const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
+const PURCHASE_ACTION_ENABLED = ENVIRONMENT !== "production";
+
 const C = {
   surface: "#101417",
   raised: "#171C20",
@@ -61,9 +64,9 @@ function meta(row) {
     row?.accuracy != null ? `${row.accuracy}% accuracy` : null,
     row?.followers_count != null ? `${row.followers_count} followers` : null,
     row?.correct_predictions != null ? `${row.correct_predictions} correct` : null,
-    row?.amountMinor != null ? `${row.amountMinor} ${row.currency || ""}`.trim() : null,
+    PURCHASE_ACTION_ENABLED && row?.amountMinor != null ? `${row.amountMinor} ${row.currency || ""}`.trim() : null,
     row?.status ? String(row.status).toUpperCase() : null,
-    row?.price_minor != null ? `${row.price_minor} ${row.currency || ""}`.trim() : null,
+    PURCHASE_ACTION_ENABLED && row?.price_minor != null ? `${row.price_minor} ${row.currency || ""}`.trim() : null,
   ].filter(Boolean);
   return parts.join(" · ") || "MST data";
 }
@@ -81,7 +84,7 @@ function DataList({ title, eyebrow, data, empty }) {
             style={[s.row, index > 0 && s.rowBorder]}
           >
             <Text style={s.rank}>{row?.rank != null ? `#${row.rank}` : `${index + 1}`}</Text>
-            <View style={s.flex}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={s.name}>
                 {label(row, `Item ${index + 1}`)}
               </Text>
@@ -103,8 +106,10 @@ function DataList({ title, eyebrow, data, empty }) {
   );
 }
 
-function TipList({ data, onPurchase, purchaseState }) {
-  const list = rows(data).slice(0, 10);
+function TipList({ data, onPurchase, purchaseState, purchaseEnabled }) {
+  const list = rows(data)
+    .filter((row) => purchaseEnabled || String(row?.access_level || row?.accessLevel || "").toLowerCase() !== "paid")
+    .slice(0, 10);
   return (
     <View style={s.card}>
       <Text style={s.eyebrow}>MST TIPS</Text>
@@ -114,11 +119,11 @@ function TipList({ data, onPurchase, purchaseState }) {
           const tipId = String(row?.id || "").trim();
           const accessLevel = String(row?.access_level || row?.accessLevel || "").toLowerCase();
           const paid = accessLevel === "paid";
-          const busy = paid && purchaseState.tipId === tipId && purchaseState.loading;
+          const busy = purchaseEnabled && paid && purchaseState.tipId === tipId && purchaseState.loading;
           return (
             <View key={tipId || `tip-${index}`} style={[s.row, index > 0 && s.rowBorder]}>
               <Text style={s.rank}>{index + 1}</Text>
-              <View style={s.flex}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Text numberOfLines={1} style={s.name}>
                   {label(row, `Tip ${index + 1}`)}
                 </Text>
@@ -131,7 +136,7 @@ function TipList({ data, onPurchase, purchaseState }) {
                   {String(row.selection)}
                 </Text>
               ) : null}
-              {paid && tipId ? (
+              {purchaseEnabled && paid && tipId ? (
                 <Pressable
                   disabled={busy}
                   onPress={() => onPurchase(row)}
@@ -150,9 +155,9 @@ function TipList({ data, onPurchase, purchaseState }) {
           );
         })
       ) : (
-        <Text style={s.empty}>No readable tips are available.</Text>
+        <Text style={s.empty}>No free Tips are available right now.</Text>
       )}
-      {purchaseState.message ? (
+      {purchaseEnabled && purchaseState.message ? (
         <Text style={purchaseState.error ? s.purchaseError : s.purchaseSuccess}>
           {purchaseState.message}
         </Text>
@@ -173,7 +178,7 @@ async function entitledPurchaseRows(purchases, tips) {
       const tip = tipRows.find((item) => String(item?.id) === String(purchase.tipId));
       return {
         id: `entitlement-${purchase.tipId}`,
-        title: tip?.title || "Purchased MST Tip",
+        title: tip?.title || "Entitled MST Tip",
         selection: entitlement.selection || null,
         status: "entitled",
         tipId: purchase.tipId,
@@ -205,7 +210,7 @@ export default function Phase4BReadOnlyHub() {
 
   const buyTip = useCallback(async (tip) => {
     const tipId = String(tip?.id || "").trim();
-    if (!tipId) return;
+    if (!tipId || !PURCHASE_ACTION_ENABLED) return;
     setPurchaseState({ tipId, loading: true, message: null, error: false });
     try {
       const result = await createTipPurchase(tipId);
@@ -246,7 +251,7 @@ export default function Phase4BReadOnlyHub() {
       if (!active) return;
       const names = [
         "Tips",
-        "Purchased tips",
+        "Entitled tips",
         "Tipsters",
         "Tipster leaderboard",
         "Prediction leaderboard",
@@ -293,7 +298,6 @@ export default function Phase4BReadOnlyHub() {
 
   return (
     <View>
-      {/* Product boundary announcement banner */}
       <View style={s.boundary}>
         <Ionicons name="shield-checkmark-outline" size={18} color={C.green} />
         <Text style={s.boundaryText}>
@@ -301,7 +305,6 @@ export default function Phase4BReadOnlyHub() {
         </Text>
       </View>
 
-      {/* Internal Navigation: Tips | Tipsters | Tipster Leaderboard */}
       <View style={s.segmentedNav} accessibilityRole="tablist">
         {[
           { id: "tips", label: "Tips", icon: "diamond-outline" },
@@ -331,20 +334,23 @@ export default function Phase4BReadOnlyHub() {
         })}
       </View>
 
-      {/* SUB-TAB 1: TIPS */}
       {subTab === "tips" ? (
         <>
           <DataList
-            title="Purchased / entitled tips"
+            title="Entitled tips"
             eyebrow="ENTITLEMENTS"
             data={state.purchased}
-            empty="No paid tip entitlement is available for this signed-in account."
+            empty="No Tip entitlement is available for this signed-in account."
           />
-          <TipList data={state.tips} onPurchase={buyTip} purchaseState={purchaseState} />
+          <TipList
+            data={state.tips}
+            onPurchase={buyTip}
+            purchaseState={purchaseState}
+            purchaseEnabled={PURCHASE_ACTION_ENABLED}
+          />
         </>
       ) : null}
 
-      {/* SUB-TAB 2: TIPSTERS */}
       {subTab === "tipsters" ? (
         <DataList
           title="Verified Tipsters"
@@ -354,7 +360,6 @@ export default function Phase4BReadOnlyHub() {
         />
       ) : null}
 
-      {/* SUB-TAB 3: TIPSTER LEADERBOARD */}
       {subTab === "leaderboard" ? (
         <>
           <DataList
@@ -453,7 +458,6 @@ const s = StyleSheet.create({
   row: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 8 },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   rank: { width: 26, color: C.muted, fontSize: 12, fontWeight: "900" },
-  flex: { flex: 1, minWidth: 0 },
   name: { color: C.secondary, fontSize: 13.5, fontWeight: "800" },
   meta: { color: C.muted, fontSize: 12, marginTop: 2 },
   selection: { color: C.green, fontSize: 12, fontWeight: "900", maxWidth: 90 },
