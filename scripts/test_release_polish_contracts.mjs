@@ -8,6 +8,8 @@ const preview = read("src/phase4b/Phase4BMatchPreviewScreen.js");
 const profile = read("src/phase4b/Phase4BProfileScreen.js");
 const search = read("src/phase4b/Phase4BSearchScreen.js");
 const hub = read("src/phase4b/Phase4BReadOnlyHub.js");
+const banner = read("src/phase4b/Phase4BAdBanner.js");
+const adConsent = read("src/services/adConsentService.js");
 const settings = read("src/final/SettingsScreenV2.js");
 const legalConfig = read("src/config/mstSocialAndLegalConfig.js");
 const appJson = JSON.parse(read("app.json"));
@@ -96,5 +98,47 @@ assert.equal(
 );
 assert.equal(imagePickerPlugin[1]?.cameraPermission, false, "Unused camera permission must remain blocked");
 assert.equal(imagePickerPlugin[1]?.microphonePermission, false, "Unused microphone permission must remain blocked");
+
+// 12. PRODUCTION TIP PURCHASE FAIL-CLOSED CONTRACT
+assert.match(
+  hub,
+  /PURCHASE_ACTION_ENABLED\s*=\s*ENVIRONMENT\s*!==\s*"production"/,
+  "Paid Tip purchase actions must be disabled in production store builds",
+);
+assert.match(
+  hub,
+  /if\s*\(!tipId\s*\|\|\s*!PURCHASE_ACTION_ENABLED\)\s*return/,
+  "Purchase handler must hard-stop when production purchase actions are disabled",
+);
+assert.match(
+  hub,
+  /purchaseEnabled=\{PURCHASE_ACTION_ENABLED\}/,
+  "Tips UI must receive the production purchase gate",
+);
+assert.match(
+  hub,
+  /filter\(\(row\)\s*=>\s*purchaseEnabled[\s\S]*!==\s*"paid"\)/,
+  "Production Tips list must omit paid catalog rows rather than advertising a nonfunctional purchase",
+);
+
+// 13. ADMOB CONSENT & PRIVACY-MINIMIZING CONTRACT
+assert.match(banner, /gatherConsentIfRequired/, "Ad banner must refresh UMP consent before requesting ads");
+assert.match(banner, /consentInfo\?\.canRequestAds/, "Ad banner must check UMP canRequestAds");
+assert.match(banner, /!canRequestAds\)\s*return null/, "Ad banner must fail closed until ads are allowed");
+assert.match(
+  banner,
+  /requestNonPersonalizedAdsOnly:\s*true/,
+  "Launch banner must remain non-personalized unless a later approved monetization change says otherwise",
+);
+assert.match(
+  adConsent,
+  /available:\s*false,\s*canRequestAds:\s*false/,
+  "Consent helper must fail closed when native UMP is unavailable",
+);
+assert.doesNotMatch(
+  adConsent,
+  /Non-personalized ads are served by default/i,
+  "Consent helper must not claim an ad mode it does not itself enforce",
+);
 
 console.log("All NEW MST Scores Release-Polish Contracts PASS!");
