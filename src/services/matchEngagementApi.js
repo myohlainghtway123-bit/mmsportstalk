@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
-import { getSessionToken } from "./accountApi";
+import { getSessionToken } from "./sessionStore";
 import { MST_API_BASE } from "./mstApiConfig";
 import { setStoredDevicePushToken } from "./pushTokenStore";
 

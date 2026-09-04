@@ -11,7 +11,8 @@
     "validate:separation": "node scripts/validate-product-separation.js",
     "validate:shared-backend": "npm run validate:separation && node scripts/validate_shared_backend.js",
     "test:phase4b-api": "node --experimental-default-type=module scripts/test_phase4b_scores_api.mjs",
-    "test:phase4b": "npm run test:phase4b-api && node scripts/validate_phase4b_internal_alpha.js",
+    "test:phase4b-preview": "node --experimental-default-type=module scripts/test_phase4b_match_preview.mjs",
+    "test:phase4b": "npm run test:phase4b-api && npm run test:phase4b-preview && node scripts/validate_phase4b_internal_alpha.js",
     "validate:android": "node scripts/generate_assets.js && expo export --clear --platform android --output-dir dist-ci && node scripts/validate_phase4b_bundle.js",
     "build:android:phase4b": "npx eas-cli@latest build --platform android --profile phase4b-internal",
     "build:android:apk": "npx eas-cli@latest build --platform android --profile preview",
@@ -31,7 +32,8 @@
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-google-mobile-ads": "16.4.0"
   },
   "overrides": {
     "expo-font": "14.0.12"

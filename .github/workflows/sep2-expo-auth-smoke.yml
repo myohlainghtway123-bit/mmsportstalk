@@ -1,0 +1,38 @@
+name: Sep 2 Expo Auth Smoke
+
+# Retriggered after repository EXPO_TOKEN setup on Sep 2, 2026.
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - .github/workflows/sep2-expo-auth-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  expo-auth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node 22.18
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+
+      - name: Verify Expo authentication only
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "EXPO_TOKEN is not configured for this repository."
+            exit 2
+          fi
+          npx --yes eas-cli@22.2.0 whoami
+          echo "Expo authentication smoke passed; no build was started."

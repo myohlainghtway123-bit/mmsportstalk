@@ -16,17 +16,25 @@ const bundle = files(directory)
   .map((file) => fs.readFileSync(file).toString("latin1"))
   .join("\n");
 
+const forbiddenPredictionWrites = /\/v1\/predictions|savePredictionScore|savePrediction\s*\(|createPrediction\s*\(|submitPrediction\s*\(|editPrediction\s*\(/;
+
 if (mode === "default") {
-  assert.match(bundle, /app-api\.myanmarsportstalk\.com/);
-  assert.doesNotMatch(bundle, /scores-api-staging\.myanmarsportstalk\.com/);
+  // The NEW Phase 4B app is now the release entrypoint. Its source intentionally
+  // contains the staging origin for internal builds, so presence of that literal
+  // is not proof that a production build can use it. Production safety is the
+  // fail-closed runtime contract plus absence of the visible internal banner.
+  assert.match(bundle, /SCORES_API_ORIGIN_REQUIRED/);
+  assert.match(bundle, /PRODUCTION_STAGING_ORIGIN_BLOCKED/);
   assert.doesNotMatch(bundle, /STAGING \/ INTERNAL/);
-  console.log("Default Android bundle passed: normal app API present; Phase 4B staging origin and marker absent.");
+  assert.doesNotMatch(bundle, forbiddenPredictionWrites);
+  assert.match(bundle, /Follow the game/i);
+  console.log("Default Android bundle passed: current NEW Scores app is production-mode, internal banner is absent, production Scores origin fails closed, and exact-score prediction writes are absent.");
 } else {
   assert.equal(mode, "internal");
   assert.match(bundle, /scores-api-staging\.myanmarsportstalk\.com/);
   assert.match(bundle, /STAGING \/ INTERNAL/);
-  assert.doesNotMatch(bundle, /app-api\.myanmarsportstalk\.com/);
-  assert.doesNotMatch(bundle, /\/v1\/predictions|savePrediction|createPrediction|submitPrediction/);
+  assert.doesNotMatch(bundle, forbiddenPredictionWrites);
+  assert.match(bundle, /Follow the game/i);
 
-  console.log("Phase 4B Android bundle passed: staging marker/origin present; production API and prediction-write surfaces absent.");
+  console.log("Phase 4B internal Android bundle passed: staging marker/origin are present only for the internal build and exact-score prediction-write surfaces remain absent.");
 }

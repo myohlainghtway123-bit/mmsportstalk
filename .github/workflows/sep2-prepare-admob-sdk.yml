@@ -1,0 +1,44 @@
+name: Sep 2 Prepare AdMob SDK
+
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - .github/workflows/sep2-prepare-admob-sdk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install-admob-sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: chatgpt/sep2-expo-auth-smoke-2026-09-02
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - name: Install pinned Google Mobile Ads SDK wrapper
+        run: npm install --save-exact react-native-google-mobile-ads@16.4.0
+      - name: Verify dependency and lockfile
+        run: |
+          node -e 'const p=require("./package.json"); if(p.dependencies?.["react-native-google-mobile-ads"]!=="16.4.0") process.exit(1)'
+          npm ci
+      - name: Commit dependency lock update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "AdMob SDK dependency already pinned."
+            exit 0
+          fi
+          git commit -m "build(scores): install Google Mobile Ads SDK"
+          git push origin HEAD:chatgpt/sep2-expo-auth-smoke-2026-09-02

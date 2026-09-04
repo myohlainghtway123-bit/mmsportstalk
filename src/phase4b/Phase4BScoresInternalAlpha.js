@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   Pressable,
   RefreshControl,
@@ -16,6 +17,14 @@ import {
   loadMatchCenter,
   loadScoresOverview,
 } from "./scoresStagingApi";
+import Phase4BMatchVote from "./Phase4BMatchVote";
+import Phase4BMatchInsights from "./Phase4BMatchInsights";
+import Phase4BReadOnlyHub from "./Phase4BReadOnlyHub";
+import Phase4BFavoritesPanel, { Phase4BMatchFavorites } from "./Phase4BFavoritesPanel";
+import Phase4BNotificationsPanel from "./Phase4BNotificationsPanel";
+import Phase4BSearchPanel from "./Phase4BSearchPanel";
+import Phase4BNewsPanel from "./Phase4BNewsPanel";
+import Phase4BAdBanner from "./Phase4BAdBanner";
 
 const T = Object.freeze({
   color: {
@@ -146,8 +155,8 @@ function firstSectionValue(match, keys) {
 }
 
 function sectionSummary(value) {
-  if (Array.isArray(value)) return `${value.length} staging record${value.length === 1 ? "" : "s"} available.`;
-  if (value && typeof value === "object") return `${Object.keys(value).length} staging field${Object.keys(value).length === 1 ? "" : "s"} available.`;
+  if (Array.isArray(value)) return `${value.length} record${value.length === 1 ? "" : "s"} available.`;
+  if (value && typeof value === "object") return `${Object.keys(value).length} field${Object.keys(value).length === 1 ? "" : "s"} available.`;
   return value == null ? "" : String(value);
 }
 
@@ -210,8 +219,8 @@ function TerminalState({ loading, error, empty, emptyTitle = "No matches availab
   return (
     <View style={s.stateCard}>
       {loading ? <ActivityIndicator color={T.color.red} /> : <Ionicons name={error ? "cloud-offline-outline" : "football-outline"} size={27} color={error ? T.color.amber : T.color.muted} />}
-      <Text style={s.stateTitle}>{loading ? "Loading staging data…" : error ? "Staging dependency unavailable" : emptyTitle}</Text>
-      <Text style={s.stateText}>{loading ? "The request stops after 8 seconds if staging does not respond." : error || emptyText || "The selected staging view is honestly empty."}</Text>
+      <Text style={s.stateTitle}>{loading ? "Loading match data…" : error ? "Scores service unavailable" : emptyTitle}</Text>
+      <Text style={s.stateText}>{loading ? "The request stops after 8 seconds if the Scores service does not respond." : error || emptyText || "The selected match view is empty."}</Text>
       {!loading && onRetry ? (
         <Pressable accessibilityRole="button" style={s.primaryButton} onPress={onRetry}>
           <Ionicons name="refresh" size={16} color={T.color.text} />
@@ -335,7 +344,7 @@ function MatchesScreen({ overview, onOpenMatch, onRetry }) {
           loading={overview.loading}
           error={overview.error}
           empty={!overview.loading && !overview.error && selectedMatches.length === 0}
-          emptyText="No real staging match is scheduled for this date. Choose another date or retry."
+          emptyText="No real match is scheduled for this date. Choose another date or retry."
           onRetry={onRetry}
         />
         {overview.warnings.map((warning) => (
@@ -378,9 +387,8 @@ function ShellScreen({ title, eyebrow, active, onSelect, children }) {
 function NewsScreen({ onSelect }) {
   return (
     <ShellScreen title="News" eyebrow="MST FOOTBALL EDITORIAL" active="news" onSelect={onSelect}>
-      <View style={s.placeholderHero}><Ionicons name="newspaper-outline" size={34} color={T.color.red} /><Text style={s.placeholderTitle}>News structure confirmed</Text><Text style={s.placeholderText}>The authorized editorial feed is not connected to this Phase 4B staging build. No fake articles are shown.</Text></View>
-      <DependencyCard icon="server-outline" title="Latest football news" text="Waiting for the authorized MST web/editorial product API." action="UNAVAILABLE" />
-      <DependencyCard icon="bookmark-outline" title="Saved stories" text="Persistence is intentionally deferred; this shell does not pretend stories are saved." action="PHASE 13" />
+      <Phase4BNewsPanel />
+      <Phase4BAdBanner />
     </ShellScreen>
   );
 }
@@ -390,54 +398,29 @@ function FavoritesScreen({ onSelect, matches, onOpenMatch }) {
   return (
     <ShellScreen title="Favorites" eyebrow="TEAMS · COMPETITIONS" active="favorites" onSelect={onSelect}>
       <View style={s.segmented}><View style={[s.segment, s.segmentActive]}><Text style={s.segmentActiveText}>All</Text></View><View style={s.segment}><Text style={s.segmentText}>Teams</Text></View><View style={s.segment}><Text style={s.segmentText}>Competitions</Text></View></View>
-      <DependencyCard icon="heart-outline" title="Favorite teams and competitions" text="Account-backed favorites are not available from the current staging Scores API. Nothing has been fabricated or persisted." action="NOT CONNECTED" />
-      <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Real staging matches</Text><Text style={s.matchCount}>Not personalized</Text></View>
-      {realMatches.length ? <View style={s.leagueCard}>{realMatches.map((match) => <MatchRow key={canonicalMatchId(match)} match={match} onOpen={onOpenMatch} />)}</View> : <TerminalState empty emptyTitle="No staging matches" emptyText="There are no real matches to show here." />}
+      <Phase4BFavoritesPanel />
+      <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Real matches</Text><Text style={s.matchCount}>Not personalized</Text></View>
+      {realMatches.length ? <View style={s.leagueCard}>{realMatches.map((match) => <MatchRow key={canonicalMatchId(match)} match={match} onOpen={onOpenMatch} />)}</View> : <TerminalState empty emptyTitle="No matches" emptyText="There are no real matches to show here." />}
     </ShellScreen>
   );
 }
 
 function TipsPredictionScreen({ onSelect, featuredMatch, onOpenMatch }) {
   return (
-    <ShellScreen title="Tips + Prediction" eyebrow="READ ONLY IN MST SCORES" active="tips" onSelect={onSelect}>
-      <View style={s.safetyBanner}><Ionicons name="shield-checkmark-outline" size={20} color={T.color.green} /><View style={s.dependencyCopy}><Text style={s.safetyTitle}>No prediction writes</Text><Text style={s.safetyText}>MST Scores can consume authorized predictions and tips, but cannot create, edit, or submit them.</Text></View></View>
-      {featuredMatch ? (
-        <View style={s.featuredPrediction}>
-          <Text style={s.sectionEyebrow}>MST PREDICTION UNLOCK</Text>
-          <Text style={s.featuredPredictionTitle}>{featuredMatch.home_team_name} vs {featuredMatch.away_team_name}</Text>
-          <Text style={s.dependencyText}>Real staging match · prediction remains locked until an authorized rewarded-video service exists.</Text>
-          <View style={s.actionRow}>
-            <View style={s.disabledAction}><Ionicons name="play-circle-outline" size={18} color={T.color.muted} /><Text style={s.disabledActionText}>Watch Video unavailable</Text></View>
-            <Pressable style={s.outlineAction} onPress={() => onOpenMatch(featuredMatch)}><Text style={s.outlineActionText}>View match</Text></Pressable>
-          </View>
-        </View>
-      ) : <TerminalState empty emptyTitle="No prediction match" emptyText="No real staging match is available for a read-only preview." />}
-      <DependencyCard icon="cart-outline" title="Buy Tipster Tip" text="Purchase and entitlement services are not connected. No fake purchase or paid-tip access is offered." action="DISABLED" />
-      <View style={s.twoColumns}>
-        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Tipster Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>
-        <View style={s.leaderboardCard}><Text style={s.leaderboardTitle}>Prediction Leaderboard</Text><Text style={s.leaderboardEmpty}>No authorized leaderboard route in the current Scores API.</Text></View>
-      </View>
-      <DependencyCard icon="open-outline" title="Open MST Prediction App" text="The staging deep-link contract is not configured. Prediction creation stays in MST Prediction." action="LINK UNAVAILABLE" />
-      <DependencyCard icon="ribbon-outline" title="Become a Tipster" text="Final path starts in MST Prediction, continues to the MST website, and is reviewed in Web Admin." action="LINK UNAVAILABLE" />
-      <View style={s.scoringCard}><Text style={s.sectionEyebrow}>SHARED SCORING</Text><View style={s.scoringRow}><Text style={s.scoreRule}>Exact score <Text style={s.scorePoints}>3</Text></Text><Text style={s.scoreRule}>Correct result <Text style={s.scorePoints}>1</Text></Text><Text style={s.scoreRule}>Wrong <Text style={s.scorePoints}>0</Text></Text></View></View>
+    <ShellScreen title="Tips + Prediction" eyebrow="TIPS · ENTITLEMENTS · LEADERBOARDS" active="tips" onSelect={onSelect}>
+      <View style={s.safetyBanner}><Ionicons name="shield-checkmark-outline" size={20} color={T.color.green} /><View style={s.dependencyCopy}><Text style={s.safetyTitle}>No prediction writes</Text><Text style={s.safetyText}>MST Scores can show the read-only Prediction leaderboard and MST Tips, but exact-score prediction creation, editing and submission stay in MST Prediction.</Text></View></View>
+      <Phase4BReadOnlyHub />
+      {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} /> : null}
     </ShellScreen>
   );
 }
 
 function MoreScreen({ onSelect }) {
-  const rows = [
-    ["language-outline", "Language", "Burmese / English · Phase 13"],
-    ["moon-outline", "Appearance", "Dark / light / system · Phase 13"],
-    ["notifications-outline", "Notifications", "Not connected"],
-    ["card-outline", "Payments & cards", "Not connected"],
-    ["document-text-outline", "Terms, Privacy & Policies", "Final content pending"],
-    ["information-circle-outline", "About MST", "Product shell"],
-    ["help-circle-outline", "Support / Help", "Integration pending"],
-  ];
   return (
-    <ShellScreen title="More" eyebrow="SETTINGS · SUPPORT" active="more" onSelect={onSelect}>
-      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="person-outline" size={28} color={T.color.muted} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>Internal tester</Text><Text style={s.dependencyText}>Profile/account service is not connected in this Phase 4B build.</Text></View></View>
-      <View style={s.menuCard}>{rows.map(([icon, title, detail]) => <View key={title} style={s.menuRow}><Ionicons name={icon} size={19} color={T.color.secondary} /><Text style={s.menuTitle}>{title}</Text><Text style={s.menuDetail}>{detail}</Text><Ionicons name="chevron-forward" size={16} color={T.color.muted} /></View>)}</View>
+    <ShellScreen title="More" eyebrow="SEARCH · NOTIFICATIONS" active="more" onSelect={onSelect}>
+      <Phase4BSearchPanel />
+      <Phase4BNotificationsPanel />
+      <View style={s.profileCard}><View style={s.profileAvatar}><Ionicons name="football-outline" size={28} color={T.color.red} /></View><View style={s.dependencyCopy}><Text style={s.dependencyTitle}>MST Scores</Text><Text style={s.dependencyText}>Follow the Game · account-backed favorites, notifications and read-only prediction data use existing MST services.</Text></View></View>
     </ShellScreen>
   );
 }
@@ -447,7 +430,7 @@ function MatchDataSection({ title, value }) {
   return (
     <View style={s.dataSection}>
       <View style={s.dataSectionHeader}><Text style={s.dataSectionTitle}>{title}</Text><Text style={[s.availability, available && s.available]}> {available ? "AVAILABLE" : "UNAVAILABLE"} </Text></View>
-      <Text style={s.dataSectionText}>{available ? sectionSummary(value) : `The current staging Match detail response does not provide ${title}.`}</Text>
+      <Text style={s.dataSectionText}>{available ? sectionSummary(value) : `The current Match detail response does not provide ${title}.`}</Text>
     </View>
   );
 }
@@ -498,7 +481,10 @@ function MatchCenter({ selectedMatch, onBack }) {
                 <View style={s.heroTeam}><TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={52} /><Text style={s.heroTeamName}>{match?.away_team_name || "Away"}</Text></View>
               </View>
             </View>
-            <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real staging response</Text></View>
+            <Phase4BMatchFavorites match={match} />
+            <Phase4BMatchVote match={match} />
+            <Phase4BMatchInsights match={match} />
+            <View style={s.sectionHeadingRow}><Text style={s.sectionTitle}>Match data</Text><Text style={s.matchCount}>Real Scores response</Text></View>
             {MATCH_SECTION_DEFS.map((section) => <MatchDataSection key={section.title} title={section.title} value={firstSectionValue(match, section.keys)} />)}
             <View style={s.dataSection}>
               <View style={s.dataSectionHeader}><Text style={s.dataSectionTitle}>Match Info</Text><Text style={[s.availability, s.available]}> AVAILABLE </Text></View>
@@ -509,10 +495,8 @@ function MatchCenter({ selectedMatch, onBack }) {
                 <View style={s.infoCell}><Text style={s.infoLabel}>FRESHNESS</Text><Text style={s.infoValue}>{String(match?.freshness_state || "unknown").toUpperCase()}</Text></View>
               </View>
             </View>
-            <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>Prediction / Tip preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
-            {state.data?.tipsError ? <View style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{state.data.tipsError}</Text></View> : state.data?.tips?.length ? state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />) : <View style={s.stateCard}><Ionicons name="shield-checkmark-outline" size={26} color={T.color.muted} /><Text style={s.stateTitle}>No permitted tips for this match</Text><Text style={s.stateText}>The real staging tips response is empty. No selection was invented.</Text></View>}
-            <DependencyCard icon="play-circle-outline" title="Watch Video to unlock MST prediction" text="Rewarded-video service is not connected in Phase 4B. No fake unlock is possible." action="DISABLED" />
-            <DependencyCard icon="open-outline" title="Open MST Prediction App" text="Staging deep-link contract is not configured. MST Scores cannot submit predictions." action="LINK UNAVAILABLE" />
+            <View style={s.sectionHeadingRow}><View><Text style={s.sectionEyebrow}>READ ONLY</Text><Text style={s.sectionTitle}>MST Tip Preview</Text></View><Text style={s.noWrites}>NO WRITES</Text></View>
+            {state.data?.tipsError ? <View style={s.inlineWarning}><Ionicons name="warning-outline" color={T.color.amber} size={16} /><Text style={s.inlineWarningText}>{state.data.tipsError}</Text></View> : state.data?.tips?.length ? state.data.tips.map((tip) => <TipPreview key={tip.id} tip={tip} />) : <View style={s.stateCard}><Ionicons name="shield-checkmark-outline" size={26} color={T.color.muted} /><Text style={s.stateTitle}>No permitted tips for this match</Text><Text style={s.stateText}>The real tips response is empty. No selection was invented.</Text></View>}
             <RequestId label="match" value={state.data?.requestIds?.match} />
             <RequestId label="tips" value={state.data?.requestIds?.tips} />
           </>
@@ -531,7 +515,7 @@ function useScoresOverview() {
     setState((current) => ({ ...current, loading: true, error: "" }));
     loadScoresOverview()
       .then((result) => active && setState({ loading: false, matches: result.matches, requestIds: result.requestIds, warnings: result.warnings, error: "" }))
-      .catch((error) => active && setState({ loading: false, matches: [], requestIds: {}, warnings: [], error: error?.message || "Could not load staging matches." }));
+      .catch((error) => active && setState({ loading: false, matches: [], requestIds: {}, warnings: [], error: error?.message || "Could not load matches." }));
     return () => { active = false; };
   }, [attempt]);
   return { ...state, retry };
@@ -544,6 +528,22 @@ export default function Phase4BScoresInternalAlpha() {
   const openMatch = useCallback((match) => setSelectedMatch(match), []);
   const selectNav = useCallback((next) => { setSelectedMatch(null); setActive(next); }, []);
 
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (selectedMatch) {
+        setSelectedMatch(null);
+        return true;
+      }
+      if (active !== "matches") {
+        setActive("matches");
+        return true;
+      }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener("hardwareBackPress", handleBackPress);
+    return () => subscription.remove();
+  }, [selectedMatch, active]);
+
   let screen;
   if (selectedMatch) screen = <MatchCenter selectedMatch={selectedMatch} onBack={() => setSelectedMatch(null)} />;
   else if (active === "news") screen = <NewsScreen onSelect={selectNav} />;
@@ -555,7 +555,7 @@ export default function Phase4BScoresInternalAlpha() {
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={T.color.bg} />
-      <EnvironmentBanner />
+      {process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "production" ? <EnvironmentBanner /> : null}
       {screen}
       {!selectedMatch && active === "matches" ? <BottomNavigation active={active} onSelect={selectNav} /> : null}
     </View>

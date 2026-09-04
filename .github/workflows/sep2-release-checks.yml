@@ -1,0 +1,48 @@
+name: Sep 2 Scores Release Checks
+
+on:
+  push:
+    branches:
+      - chatgpt/sep2-expo-auth-smoke-2026-09-02
+    paths:
+      - 'App.js'
+      - 'src/**'
+      - 'scripts/**'
+      - 'app.json'
+      - 'app.config.js'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/sep2-release-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  current-scores-release-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - name: Phase 4B API unit contract
+        run: node scripts/test_phase4b_scores_api.mjs
+      - name: Product separation regression
+        run: node scripts/validate-product-separation.js
+      - name: Current Scores source contract
+        run: node scripts/validate_sep2_scores_release.mjs
+      - name: Android production-mode JS export
+        env:
+          EXPO_PUBLIC_MST_ENVIRONMENT: production
+        run: npx expo export --platform android --output-dir dist-release-android --clear && node scripts/validate_phase4b_bundle.js dist-release-android default
+      - name: iOS production-mode JS export
+        env:
+          EXPO_PUBLIC_MST_ENVIRONMENT: production
+        run: npx expo export --platform ios --output-dir dist-release-ios --clear && node scripts/validate_phase4b_bundle.js dist-release-ios default
+      - name: Strict launch gate
+        run: node scripts/validate_sep2_scores_release.mjs --strict-release

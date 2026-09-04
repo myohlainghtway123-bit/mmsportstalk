@@ -1,4 +1,4 @@
-import { getSessionToken } from "./accountApi";
+import { getSessionToken } from "./sessionStore";
 import { MST_API_BASE } from "./mstApiConfig";
 
 async function decode(response) {
