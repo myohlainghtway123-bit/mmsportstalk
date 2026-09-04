@@ -25,7 +25,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_MST_ENVIRONMENT": "production",
-        "EXPO_PUBLIC_MST_SCORES_API_ORIGIN": "https://scores-api.myanmarsportstalk.com"
+        "EXPO_PUBLIC_MST_SCORES_API_ORIGIN": "https://scores-api.myanmarsportstalk.com",
+        "MST_REQUIRE_PRODUCTION_ADS": "true"
       }
     }
   }
