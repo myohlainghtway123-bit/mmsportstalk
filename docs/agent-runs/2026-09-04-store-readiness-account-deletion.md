@@ -30,6 +30,7 @@ Base: `scores/release-polish-sep4` at physical-QA commit `fd0536acacd32d296917c5
   - `Allow MST Scores to choose a profile picture.`
 - Explicitly blocked the unused camera and microphone permissions through the image-picker plugin configuration.
 - Extended `scripts/test_release_polish_contracts.mjs` to lock the product name, photo purpose string, and blocked camera/microphone permission configuration.
+- Updated `Validate MST App` so the release-polish/store contract script is part of the main validation job rather than an unexecuted side script.
 
 The package/bundle identity, version and build remain unchanged:
 
@@ -53,6 +54,10 @@ That branch adds the public `/account-deletion` resource and uses the website's 
 
 - Google Play: apps that support account creation require an in-app deletion path and a functional external web deletion resource.
 - Apple: apps that support account creation must allow users to initiate account deletion within the app.
+- Google Play target API requirement effective 2026-08-31: new apps and app updates must target Android 16 / API level 36 or higher.
+- Expo's official SDK reference states Expo SDK 54 uses `compileSdkVersion 36` and `targetSdkVersion 36`.
+
+Therefore the current `expo ~54.0.37` release line already meets the current Google Play target-API gate. The open Expo SDK 57 security-upgrade issue remains a separate dependency/security maintenance concern and is **not** a reason to force a risky major SDK upgrade solely for Play API-level compliance before this release.
 
 The current MST Scores Settings screen already exposes in-app `Delete Account`; this task fixes the external web resource destination used for store-readiness.
 
@@ -72,7 +77,9 @@ New assertions cover:
 - unused camera permission is blocked
 - unused microphone permission is blocked
 
-The current GitHub connector did not expose an automatic PR workflow run for this stacked branch, and the assistant runtime could not safely substitute a local GitHub checkout. Therefore this handoff does **not** claim that the new contracts have executed yet. They must run through the existing app validation lane before merge/release.
+The main `.github/workflows/validate-app.yml` validation job now explicitly runs this release-polish/store contract script.
+
+Because this PR is currently stacked on PR #32 rather than targeting `main`, the repository's `pull_request: branches: [main]` trigger does not automatically execute for this PR in its current stacked form. This handoff does **not** claim that the newly added contracts have executed yet. They must run through the existing app validation lane before merge/release, for example once the stack is advanced/retargeted to the normal `main` release path.
 
 The native config changes also require artifact-specific verification on the later real Android/iOS production artifacts. They do not invalidate the previously recorded UI/Android physical QA, but the final store artifact must verify generated native permissions/config.
 
