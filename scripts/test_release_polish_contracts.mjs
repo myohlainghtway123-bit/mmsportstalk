@@ -15,6 +15,7 @@ const policies = read("src/final/PolicyScreens.js");
 const legalConfig = read("src/config/mstSocialAndLegalConfig.js");
 const appConfig = read("app.config.js");
 const appJson = JSON.parse(read("app.json"));
+const easJson = JSON.parse(read("eas.json"));
 
 console.log("Validating NEW MST Scores Release-Polish Contracts...");
 
@@ -178,6 +179,26 @@ assert.doesNotMatch(
   policies,
   /MST Score(?!s)/,
   "User-facing policy copy must use the final MST Scores product name",
+);
+
+// 15. PRODUCTION EAS ADMOB COMPLETENESS GUARD
+assert.equal(
+  easJson.build?.production?.env?.MST_REQUIRE_PRODUCTION_ADS,
+  "true",
+  "EAS production profile must opt into the production AdMob completeness guard",
+);
+for (const envName of [
+  "MST_ADMOB_ANDROID_APP_ID",
+  "MST_ADMOB_IOS_APP_ID",
+  "EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID",
+  "EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID",
+]) {
+  assert.match(appConfig, new RegExp(envName), `Production AdMob guard must require ${envName}`);
+}
+assert.match(
+  appConfig,
+  /if\s*\(requireProductionAds\)[\s\S]*if\s*\(missing\.length\)[\s\S]*throw new Error/,
+  "Production store builds must hard-fail when required AdMob values are missing",
 );
 
 console.log("All NEW MST Scores Release-Polish Contracts PASS!");
