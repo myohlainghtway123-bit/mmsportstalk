@@ -10,6 +10,7 @@ const search = read("src/phase4b/Phase4BSearchScreen.js");
 const hub = read("src/phase4b/Phase4BReadOnlyHub.js");
 const settings = read("src/final/SettingsScreenV2.js");
 const legalConfig = read("src/config/mstSocialAndLegalConfig.js");
+const appJson = JSON.parse(read("app.json"));
 
 console.log("Validating NEW MST Scores Release-Polish Contracts...");
 
@@ -81,5 +82,19 @@ assert.doesNotMatch(
   /privacy#deletion/,
   "Data deletion must not fall back to the old Privacy Policy anchor",
 );
+
+// 11. STORE DISPLAY NAME & PHOTO-PICKER PERMISSIONS
+assert.equal(appJson.expo.name, "MST Scores", "Standalone/store app display name must be MST Scores");
+const imagePickerPlugin = appJson.expo.plugins.find(
+  (plugin) => Array.isArray(plugin) && plugin[0] === "expo-image-picker",
+);
+assert.ok(imagePickerPlugin, "expo-image-picker config plugin must be present for profile-photo release builds");
+assert.equal(
+  imagePickerPlugin[1]?.photosPermission,
+  "Allow MST Scores to choose a profile picture.",
+  "iOS photo-library purpose string must describe the profile-picture feature",
+);
+assert.equal(imagePickerPlugin[1]?.cameraPermission, false, "Unused camera permission must remain blocked");
+assert.equal(imagePickerPlugin[1]?.microphonePermission, false, "Unused microphone permission must remain blocked");
 
 console.log("All NEW MST Scores Release-Polish Contracts PASS!");
