@@ -15,6 +15,9 @@ if (androidAppId && iosAppId) {
     {
       androidAppId,
       iosAppId,
+      // UMP consent is checked before Mobile Ads initialization/ad requests.
+      // Delay native app measurement so EEA users are not measured before that flow.
+      delayAppMeasurementInit: true,
     },
   ]);
 }

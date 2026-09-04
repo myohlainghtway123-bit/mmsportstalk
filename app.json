@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "MST Score",
+    "name": "MST Scores",
     "slug": "mst-app",
     "owner": "myohlainghtway",
-    "description": "MST Score — live football scores, fixtures, results, news, transfers, favorites and match-day updates by Myanmar Sports Talk.",
+    "description": "MST Scores — live football scores, fixtures, results, news, transfers, favorites and match-day updates by Myanmar Sports Talk.",
     "version": "1.5.2",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -23,6 +23,14 @@
         {
           "color": "#F32735",
           "defaultChannel": "match-alerts"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow MST Scores to choose a profile picture.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ]
     ],
