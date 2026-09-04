@@ -11,6 +11,7 @@ const hub = read("src/phase4b/Phase4BReadOnlyHub.js");
 const banner = read("src/phase4b/Phase4BAdBanner.js");
 const adConsent = read("src/services/adConsentService.js");
 const settings = read("src/final/SettingsScreenV2.js");
+const policies = read("src/final/PolicyScreens.js");
 const legalConfig = read("src/config/mstSocialAndLegalConfig.js");
 const appJson = JSON.parse(read("app.json"));
 
@@ -139,6 +140,28 @@ assert.doesNotMatch(
   adConsent,
   /Non-personalized ads are served by default/i,
   "Consent helper must not claim an ad mode it does not itself enforce",
+);
+
+// 14. SCORES-ONLY EMBEDDED POLICY CONTRACT
+assert.match(policies, /id:\s*"privacy"/, "Scores must expose its Privacy Policy");
+assert.match(policies, /id:\s*"terms"/, "Scores must expose its Terms of Use");
+assert.doesNotMatch(
+  policies,
+  /id:\s*"(?:predictions|tipster|credits|community)"/,
+  "Scores policy modal must not expose Prediction, paid-tip, credits, or Match Chat policy catalogs",
+);
+assert.doesNotMatch(policies, /tamper-proof/i, "Policy copy must not make absolute security guarantees");
+assert.doesNotMatch(policies, /licensed providers/i, "Policy copy must not invent or overstate provider licensing");
+assert.doesNotMatch(policies, /စက္ကန့်ပိုင်းအတွင်း/, "Policy copy must not promise an unsupported deletion time");
+assert.match(
+  policies,
+  /Paid Tip purchase actions are not offered in the production store build/,
+  "Terms must state the V1 production paid-Tip boundary",
+);
+assert.doesNotMatch(
+  policies,
+  /MST Score(?!s)/,
+  "User-facing policy copy must use the final MST Scores product name",
 );
 
 console.log("All NEW MST Scores Release-Polish Contracts PASS!");
