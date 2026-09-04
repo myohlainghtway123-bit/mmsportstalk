@@ -59,6 +59,6 @@ export const MST_OFFICIAL_SOCIALS = Object.freeze([
 export const MST_LEGAL_URLS = Object.freeze({
   privacyPolicy: process.env.EXPO_PUBLIC_MST_PRIVACY_URL || "https://myanmarsportstalk.com/privacy",
   termsOfUse: process.env.EXPO_PUBLIC_MST_TERMS_URL || "https://myanmarsportstalk.com/terms",
-  dataDeletion: process.env.EXPO_PUBLIC_MST_DATA_DELETION_URL || "https://myanmarsportstalk.com/privacy#deletion",
+  dataDeletion: process.env.EXPO_PUBLIC_MST_DATA_DELETION_URL || "https://myanmarsportstalk.com/account-deletion",
   website: process.env.EXPO_PUBLIC_MST_WEBSITE_URL || "https://myanmarsportstalk.com",
 });
