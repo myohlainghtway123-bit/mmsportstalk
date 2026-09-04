@@ -10,11 +10,10 @@ import { NativeModules, TurboModuleRegistry } from "react-native";
  */
 export function isConsentAvailable() {
   try {
-    const hasNative = Boolean(
+    return Boolean(
       (TurboModuleRegistry?.get && TurboModuleRegistry.get("RNGoogleMobileAdsModule")) ||
       NativeModules?.RNGoogleMobileAdsModule
     );
-    return hasNative;
   } catch {
     return false;
   }
@@ -60,6 +59,15 @@ export async function showPrivacyOptionsForm() {
   }
 }
 
+async function currentConsentInfo(AdsConsent) {
+  const info = await AdsConsent?.getConsentInfo?.();
+  return {
+    available: Boolean(info),
+    ...(info || {}),
+    canRequestAds: Boolean(info?.canRequestAds),
+  };
+}
+
 /**
  * Refreshes UMP consent information and presents a required form when applicable.
  * The caller must inspect canRequestAds before initializing Mobile Ads or requesting an ad.
@@ -69,25 +77,23 @@ export async function gatherConsentIfRequired() {
     return { available: false, canRequestAds: false };
   }
 
+  let AdsConsent;
   try {
     const ads = require("react-native-google-mobile-ads");
-    if (!ads?.AdsConsent) return { available: false, canRequestAds: false };
-    const consentInfo = await ads.AdsConsent.gatherConsent();
-    return {
-      available: true,
-      ...consentInfo,
-      canRequestAds: Boolean(consentInfo?.canRequestAds),
-    };
+    AdsConsent = ads?.AdsConsent;
+    if (!AdsConsent) return { available: false, canRequestAds: false };
+
+    // The library's documented flow is: gather consent, then query the latest
+    // AdsConsentInfo and read canRequestAds from that state.
+    await AdsConsent.gatherConsent();
+    return await currentConsentInfo(AdsConsent);
   } catch (error) {
-    // UMP guidance permits using valid consent from a previous session after an
-    // update error. Query that state explicitly; never assume ad readiness.
+    // UMP guidance allows a valid previous-session consent state to remain usable
+    // after a refresh error. Query it explicitly; never assume ad readiness.
     try {
-      const ads = require("react-native-google-mobile-ads");
-      const previous = await ads?.AdsConsent?.getConsentInfo?.();
+      const previous = AdsConsent ? await currentConsentInfo(AdsConsent) : null;
       return {
-        available: true,
-        ...(previous || {}),
-        canRequestAds: Boolean(previous?.canRequestAds),
+        ...(previous || { available: false, canRequestAds: false }),
         error,
       };
     } catch {
