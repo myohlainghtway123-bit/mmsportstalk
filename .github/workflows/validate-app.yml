@@ -57,6 +57,9 @@ jobs:
       - name: Test Phase 4B internal alpha
         run: npm run test:phase4b
 
+      - name: Validate release-polish and store contracts
+        run: node scripts/test_release_polish_contracts.mjs
+
       - name: Verify dedicated app API
         shell: bash
         run: |
