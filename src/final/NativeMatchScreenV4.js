@@ -10,7 +10,8 @@ import {
   normalizeFootballMatch,
 } from "../services/footballApi";
 import { fetchPreferredOdds } from "../services/oddsApi";
-import { getAccountPredictions, getAuthStatus, normalizePredictionPayload, savePredictionScore } from "../services/accountApi";
+import { getAccountPredictions, getAuthStatus, normalizePredictionPayload } from "../services/accountApi";
+import { savePredictionScore } from "../services/predictionApi";
 import {
   DEFAULT_MATCH_ALERTS,
   getMatchAlert,

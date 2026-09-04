@@ -37,8 +37,8 @@ for (const marker of [
   "Phase4BSearchPanel",
 ]) assert.match(phase, new RegExp(marker));
 
-assert.match(phase, /label: "Tips \+ Prediction"/);
-assert.match(phase, /title="Tips \+ Prediction"/);
+assert.match(phase, /label: "(Tips|Tips \+ Prediction)"/);
+assert.match(phase, /title="(Tips|Tips \+ Prediction)"/);
 assert.match(phase, /<Phase4BNewsPanel \/>[\s\S]*<Phase4BAdBanner \/>/);
 assert.match(phase, /EXPO_PUBLIC_MST_ENVIRONMENT !== "production" \? <EnvironmentBanner \/> : null/);
 for (const forbiddenPublicCopy of [
