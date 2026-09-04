@@ -30,7 +30,7 @@ export async function showPrivacyOptionsForm() {
     return {
       available: false,
       shown: false,
-      message: "Privacy options form is active for applicable jurisdictions. Non-personalized ads are served by default.",
+      message: "Advertising privacy options are unavailable in this build. No ad request should be made until privacy readiness can be checked.",
     };
   }
 
@@ -40,7 +40,7 @@ export async function showPrivacyOptionsForm() {
       return {
         available: false,
         shown: false,
-        message: "Privacy options form is active for applicable jurisdictions. Non-personalized ads are served by default.",
+        message: "Advertising privacy options are unavailable in this build. No ad request should be made until privacy readiness can be checked.",
       };
     }
 
@@ -61,17 +61,37 @@ export async function showPrivacyOptionsForm() {
 }
 
 /**
- * Requests consent information update and presents the consent form if required by law.
+ * Refreshes UMP consent information and presents a required form when applicable.
+ * The caller must inspect canRequestAds before initializing Mobile Ads or requesting an ad.
  */
 export async function gatherConsentIfRequired() {
-  if (!isConsentAvailable()) return null;
+  if (!isConsentAvailable()) {
+    return { available: false, canRequestAds: false };
+  }
 
   try {
     const ads = require("react-native-google-mobile-ads");
-    if (!ads?.AdsConsent) return null;
+    if (!ads?.AdsConsent) return { available: false, canRequestAds: false };
     const consentInfo = await ads.AdsConsent.gatherConsent();
-    return consentInfo;
-  } catch {
-    return null;
+    return {
+      available: true,
+      ...consentInfo,
+      canRequestAds: Boolean(consentInfo?.canRequestAds),
+    };
+  } catch (error) {
+    // UMP guidance permits using valid consent from a previous session after an
+    // update error. Query that state explicitly; never assume ad readiness.
+    try {
+      const ads = require("react-native-google-mobile-ads");
+      const previous = await ads?.AdsConsent?.getConsentInfo?.();
+      return {
+        available: true,
+        ...(previous || {}),
+        canRequestAds: Boolean(previous?.canRequestAds),
+        error,
+      };
+    } catch {
+      return { available: false, canRequestAds: false, error };
+    }
   }
 }
