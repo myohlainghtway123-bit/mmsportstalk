@@ -25,6 +25,7 @@ on:
     branches: [main]
     paths:
       - '.release/android-preview.txt'
+      - '.release/v1-production-build.trigger'
 
 permissions:
   contents: write
@@ -42,6 +43,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Resolve requested build
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" && -f .release/v1-production-build.trigger ]]; then
+            grep -qx 'RUN_MST_SCORES_V1_PRODUCTION_BUILD' .release/v1-production-build.trigger
+            echo 'platform=all' >> "$GITHUB_OUTPUT"
+            echo 'profile=production' >> "$GITHUB_OUTPUT"
+          else
+            echo 'platform=${{ inputs.platform || 'android' }}' >> "$GITHUB_OUTPUT"
+            echo 'profile=${{ inputs.profile || 'preview' }}' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
@@ -52,7 +67,7 @@ jobs:
         run: npm ci
 
       - name: Production release preflight
-        if: ${{ (inputs.profile || 'preview') == 'production' }}
+        if: ${{ steps.release.outputs.profile == 'production' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -72,8 +87,8 @@ jobs:
         id: eas
         continue-on-error: true
         env:
-          PLATFORM: ${{ inputs.platform || 'android' }}
-          PROFILE: ${{ inputs.profile || 'preview' }}
+          PLATFORM: ${{ steps.release.outputs.platform }}
+          PROFILE: ${{ steps.release.outputs.profile }}
         shell: bash
         run: |
           set -o pipefail
@@ -90,8 +105,8 @@ jobs:
           {
             echo "MST EAS BUILD"
             echo "Commit: $GITHUB_SHA"
-            echo "Profile: ${{ inputs.profile || 'preview' }}"
-            echo "Platform: ${{ inputs.platform || 'android' }}"
+            echo "Profile: ${{ steps.release.outputs.profile }}"
+            echo "Platform: ${{ steps.release.outputs.platform }}"
             echo "Exit code: ${{ steps.eas.outputs.exit_code }}"
             echo ""
             cat eas-build-output.txt 2>/dev/null || true
