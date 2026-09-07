@@ -1,1 +1,1 @@
-RUN_MST_SCORES_V1_ANDROID_BUILD
+# Neutralized after V1 production build
