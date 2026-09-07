@@ -1,8 +1,8 @@
 MST EAS BUILD
-Commit: e53e5e20baefbf8776f2378a7865903e2bc9340c
+Commit: 94c625c8cf6d49e8338fb3b75a448ecedc092806
 Profile: production
-Platform: all
-Exit code: 
+Platform: android
+Exit code: 1
 
 npm warn exec The following package was not found and will be installed: eas-cli@23.2.0
 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
@@ -22,11 +22,10 @@ Resolved "production" environment for the build. Learn more: https://docs.expo.d
 No environment variables with visibility "Plain text" and "Sensitive" found for the "production" environment on EAS.
 Environment variables loaded from the "production" build profile "env" configuration: EXPO_PUBLIC_MST_ENVIRONMENT, EXPO_PUBLIC_MST_SCORES_API_ORIGIN.
 
-- Incrementing versionCode from 1 to 2.
-✔ Incremented versionCode from 1 to 2.
+- Incrementing versionCode from 2 to 3.
+✔ Incremented versionCode from 2 to 3.
 
 
-🤖 Android build
 android.versionCode field in app config is ignored when version source is set to remote, but this value will still be in the manifest available via expo-constants. It's recommended to remove this value from app config.
 ✔ Using remote Android credentials (Expo server)
 ✔ Using Keystore from configuration: Build Credentials DIHDjHlk9e (default)
@@ -37,18 +36,12 @@ Compressing project files and uploading to EAS Build. Learn more: https://expo.f
 ✔ Uploaded to EAS 1s
 - Computing project fingerprint
 ✔ Computed project fingerprint
-Resolved "production" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
-No environment variables with visibility "Plain text" and "Sensitive" found for the "production" environment on EAS.
-Environment variables loaded from the "production" build profile "env" configuration: EXPO_PUBLIC_MST_ENVIRONMENT, EXPO_PUBLIC_MST_SCORES_API_ORIGIN.
 
-- Incrementing buildNumber from 7 to 8.
-✔ Incremented buildNumber from 7 to 8.
+See logs: https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/da645f19-504c-486b-a1d6-8cfee3ae8719
 
-🍏 iOS build
-ios.buildNumber field in app config is ignored when version source is set to remote, but this value will still be in the manifest available via expo-constants. It's recommended to remove this value from app config.
-✔ Using remote iOS credentials (Expo server)
+Waiting for build to complete. You can press Ctrl+C to exit.
+- Waiting for build to complete.
+✖ Build failed
 
-Distribution Certificate is not validated for non-interactive builds.
-Failed to set up credentials.
-Credentials are not set up. Run this command again in interactive mode.
-    Error: build command failed.
+🤖 Android build failed:
+Gradle build failed with unknown error. See logs for the "Run gradlew" (https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/da645f19-504c-486b-a1d6-8cfee3ae8719#run-gradlew) phase for more information.
