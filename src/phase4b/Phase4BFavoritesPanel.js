@@ -64,14 +64,14 @@ export default function Phase4BFavoritesPanel() {
   );
 }
 
-function numeric(value) {
-  return /^\d{1,12}$/.test(String(value || ""));
+function isValidFavoriteId(value) {
+  return /^[a-zA-Z0-9_\-:.]{1,64}$/.test(String(value || "").trim());
 }
 
 function FavoriteButton({ type, entity }) {
-  const id = String(entity?.id || "");
+  const id = String(entity?.id || "").trim();
   const [state, setState] = useState({ loading:true, favorite:false, requiresAuth:false, error:"" });
-  const usable = numeric(id) && Boolean(entity?.name);
+  const usable = isValidFavoriteId(id) && Boolean(entity?.name);
 
   const load = useCallback(async () => {
     if (!usable) {

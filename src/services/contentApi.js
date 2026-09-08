@@ -1,4 +1,4 @@
-import { MST_API_BASE, MST_SITE_ORIGIN } from "./mstApiConfig";
+import { MST_API_BASE, MST_SITE_ORIGIN } from "./mstApiConfig.js";
 
 const API_BASE = MST_API_BASE;
 const SITE = MST_SITE_ORIGIN;
@@ -16,22 +16,29 @@ function ttlFor(path) {
   return 2 * 60 * 1000;
 }
 
-async function networkGet(path) {
+async function networkGet(path, { locale } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const normalizedLocale = locale === "en" ? "en" : "my";
+  const separator = path.includes("?") ? "&" : "?";
+  const urlPath = locale ? `${path}${separator}locale=${encodeURIComponent(normalizedLocale)}` : path;
+  const cacheKey = `${path}:${normalizedLocale}`;
   try {
-    const response = await fetch(`${API_BASE}${path}`, {
-      headers: { Accept: "application/json" },
+    const response = await fetch(`${API_BASE}${urlPath}`, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": normalizedLocale,
+      },
       signal: controller.signal,
     });
     const text = await response.text();
     let payload = null;
     try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = { message: text }; }
     if (!response.ok) throw new Error(payload?.error || payload?.message || `MST API ${response.status}`);
-    cache.set(path, { payload, fetchedAt: Date.now() });
+    cache.set(cacheKey, { payload, fetchedAt: Date.now() });
     return payload;
   } catch (error) {
-    const saved = cache.get(path);
+    const saved = cache.get(cacheKey);
     if (saved) return saved.payload;
     if (error?.name === "AbortError") throw new Error("MST content is taking too long. Pull to refresh in a moment.");
     throw error;
@@ -40,14 +47,16 @@ async function networkGet(path) {
   }
 }
 
-async function get(path, { force = false } = {}) {
-  const saved = cache.get(path);
+async function get(path, { force = false, locale } = {}) {
+  const normalizedLocale = locale === "en" ? "en" : "my";
+  const cacheKey = `${path}:${normalizedLocale}`;
+  const saved = cache.get(cacheKey);
   if (!force && saved && Date.now() - saved.fetchedAt < ttlFor(path)) return saved.payload;
-  if (!force && inflight.has(path)) return inflight.get(path);
-  const promise = networkGet(path).finally(() => {
-    if (inflight.get(path) === promise) inflight.delete(path);
+  if (!force && inflight.has(cacheKey)) return inflight.get(cacheKey);
+  const promise = networkGet(path, { locale: normalizedLocale }).finally(() => {
+    if (inflight.get(cacheKey) === promise) inflight.delete(cacheKey);
   });
-  inflight.set(path, promise);
+  inflight.set(cacheKey, promise);
   return promise;
 }
 
@@ -205,8 +214,9 @@ async function fetchYouTubeFallback() {
   }
 }
 
-export async function fetchArticles(options) {
-  const payload = await get("/content/articles", options);
+export async function fetchArticles(options = {}) {
+  const locale = options?.locale || (options?.language === "en" ? "en" : "my");
+  const payload = await get("/content/articles", { ...options, locale });
   return { payload, articles: arrayFrom(payload, ["posts"]).map(normalizeArticle).filter((x) => x.title) };
 }
 

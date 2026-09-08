@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   createTipPurchase,
@@ -10,6 +10,7 @@ import {
   loadTipsters,
   loadUserLeaderboard,
 } from "./scoresStagingApi";
+import { MST_SITE_ORIGIN } from "../services/mstApiConfig";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const PURCHASE_ACTION_ENABLED = ENVIRONMENT !== "production";
@@ -136,18 +137,30 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled }) {
                   {String(row.selection)}
                 </Text>
               ) : null}
-              {purchaseEnabled && paid && tipId ? (
-                <Pressable
-                  disabled={busy}
-                  onPress={() => onPurchase(row)}
-                  style={[s.buyButton, busy && s.buyButtonDisabled]}
-                >
-                  {busy ? (
-                    <ActivityIndicator size="small" color={C.text} />
-                  ) : (
-                    <Text style={s.buyText}>BUY TIP</Text>
-                  )}
-                </Pressable>
+              {paid && tipId ? (
+                purchaseEnabled ? (
+                  <Pressable
+                    disabled={busy}
+                    onPress={() => onPurchase(row)}
+                    style={[s.buyButton, busy && s.buyButtonDisabled]}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color={C.text} />
+                    ) : (
+                      <Text style={s.buyText}>BUY TIP</Text>
+                    )}
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open MST website for premium tips"
+                    onPress={() => Linking.openURL(`${MST_SITE_ORIGIN}/tips`).catch(() => {})}
+                    style={s.webTipButton}
+                  >
+                    <Ionicons name="open-outline" size={11} color={C.amber} />
+                    <Text style={s.webTipText}>PREMIUM</Text>
+                  </Pressable>
+                )
               ) : accessLevel === "free" ? (
                 <Text style={s.freeTag}>FREE</Text>
               ) : null}
@@ -488,6 +501,18 @@ const s = StyleSheet.create({
   },
   buyButtonDisabled: { opacity: 0.6 },
   buyText: { color: C.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.3 },
+  webTipButton: {
+    minHeight: 30,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(244,200,77,0.3)",
+    backgroundColor: "rgba(244,200,77,0.08)",
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  webTipText: { color: C.amber, fontSize: 11, fontWeight: "900", letterSpacing: 0.5 },
   freeTag: { color: C.green, fontSize: 12, fontWeight: "900" },
   purchaseSuccess: { color: C.green, fontSize: 12.5, lineHeight: 16, marginTop: 7 },
   purchaseError: { color: C.amber, fontSize: 12.5, lineHeight: 16, marginTop: 7 },

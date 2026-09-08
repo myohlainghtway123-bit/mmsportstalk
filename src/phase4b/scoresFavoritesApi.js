@@ -1,7 +1,7 @@
-import { favoriteMetadata } from "../services/favoriteCatalog";
-import { MST_API_BASE } from "../services/mstApiConfig";
-import { loadOnboardingPreferences, saveOnboardingPreferences } from "../services/onboardingStore";
-import { getSessionToken, setSessionToken } from "../services/sessionStore";
+import { favoriteMetadata } from "../services/favoriteCatalog.js";
+import { MST_API_BASE } from "../services/mstApiConfig.js";
+import { loadOnboardingPreferences, saveOnboardingPreferences } from "../services/onboardingStore.js";
+import { getSessionToken, setSessionToken } from "../services/sessionStore.js";
 
 class ScoresAccountError extends Error {
   constructor(message, status = 0, payload = null) {
@@ -73,7 +73,7 @@ export async function getAuthStatus(options) {
 
 export const getFavorites = (options) => request("/account/favorites", options);
 
-function canonicalFavoriteKind(kind) {
+export function canonicalFavoriteKind(kind) {
   const value = String(kind || "").toLowerCase();
   if (value.startsWith("comp") || value.startsWith("league")) return "competition";
   if (value.startsWith("player")) return "player";
@@ -84,7 +84,7 @@ function canonicalFavoriteKind(kind) {
 export async function setFavorite({ kind, id, name, imageUrl, logo, photo, country, competitionId, competitionName, teamId, teamName, active }) {
   const type = canonicalFavoriteKind(kind);
   const entityId = String(id ?? "").trim();
-  if (!type || !/^\d{1,12}$/.test(entityId)) throw new ScoresAccountError("Choose a valid favorite.");
+  if (!type || !/^[a-zA-Z0-9_\-:.]{1,64}$/.test(entityId)) throw new ScoresAccountError("Choose a valid favorite.");
 
   if (!active) return request("/account/favorites", { method: "DELETE", body: { kind: type, id: entityId } });
 
