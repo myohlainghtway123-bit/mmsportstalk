@@ -322,7 +322,7 @@ function canonicalFavoriteKind(kind) {
 export async function setFavorite({ kind, id, name, imageUrl, logo, photo, country, competitionId, competitionName, teamId, teamName, active }) {
   const type = canonicalFavoriteKind(kind);
   const entityId = String(id ?? "").trim();
-  if (!type || !/^\d{1,12}$/.test(entityId)) throw new MstApiError("Choose a valid favorite.");
+  if (!type || !/^[a-zA-Z0-9_\-:.]{1,64}$/.test(entityId)) throw new MstApiError("Choose a valid favorite.");
 
   if (!active) {
     return api("/account/favorites", { method: "DELETE", body: { kind: type, id: entityId } });

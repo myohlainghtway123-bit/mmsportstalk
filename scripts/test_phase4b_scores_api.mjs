@@ -136,7 +136,7 @@ async function testSharedSessionContract() {
     }),
     (error) => error.status === 401 && error.requestId === "expired-request",
   );
-  assert.equal(sessionStore.current(), null, "401 must clear the persisted shared session");
+  assert.equal(sessionStore.current(), "shared-identity-token", "an auxiliary worker 401 must not clear the persisted shared session");
 
   await sessionStore.setSessionToken("logout-token");
   await logoutScoresAccount({

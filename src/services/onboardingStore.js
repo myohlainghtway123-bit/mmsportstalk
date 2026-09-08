@@ -13,9 +13,11 @@ function cleanIds(values) {
   return [...new Set((Array.isArray(values) ? values : []).map((x) => String(x)).filter(Boolean))];
 }
 
+const storage = AsyncStorage?.setItem ? AsyncStorage : (AsyncStorage?.default || AsyncStorage);
+
 export async function loadOnboardingPreferences() {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
+    const raw = await storage.getItem(KEY);
     if (!raw) return { ...DEFAULT };
     const parsed = JSON.parse(raw);
     return {
@@ -40,12 +42,27 @@ export async function saveOnboardingPreferences(next) {
     teams: cleanIds(next?.teams ?? current.teams),
     competitions: cleanIds(next?.competitions ?? current.competitions),
   };
-  await AsyncStorage.setItem(KEY, JSON.stringify(merged));
+  await storage.setItem(KEY, JSON.stringify(merged));
   return merged;
 }
 
+const languageListeners = new Set();
+
+export function subscribeAppLanguage(listener) {
+  if (typeof listener === "function") {
+    languageListeners.add(listener);
+    return () => languageListeners.delete(listener);
+  }
+  return () => {};
+}
+
 export async function persistAppLanguage(language) {
-  return saveOnboardingPreferences({ language: language === "en" ? "en" : "my" });
+  const clean = language === "en" ? "en" : "my";
+  const result = await saveOnboardingPreferences({ language: clean });
+  for (const fn of languageListeners) {
+    try { fn(clean); } catch (_) {}
+  }
+  return result;
 }
 
 export async function syncStoredOnboardingFavorites(setFavorite) {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchArticles, formatContentDate } from "../services/contentApi";
+import { subscribeAppLanguage } from "../services/onboardingStore";
 
 const C = {
   surface: "#101417",
@@ -45,7 +46,17 @@ function ArticleCard({ article }) {
   );
 }
 
-export default function Phase4BNewsPanel() {
+export default function Phase4BNewsPanel({ language: propLanguage = "my" }) {
+  const [currentLang, setCurrentLang] = useState(propLanguage);
+  useEffect(() => setCurrentLang(propLanguage), [propLanguage]);
+
+  useEffect(() => {
+    return subscribeAppLanguage((newLang) => {
+      setCurrentLang(newLang);
+    });
+  }, []);
+
+  const my = currentLang === "my";
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState({ loading: true, articles: [], error: "" });
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
@@ -53,29 +64,33 @@ export default function Phase4BNewsPanel() {
   useEffect(() => {
     let active = true;
     setState((current) => ({ ...current, loading: true, error: "" }));
-    fetchArticles({ force: attempt > 0 })
+    fetchArticles({ force: attempt > 0, locale: currentLang })
       .then(({ articles }) => {
         if (!active) return;
         setState({ loading: false, articles: Array.isArray(articles) ? articles.slice(0, 20) : [], error: "" });
       })
       .catch((error) => {
         if (!active) return;
-        setState({ loading: false, articles: [], error: error?.message || "MST News is unavailable." });
+        setState({
+          loading: false,
+          articles: [],
+          error: error?.message || (my ? "MST သတင်း မရရှိနိုင်သေးပါ" : "MST News is unavailable."),
+        });
       });
     return () => { active = false; };
-  }, [attempt]);
+  }, [attempt, currentLang, my]);
 
   return (
     <View style={s.wrap}>
       <View style={s.headingRow}>
         <View>
           <Text style={s.eyebrow}>MYANMAR SPORTS TALK</Text>
-          <Text style={s.heading}>Latest football news</Text>
+          <Text style={s.heading}>{my ? "နောက်ဆုံးရ ဘောလုံးသတင်းများ" : "Latest football news"}</Text>
         </View>
         {!state.loading ? (
           <Pressable accessibilityRole="button" onPress={retry} style={s.refreshButton}>
             <Ionicons name="refresh" size={15} color={C.secondary} />
-            <Text style={s.refreshText}>REFRESH</Text>
+            <Text style={s.refreshText}>{my ? "ပြန်လည်စစ်ဆေး" : "REFRESH"}</Text>
           </Pressable>
         ) : null}
       </View>

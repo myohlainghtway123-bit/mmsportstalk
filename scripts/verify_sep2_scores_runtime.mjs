@@ -80,9 +80,18 @@ if (providerId) {
 }
 const competitionProviderId = apiFootballId(match?.competition_id, "competition");
 if (competitionProviderId) {
-  const season = match?.season ? `?season=${encodeURIComponent(match.season)}` : "";
+  let resolvedSeason = match?.season;
+  if (!resolvedSeason) {
+    const seasonsRes = await json(`${APP}/football/competitions/${encodeURIComponent(competitionProviderId)}/seasons`);
+    const sList = data(seasonsRes.payload);
+    resolvedSeason = Array.isArray(sList) && sList.length ? sList[0] : 2024;
+  }
+  const season = `?season=${encodeURIComponent(resolvedSeason)}`;
   const result = await json(`${APP}/football/competitions/${encodeURIComponent(competitionProviderId)}/standings${season}`);
   console.log("existing-service-standings", JSON.stringify({ status:result.response.status, ok:result.response.ok, count:arrayCount(result.payload), message:errorMessage(result.payload), keys:keys(result.payload) }));
+
+  const bffStandings = await json(`${SCORES}/v1/standings?competitionId=${encodeURIComponent(match?.competition_id || competitionProviderId)}&season=${encodeURIComponent(resolvedSeason)}`);
+  console.log("scores-standings", JSON.stringify({ status: bffStandings.response.status, ok: bffStandings.response.ok, count: arrayCount(bffStandings.payload), message: errorMessage(bffStandings.payload), keys: keys(bffStandings.payload) }));
 }
 
 const tips = await json(`${SCORES}/v1/tips?matchId=${encodeURIComponent(sample.id)}&limit=10`);

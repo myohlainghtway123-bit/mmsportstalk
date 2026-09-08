@@ -361,9 +361,20 @@ export default function Phase4BProfileScreen({ onBack, onOpenSignIn }) {
                 <Text style={s.accountStatusText}>
                   {auth?.authenticated
                     ? "Authenticated MST Account"
-                    : "Guest Session · Sign in from Settings to link account"}
+                    : "Guest Session · Sign in to link your account and sync favorites"}
                 </Text>
               </View>
+
+              {!auth?.authenticated ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={onOpenSignIn}
+                  style={s.signInCtaBtn}
+                >
+                  <Ionicons name="log-in-outline" size={18} color={C.text} />
+                  <Text style={s.signInCtaText}>SIGN IN / REGISTER</Text>
+                </Pressable>
+              ) : null}
 
               {/* Save Info CTA */}
               <Pressable
@@ -524,12 +535,25 @@ const s = StyleSheet.create({
     paddingHorizontal: 2,
   },
   accountStatusText: { color: C.muted, fontSize: 12.5, flex: 1 },
-  saveChangesBtn: {
+  signInCtaBtn: {
     minHeight: 44,
     borderRadius: 8,
     backgroundColor: C.red,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  signInCtaText: { color: C.text, fontSize: 13.5, fontWeight: "900", letterSpacing: 0.5 },
+  saveChangesBtn: {
+    minHeight: 44,
+    borderRadius: 8,
+    backgroundColor: C.raised,
+    borderWidth: 1,
+    borderColor: C.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  saveChangesText: { color: C.text, fontSize: 14, fontWeight: "900", letterSpacing: 0.5 },
+  saveChangesText: { color: C.secondary, fontSize: 13, fontWeight: "800", letterSpacing: 0.5 },
 });

@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   canonicalMatchId,
   loadMatchCenter,
+  loadScoresForDate,
   loadScoresOverview,
 } from "./scoresStagingApi";
 import Phase4BMatchVote from "./Phase4BMatchVote";
@@ -33,7 +34,9 @@ import SettingsScreenV2 from "../final/SettingsScreenV2";
 import Phase4BMatchPreviewScreen from "./Phase4BMatchPreviewScreen";
 import Phase4BSearchScreen from "./Phase4BSearchScreen";
 import Phase4BProfileScreen from "./Phase4BProfileScreen";
+import Phase4BAuthModal from "./Phase4BAuthModal";
 import { getAuthStatus } from "../services/accountApi";
+import { loadOnboardingPreferences, persistAppLanguage } from "../services/onboardingStore";
 
 const T = Object.freeze({
   color: {
@@ -474,6 +477,8 @@ function MatchesScreen({
 }) {
   const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
   const [didSelectFallback, setDidSelectFallback] = useState(false);
+  const [dateMatches, setDateMatches] = useState({});
+  const [dateLoading, setDateLoading] = useState(false);
 
   useEffect(() => {
     if (!overview.loading && !didSelectFallback && overview.matches.length) {
@@ -483,11 +488,39 @@ function MatchesScreen({
     }
   }, [didSelectFallback, overview.loading, overview.matches, selectedDate]);
 
-  const selectedMatches = useMemo(
-    () => overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate),
-    [overview.matches, selectedDate],
-  );
+  useEffect(() => {
+    let alive = true;
+    if (dateMatches[selectedDate]) return;
+
+    setDateLoading(true);
+    loadScoresForDate(selectedDate)
+      .then((result) => {
+        if (!alive) return;
+        setDateMatches((prev) => ({ ...prev, [selectedDate]: result?.matches || [] }));
+      })
+      .catch(() => {
+        if (!alive) return;
+        const fallback = overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate);
+        setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
+      })
+      .finally(() => {
+        if (alive) setDateLoading(false);
+      });
+
+    return () => { alive = false; };
+  }, [selectedDate, overview.matches, dateMatches]);
+
+  const selectedMatches = useMemo(() => {
+    if (dateMatches[selectedDate]) return dateMatches[selectedDate];
+    return overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate);
+  }, [dateMatches, overview.matches, selectedDate]);
+
   const groups = useMemo(() => groupByCompetition(selectedMatches), [selectedMatches]);
+
+  const handleRefresh = useCallback(() => {
+    setDateMatches({});
+    onRetry?.();
+  }, [onRetry]);
 
   return (
     <View style={s.flex}>
@@ -502,8 +535,8 @@ function MatchesScreen({
         contentContainerStyle={s.scrollContent}
         refreshControl={
           <RefreshControl
-            refreshing={overview.loading}
-            onRefresh={onRetry}
+            refreshing={overview.loading || dateLoading}
+            onRefresh={handleRefresh}
             tintColor={T.color.red}
             colors={[T.color.red]}
           />
@@ -517,11 +550,11 @@ function MatchesScreen({
           <Text style={s.matchCount}>{selectedMatches.length} matches</Text>
         </View>
         <TerminalState
-          loading={overview.loading}
+          loading={overview.loading || dateLoading}
           error={overview.error}
-          empty={!overview.loading && !overview.error && selectedMatches.length === 0}
+          empty={!overview.loading && !dateLoading && !overview.error && selectedMatches.length === 0}
           emptyText="No real match is scheduled for this date. Choose another date or retry."
-          onRetry={onRetry}
+          onRetry={handleRefresh}
         />
         {overview.warnings.map((warning) => (
           <View key={warning.feed} style={s.inlineWarning}>
@@ -862,16 +895,38 @@ export default function Phase4BScoresInternalAlpha() {
   const [previewMatch, setPreviewMatch] = useState(null);
   const [subScreen, setSubScreen] = useState(null); // null | "search" | "profile" | "settings"
   const [userAvatar, setUserAvatar] = useState(null);
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [language, setLanguage] = useState("my");
 
-  // Load user avatar for top header
-  useEffect(() => {
+  const loadUserData = useCallback(() => {
     getAuthStatus()
       .then((status) => {
         const avatar = status?.user?.avatar || status?.user?.avatarUrl;
         if (avatar) setUserAvatar(avatar);
       })
       .catch(() => {});
-  }, [subScreen]);
+  }, []);
+
+  // Load user avatar for top header
+  useEffect(() => {
+    loadUserData();
+  }, [subScreen, loadUserData]);
+
+  useEffect(() => {
+    loadOnboardingPreferences()
+      .then((prefs) => {
+        if (prefs?.language === "en" || prefs?.language === "my") {
+          setLanguage(prefs.language);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSetLanguage = useCallback((nextLang) => {
+    const clean = nextLang === "en" ? "en" : "my";
+    setLanguage(clean);
+    persistAppLanguage(clean).catch(() => {});
+  }, []);
 
   const openMatch = useCallback((match) => {
     setPreviewMatch(null);
@@ -911,6 +966,11 @@ export default function Phase4BScoresInternalAlpha() {
   // Global Android hardware Back navigation hierarchy & double-press root exit
   useEffect(() => {
     const handleHardwareBack = () => {
+      // 0. Auth Modal open -> close modal
+      if (authModalVisible) {
+        setAuthModalVisible(false);
+        return true;
+      }
       // 1. In-App Match Preview open -> close preview
       if (previewMatch) {
         setPreviewMatch(null);
@@ -946,7 +1006,7 @@ export default function Phase4BScoresInternalAlpha() {
 
     const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
     return () => subscription.remove();
-  }, [previewMatch, subScreen, selectedMatch, active, selectNav]);
+  }, [authModalVisible, previewMatch, subScreen, selectedMatch, active, selectNav]);
 
   // Render secondary screens if active
   let content;
@@ -964,7 +1024,12 @@ export default function Phase4BScoresInternalAlpha() {
   } else if (subScreen === "search") {
     content = <Phase4BSearchScreen onBack={() => setSubScreen(null)} />;
   } else if (subScreen === "profile") {
-    content = <Phase4BProfileScreen onBack={() => setSubScreen(null)} />;
+    content = (
+      <Phase4BProfileScreen
+        onBack={() => setSubScreen(null)}
+        onOpenSignIn={() => setAuthModalVisible(true)}
+      />
+    );
   } else if (subScreen === "settings" || active === "settings") {
     content = (
       <SettingsScreenV2
@@ -973,6 +1038,10 @@ export default function Phase4BScoresInternalAlpha() {
           else selectNav("matches");
         }}
         openProfile={() => setSubScreen("profile")}
+        onOpenSignIn={() => setAuthModalVisible(true)}
+        openAccount={() => setAuthModalVisible(true)}
+        language={language}
+        setLanguage={handleSetLanguage}
       />
     );
   } else if (selectedMatch) {
@@ -1054,6 +1123,15 @@ export default function Phase4BScoresInternalAlpha() {
       {showFooter ? (
         <BottomNavigation active={active} onSelect={selectNav} />
       ) : null}
+      <Phase4BAuthModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        onSuccess={() => {
+          setAuthModalVisible(false);
+          loadUserData();
+        }}
+        language={language}
+      />
     </View>
   );
 }

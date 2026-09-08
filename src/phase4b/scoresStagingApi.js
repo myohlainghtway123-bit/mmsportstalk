@@ -123,10 +123,8 @@ export async function scoresProductRequest(path, {
     const payload = await decode(response);
     const requestId = requestIdFrom(response, payload);
     if (!response.ok) {
-      if (response.status === 401 && storedToken) {
-        sessionStore ||= await resolveSessionStore(providedSessionStore);
-        await sessionStore.setSessionToken(null).catch(() => {});
-      }
+      // Do not allow an auxiliary worker 401 to destroy the user's valid MST account session.
+      // Authoritative session invalidation is handled by getAuthStatus() or explicit logout.
       throw new ScoresStagingError(
         payload?.error?.message || payload?.message || `Scores API returned ${response.status}.`,
         { code: payload?.error?.code || "STAGING_DEPENDENCY_ERROR", status: response.status, requestId },
@@ -270,6 +268,63 @@ export async function loadScoresOverview(options) {
     matches: [...matches.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
     requestIds,
     warnings,
+  };
+}
+
+export async function loadScoresForDate(date, options = {}) {
+  const cleanDate = String(date || "").trim();
+  if (!cleanDate) return loadScoresOverview(options);
+
+  const encoded = encodeURIComponent(cleanDate);
+  try {
+    const result = await scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options);
+    if (Array.isArray(result.data) && result.data.length > 0) {
+      return {
+        matches: result.data.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+        requestId: result.requestId,
+        warnings: [],
+      };
+    }
+  } catch (_) {}
+
+  try {
+    const resResult = await scoresStagingGet(`/v1/results?date=${encoded}&limit=50`, options);
+    if (Array.isArray(resResult.data) && resResult.data.length > 0) {
+      return {
+        matches: resResult.data.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+        requestId: resResult.requestId,
+        warnings: [],
+      };
+    }
+  } catch (_) {}
+
+  const overview = await loadScoresOverview(options);
+  const filtered = overview.matches.filter((m) => {
+    const matchDate = String(m?.kickoff_at || m?.kickoff || "").slice(0, 10);
+    return matchDate === cleanDate;
+  });
+  return {
+    matches: filtered,
+    requestId: overview.requestIds?.fixtures || null,
+    warnings: overview.warnings || [],
+  };
+}
+
+export async function loadStandings({ competitionId, season } = {}, options = {}) {
+  const cleanId = String(competitionId || "").trim();
+  if (!cleanId) {
+    throw new ScoresStagingError("competitionId is required to load standings.", {
+      code: "COMPETITION_ID_REQUIRED",
+      status: 400,
+    });
+  }
+  const cleanSeason = season ? String(season).trim() : null;
+  const path = `/v1/standings?competitionId=${encodeURIComponent(cleanId)}${cleanSeason ? `&season=${encodeURIComponent(cleanSeason)}` : ""}`;
+  const result = await scoresStagingGet(path, options);
+  return {
+    standings: Array.isArray(result.data) ? result.data : [],
+    requestId: result.requestId,
+    warnings: [],
   };
 }
 
