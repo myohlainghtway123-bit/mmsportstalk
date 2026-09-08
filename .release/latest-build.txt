@@ -1,47 +1,6 @@
 MST EAS BUILD
-Commit: 3920efa3a57a0221687ed53d519296cf8aafb20d
-Profile: production
-Platform: android
-Exit code: 0
+Commit: 778ae471dded6c4941dd6887eef1a69b3369a5c4
+Profile: 
+Platform: 
+Exit code: 
 
-npm warn exec The following package was not found and will be installed: eas-cli@23.2.0
-npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
-npm warn deprecated rimraf@2.4.5: Rimraf versions prior to v4 are no longer supported
-npm warn deprecated uuid@7.0.3: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
-npm warn deprecated glob@6.0.4: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
-npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
-npm warn deprecated uuid@8.3.2: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
-npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
-npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
-
-⚠️ Detected that your app uses Expo Go for development, this is not recommended when building production apps.
-Learn more: https://expo.fyi/why-not-build-expo-go-for-production
-To suppress this warning, set EAS_BUILD_NO_EXPO_GO_WARNING=true.
-
-Resolved "production" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
-No environment variables with visibility "Plain text" and "Sensitive" found for the "production" environment on EAS.
-Environment variables loaded from the "production" build profile "env" configuration: EXPO_PUBLIC_MST_ENVIRONMENT, EXPO_PUBLIC_MST_SCORES_API_ORIGIN.
-
-- Incrementing versionCode from 3 to 4.
-✔ Incremented versionCode from 3 to 4.
-
-
-android.versionCode field in app config is ignored when version source is set to remote, but this value will still be in the manifest available via expo-constants. It's recommended to remove this value from app config.
-✔ Using remote Android credentials (Expo server)
-✔ Using Keystore from configuration: Build Credentials DIHDjHlk9e (default)
-
-Compressing project files and uploading to EAS Build. Learn more: https://expo.fyi/eas-build-archive
-- Compressing project files
-- Uploading to EAS Build (0 / 99.8 MB)
-✔ Uploaded to EAS 
-- Computing project fingerprint
-✔ Computed project fingerprint
-
-See logs: https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/7950b0c4-b143-4bb7-abf1-14011676c53c
-
-Waiting for build to complete. You can press Ctrl+C to exit.
-- Waiting for build to complete.
-✔ Build finished
-
-🤖 Android app:
-https://expo.dev/artifacts/eas/dI9KkfvFlldoQixrtPqxED4aNdZxNgl7Ymc5YCoVwao.aab
