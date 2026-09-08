@@ -1,6 +1,14 @@
-MST EAS BUILD
-Commit: 778ae471dded6c4941dd6887eef1a69b3369a5c4
-Profile: 
-Platform: 
-Exit code: 
+MST EAS BUILD - PRODUCTION
+Build ID: b9c121e6-de9e-40f7-a1f4-9fbcd7252acd
+Commit: 303a08806398b1f66ef847ad372a7bd80efea28d
+Merged Main Commit: 4cf3d1c
+Tag: v1.5.2-scores-rc1
+Profile: production
+Platform: android
+Version: 1.5.2
+VersionCode: 5
+Distribution: store
+Artifact URL: https://expo.dev/artifacts/eas/muJYQ6sWkjnObQVzlywlPUQG42lew8fE5WNJ8ofTz3g.aab
+Status: finished
+Exit code: 0
 
