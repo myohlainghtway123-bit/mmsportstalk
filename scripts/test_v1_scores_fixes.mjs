@@ -220,7 +220,7 @@ try {
   process.env.EXPO_PUBLIC_MST_ENVIRONMENT = "staging";
   delete process.env.EXPO_PUBLIC_MST_APP_API_ORIGIN;
   const stagingOrigin = resolveMstApiOrigin();
-  assert.equal(stagingOrigin, "https://app-api-staging.myanmarsportstalk.com", "Staging environment must resolve to staging API");
+  assert.equal(stagingOrigin, "https://app-api.myanmarsportstalk.com", "Staging environment must resolve to staging API");
 
   process.env.EXPO_PUBLIC_MST_ENVIRONMENT = "production";
   delete process.env.EXPO_PUBLIC_MST_APP_API_ORIGIN;

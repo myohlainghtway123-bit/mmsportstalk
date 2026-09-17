@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View } 
 import { Ionicons } from "@expo/vector-icons";
 import { fetchArticles, formatContentDate } from "../services/contentApi";
 import { subscribeAppLanguage } from "../services/onboardingStore";
+import { useTheme } from "../theme/ThemeContext";
 
 const C = {
   surface: "#101417",
@@ -21,25 +22,25 @@ async function openArticle(url) {
   if (supported) await Linking.openURL(url).catch(() => {});
 }
 
-function ArticleCard({ article }) {
+function ArticleCard({ article, colors = C, my = false }) {
   return (
     <Pressable
       accessibilityRole="link"
       disabled={!article?.url}
       onPress={() => openArticle(article?.url)}
-      style={s.card}
+      style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}
     >
-      {article?.image ? <Image source={{ uri: article.image }} resizeMode="cover" style={s.image} /> : null}
+      {article?.image ? <Image source={{ uri: article.image }} resizeMode="cover" style={[s.image, { backgroundColor: colors.raised || C.raised }]} /> : null}
       <View style={s.copy}>
         <View style={s.metaRow}>
           <Text numberOfLines={1} style={s.category}>{String(article?.category || "News").toUpperCase()}</Text>
-          <Text style={s.date}>{formatContentDate(article?.publishedAt)}</Text>
+          <Text style={[s.date, { color: colors.muted }]}>{formatContentDate(article?.publishedAt)}</Text>
         </View>
-        <Text style={s.title}>{article?.title || "Myanmar Sports Talk"}</Text>
-        {article?.excerpt ? <Text numberOfLines={3} style={s.excerpt}>{article.excerpt}</Text> : null}
+        <Text style={[s.title, { color: colors.text }]}>{article?.title || "Myanmar Sports Talk"}</Text>
+        {article?.excerpt ? <Text numberOfLines={3} style={[s.excerpt, { color: colors.secondary || colors.text }]}>{article.excerpt}</Text> : null}
         <View style={s.readRow}>
-          <Text style={s.readText}>{article?.url ? "READ ON MST" : "ARTICLE LINK UNAVAILABLE"}</Text>
-          {article?.url ? <Ionicons name="arrow-forward" size={15} color={C.red} /> : null}
+          <Text style={s.readText}>{article?.url ? (my ? "MST တွင် ဖတ်ရှုရန်" : "READ ON MST") : (my ? "လင့်ခ် မရရှိနိုင်ပါ" : "ARTICLE LINK UNAVAILABLE")}</Text>
+          {article?.url ? <Ionicons name="arrow-forward" size={15} color={colors.red || C.red} /> : null}
         </View>
       </View>
     </Pressable>
@@ -80,42 +81,48 @@ export default function Phase4BNewsPanel({ language: propLanguage = "my" }) {
     return () => { active = false; };
   }, [attempt, currentLang, my]);
 
+  let colors = C;
+  try {
+    const theme = useTheme();
+    if (theme?.colors) colors = theme.colors;
+  } catch {}
+
   return (
     <View style={s.wrap}>
       <View style={s.headingRow}>
         <View>
           <Text style={s.eyebrow}>MYANMAR SPORTS TALK</Text>
-          <Text style={s.heading}>{my ? "နောက်ဆုံးရ ဘောလုံးသတင်းများ" : "Latest football news"}</Text>
+          <Text style={[s.heading, { color: colors.text }]}>{my ? "နောက်ဆုံးရ ဘောလုံးသတင်းများ" : "Latest football news"}</Text>
         </View>
         {!state.loading ? (
-          <Pressable accessibilityRole="button" onPress={retry} style={s.refreshButton}>
-            <Ionicons name="refresh" size={15} color={C.secondary} />
-            <Text style={s.refreshText}>{my ? "ပြန်လည်စစ်ဆေး" : "REFRESH"}</Text>
+          <Pressable accessibilityRole="button" onPress={retry} style={[s.refreshButton, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
+            <Ionicons name="refresh" size={15} color={colors.secondary || colors.text} />
+            <Text style={[s.refreshText, { color: colors.secondary || colors.text }]}>{my ? "ပြန်လည်စစ်ဆေး" : "REFRESH"}</Text>
           </Pressable>
         ) : null}
       </View>
 
       {state.loading ? (
-        <View style={s.stateCard}>
-          <ActivityIndicator color={C.red} />
-          <Text style={s.stateText}>Loading MST News…</Text>
+        <View style={[s.stateCard, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+          <ActivityIndicator color={colors.red || C.red} />
+          <Text style={[s.stateText, { color: colors.muted }]}>Loading MST News…</Text>
         </View>
       ) : state.error ? (
-        <View style={s.stateCard}>
+        <View style={[s.stateCard, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
           <Ionicons name="cloud-offline-outline" size={26} color={C.amber} />
-          <Text style={s.stateTitle}>News temporarily unavailable</Text>
-          <Text style={s.stateText}>{state.error}</Text>
+          <Text style={[s.stateTitle, { color: colors.text }]}>News temporarily unavailable</Text>
+          <Text style={[s.stateText, { color: colors.muted }]}>{state.error}</Text>
           <Pressable accessibilityRole="button" onPress={retry} style={s.retryButton}>
             <Text style={s.retryText}>RETRY</Text>
           </Pressable>
         </View>
       ) : !state.articles.length ? (
-        <View style={s.stateCard}>
-          <Ionicons name="newspaper-outline" size={26} color={C.muted} />
-          <Text style={s.stateTitle}>No published articles</Text>
-          <Text style={s.stateText}>The MST content API returned no articles. No fabricated stories are shown.</Text>
+        <View style={[s.stateCard, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+          <Ionicons name="newspaper-outline" size={26} color={colors.muted} />
+          <Text style={[s.stateTitle, { color: colors.text }]}>No published articles</Text>
+          <Text style={[s.stateText, { color: colors.muted }]}>The MST content API returned no articles. No fabricated stories are shown.</Text>
         </View>
-      ) : state.articles.map((article) => <ArticleCard key={article.id || article.slug} article={article} />)}
+      ) : state.articles.map((article) => <ArticleCard key={article.id || article.slug} article={article} colors={colors} />)}
     </View>
   );
 }

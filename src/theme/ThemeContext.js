@@ -8,22 +8,25 @@ export const THEMES = {
   dark: {
     name: "dark",
     isDark: true,
-    bg: "#080A0C",
-    bg2: "#0B0E10",
-    panel: "#0D1013",
-    card: "#111519",
-    card2: "#151A1F",
-    border: "#20262C",
-    border2: "#181D22",
-    red: "#F3262D",
-    redSoft: "rgba(243,38,45,.14)",
-    gold: "#F4C84D",
+    bg: "#000000",
+    bg2: "#0A0A0C",
+    panel: "#121214",
+    card: "#121214",
+    card2: "#18181C",
+    border: "#202024",
+    border2: "#18181C",
+    red: "#E50914",
+    redSoft: "rgba(229,9,20,.14)",
+    gold: "#F59E0B",
     text: "#FFFFFF",
-    text2: "#D0D2D4",
-    muted: "#8E9499",
-    muted2: "#5E646A",
-    green: "#31C674",
-    blue: "#43A9E8",
+    text2: "#C4C4CC",
+    muted: "#787882",
+    muted2: "#52525B",
+    surface: "#121214",
+    raised: "#18181C",
+    secondary: "#C4C4CC",
+    green: "#10B981",
+    blue: "#38BDF8",
     pitch: "#0B2D1E",
     pitchBorder: "#1F5B42",
     barStyle: "light-content",
@@ -36,6 +39,9 @@ export const THEMES = {
     panel: "#EAEDF2",
     card: "#FFFFFF",
     card2: "#F3F5F8",
+    surface: "#FFFFFF",
+    raised: "#E6E9EE",
+    secondary: "#2A2F35",
     border: "#D5DAE0",
     border2: "#E2E6EC",
     red: "#E51D24",
@@ -61,17 +67,33 @@ const ThemeContext = createContext({
 });
 
 export function ThemeProvider({ children }) {
-  const systemScheme = useColorScheme();
+  const rnColorScheme = useColorScheme();
+  const [listenerScheme, setListenerScheme] = useState(Appearance.getColorScheme());
   const [themeMode, setThemeModeState] = useState("dark");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      setListenerScheme(colorScheme);
+    });
+    return () => sub?.remove?.();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     AsyncStorage.getItem(THEME_STORAGE_KEY)
       .then((saved) => {
-        if (saved === "light" || saved === "dark" || saved === "system") {
+        if (active && (saved === "light" || saved === "dark" || saved === "system")) {
           setThemeModeState(saved);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (active) setHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const setThemeMode = async (mode) => {
@@ -86,11 +108,12 @@ export function ThemeProvider({ children }) {
 
   const activeTheme = useMemo(() => {
     if (themeMode === "system") {
-      const isSysDark = systemScheme !== "light";
+      const effective = listenerScheme || rnColorScheme || Appearance.getColorScheme();
+      const isSysDark = effective !== "light";
       return isSysDark ? THEMES.dark : THEMES.light;
     }
     return themeMode === "light" ? THEMES.light : THEMES.dark;
-  }, [themeMode, systemScheme]);
+  }, [themeMode, rnColorScheme, listenerScheme]);
 
   const value = useMemo(
     () => ({
@@ -98,8 +121,9 @@ export function ThemeProvider({ children }) {
       setThemeMode,
       colors: activeTheme,
       isDark: activeTheme.isDark,
+      hydrated,
     }),
-    [themeMode, activeTheme],
+    [themeMode, activeTheme, hydrated],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

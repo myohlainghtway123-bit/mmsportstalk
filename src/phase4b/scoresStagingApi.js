@@ -276,38 +276,56 @@ export async function loadScoresForDate(date, options = {}) {
   if (!cleanDate) return loadScoresOverview(options);
 
   const encoded = encodeURIComponent(cleanDate);
-  try {
-    const result = await scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options);
-    if (Array.isArray(result.data) && result.data.length > 0) {
-      return {
-        matches: result.data.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
-        requestId: result.requestId,
-        warnings: [],
-      };
+  const [fixturesRes, resultsRes] = await Promise.allSettled([
+    scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options),
+    scoresStagingGet(`/v1/results?date=${encoded}&limit=50`, options),
+  ]);
+
+  const map = new Map();
+  let reqId = null;
+
+  if (fixturesRes.status === "fulfilled" && Array.isArray(fixturesRes.value?.data)) {
+    reqId = fixturesRes.value.requestId || reqId;
+    for (const m of fixturesRes.value.data) {
+      const id = canonicalMatchId(m);
+      if (id) map.set(id, { ...(map.get(id) || {}), ...m });
     }
-  } catch (_) {}
+  }
+
+  if (resultsRes.status === "fulfilled" && Array.isArray(resultsRes.value?.data)) {
+    reqId = resultsRes.value.requestId || reqId;
+    for (const m of resultsRes.value.data) {
+      const id = canonicalMatchId(m);
+      if (id) map.set(id, { ...(map.get(id) || {}), ...m });
+    }
+  }
+
+  if (map.size > 0) {
+    return {
+      matches: [...map.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+      requestId: reqId,
+      warnings: [],
+    };
+  }
 
   try {
-    const resResult = await scoresStagingGet(`/v1/results?date=${encoded}&limit=50`, options);
-    if (Array.isArray(resResult.data) && resResult.data.length > 0) {
-      return {
-        matches: resResult.data.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
-        requestId: resResult.requestId,
-        warnings: [],
-      };
-    }
-  } catch (_) {}
-
-  const overview = await loadScoresOverview(options);
-  const filtered = overview.matches.filter((m) => {
-    const matchDate = String(m?.kickoff_at || m?.kickoff || "").slice(0, 10);
-    return matchDate === cleanDate;
-  });
-  return {
-    matches: filtered,
-    requestId: overview.requestIds?.fixtures || null,
-    warnings: overview.warnings || [],
-  };
+    const overview = await loadScoresOverview(options);
+    const filtered = overview.matches.filter((m) => {
+      const matchDate = String(m?.kickoff_at || m?.kickoff || "").slice(0, 10);
+      return matchDate === cleanDate;
+    });
+    return {
+      matches: filtered,
+      requestId: overview.requestIds?.fixtures || null,
+      warnings: overview.warnings || [],
+    };
+  } catch {
+    return {
+      matches: [],
+      requestId: reqId,
+      warnings: [],
+    };
+  }
 }
 
 export async function loadStandings({ competitionId, season } = {}, options = {}) {

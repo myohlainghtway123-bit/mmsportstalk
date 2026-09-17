@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import ScreenHeader from "../components/ScreenHeader";
+import { useTheme } from "../theme/ThemeContext";
 import {
   deleteAvatar,
   getAuthStatus,
@@ -35,7 +36,13 @@ const C = {
   amber: "#F4C84D",
 };
 
-export default function Phase4BProfileScreen({ onBack, onOpenSignIn }) {
+export default function Phase4BProfileScreen({ onBack, onOpenSignIn, language = "my" }) {
+  let colors = C;
+  try {
+    const theme = useTheme();
+    if (theme?.colors) colors = theme.colors;
+  } catch {}
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
@@ -212,10 +219,10 @@ export default function Phase4BProfileScreen({ onBack, onOpenSignIn }) {
   const currentAvatarUri = pendingAvatar?.uri || auth?.user?.avatar || auth?.user?.avatarUrl;
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.bg }]}>
       <ScreenHeader
-        title="Profile"
-        subtitle="VIEW & EDIT PROFILE"
+        title={language === "my" ? "ပရိုဖိုင်" : "Profile"}
+        subtitle={language === "my" ? "ပရိုဖိုင် ကြည့်ရန်နှင့် ပြင်ဆင်ရန်" : "VIEW & EDIT PROFILE"}
         onBack={onBack}
       />
 

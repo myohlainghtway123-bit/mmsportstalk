@@ -70,10 +70,20 @@ function Row({
   external = false,
   accessibilityLabel,
 }) {
+  const isLight = colors?.isDark === false || colors?.name === "light" || colors?.bg === "#F2F4F7" || colors?.text === "#101316";
+  const isWhiteTone = tone === "#FFFFFF" || tone === "#ffffff" || tone === "#D4D8DB";
+  const iconColor = (isLight && (isWhiteTone || icon === "logo-tiktok" || icon === "logo-threads"))
+    ? (colors?.text || "#101316")
+    : (tone || colors?.text2 || "#FFFFFF");
+
   const content = (
     <>
-      <View style={[s.icon, { backgroundColor: colors.card2 }]}>
-        <Ionicons name={icon} size={20} color={tone || colors.text2} />
+      <View style={[s.icon, { backgroundColor: isLight ? (colors.card2 || "#F3F5F8") : (colors.card2 || "#18181C") }]}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={iconColor}
+        />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text numberOfLines={1} style={[s.rowTitle, { color: colors.text }]}>

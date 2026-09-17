@@ -11,6 +11,7 @@ import {
   loadUserLeaderboard,
 } from "./scoresStagingApi";
 import { MST_SITE_ORIGIN } from "../services/mstApiConfig";
+import { useTheme } from "../theme/ThemeContext";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const PURCHASE_ACTION_ENABLED = ENVIRONMENT !== "production";
@@ -72,24 +73,24 @@ function meta(row) {
   return parts.join(" · ") || "MST data";
 }
 
-function DataList({ title, eyebrow, data, empty }) {
+function DataList({ title, eyebrow, data, empty, colors = C }) {
   const list = rows(data).slice(0, 10);
   return (
-    <View style={s.card}>
-      <Text style={s.eyebrow}>{eyebrow}</Text>
-      <Text style={s.title}>{title}</Text>
+    <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+      <Text style={[s.eyebrow, { color: colors.red }]}>{eyebrow}</Text>
+      <Text style={[s.title, { color: colors.text }]}>{title}</Text>
       {list.length ? (
         list.map((row, index) => (
           <View
             key={String(row?.id || row?.user_id || row?.userId || row?.tipsterId || `${title}-${index}`)}
-            style={[s.row, index > 0 && s.rowBorder]}
+            style={[s.row, index > 0 && [s.rowBorder, { borderTopColor: colors.border }]]}
           >
-            <Text style={s.rank}>{row?.rank != null ? `#${row.rank}` : `${index + 1}`}</Text>
+            <Text style={[s.rank, { color: colors.muted }]}>{row?.rank != null ? `#${row.rank}` : `${index + 1}`}</Text>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={s.name}>
+              <Text numberOfLines={1} style={[s.name, { color: colors.secondary || colors.text }]}>
                 {label(row, `Item ${index + 1}`)}
               </Text>
-              <Text numberOfLines={1} style={s.meta}>
+              <Text numberOfLines={1} style={[s.meta, { color: colors.muted }]}>
                 {meta(row)}
               </Text>
             </View>
@@ -101,20 +102,20 @@ function DataList({ title, eyebrow, data, empty }) {
           </View>
         ))
       ) : (
-        <Text style={s.empty}>{empty}</Text>
+        <Text style={[s.empty, { color: colors.muted }]}>{empty}</Text>
       )}
     </View>
   );
 }
 
-function TipList({ data, onPurchase, purchaseState, purchaseEnabled }) {
+function TipList({ data, onPurchase, purchaseState, purchaseEnabled, colors = C }) {
   const list = rows(data)
     .filter((row) => purchaseEnabled || String(row?.access_level || row?.accessLevel || "").toLowerCase() !== "paid")
     .slice(0, 10);
   return (
-    <View style={s.card}>
-      <Text style={s.eyebrow}>MST TIPS</Text>
-      <Text style={s.title}>Tips</Text>
+    <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+      <Text style={[s.eyebrow, { color: colors.red }]}>MST TIPS</Text>
+      <Text style={[s.title, { color: colors.text }]}>Tips</Text>
       {list.length ? (
         list.map((row, index) => {
           const tipId = String(row?.id || "").trim();
@@ -122,13 +123,13 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled }) {
           const paid = accessLevel === "paid";
           const busy = purchaseEnabled && paid && purchaseState.tipId === tipId && purchaseState.loading;
           return (
-            <View key={tipId || `tip-${index}`} style={[s.row, index > 0 && s.rowBorder]}>
-              <Text style={s.rank}>{index + 1}</Text>
+            <View key={tipId || `tip-${index}`} style={[s.row, index > 0 && [s.rowBorder, { borderTopColor: colors.border }]]}>
+              <Text style={[s.rank, { color: colors.muted }]}>{index + 1}</Text>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={s.name}>
+                <Text numberOfLines={1} style={[s.name, { color: colors.secondary || colors.text }]}>
                   {label(row, `Tip ${index + 1}`)}
                 </Text>
-                <Text numberOfLines={1} style={s.meta}>
+                <Text numberOfLines={1} style={[s.meta, { color: colors.muted }]}>
                   {meta(row)}
                 </Text>
               </View>
@@ -168,7 +169,7 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled }) {
           );
         })
       ) : (
-        <Text style={s.empty}>No free Tips are available right now.</Text>
+        <Text style={[s.empty, { color: colors.muted }]}>No free Tips are available right now.</Text>
       )}
       {purchaseEnabled && purchaseState.message ? (
         <Text style={purchaseState.error ? s.purchaseError : s.purchaseSuccess}>
@@ -201,8 +202,9 @@ async function entitledPurchaseRows(purchases, tips) {
   return settled.flatMap((entry) => (entry.status === "fulfilled" && entry.value ? [entry.value] : []));
 }
 
-export default function Phase4BReadOnlyHub() {
-  const [subTab, setSubTab] = useState("tips"); // "tips" | "tipsters" | "leaderboard"
+export default function Phase4BReadOnlyHub({ language = "my" }) {
+  const my = language === "my";
+  const [subTab, setSubTab] = useState("tips"); // "tips" | "prediction" | "tipsters" | "rank"
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState({
     loading: true,
@@ -248,45 +250,36 @@ export default function Phase4BReadOnlyHub() {
     setState((current) => ({ ...current, loading: true, warnings: [] }));
     Promise.allSettled([
       loadTips(),
-      loadOwnPurchases(),
       loadTipsters(),
       loadTipsterLeaderboard(),
       loadUserLeaderboard(),
-    ]).then(async (settled) => {
+      loadOwnPurchases().catch(() => null),
+    ]).then(async ([tipsRes, tipstersRes, tipsterLbRes, userLbRes, purchasesRes]) => {
       if (!active) return;
-      const [tips, purchases, tipsters, tipsterLeaderboard, leaderboard] = settled;
-      const tipsData = tips.status === "fulfilled" ? tips.value : null;
-      const purchasesData = purchases.status === "fulfilled" ? purchases.value : null;
-      const purchased =
-        purchases.status === "fulfilled"
-          ? await entitledPurchaseRows(purchasesData, tipsData).catch(() => [])
-          : [];
-      if (!active) return;
-      const names = [
-        "Tips",
-        "Entitled tips",
-        "Tipsters",
-        "Tipster leaderboard",
-        "Prediction leaderboard",
-      ];
-      const warnings = settled.flatMap((entry, index) =>
-        entry.status === "rejected"
-          ? [entry.reason?.message || `${names[index]} unavailable`]
-          : [],
-      );
+      const tips = tipsRes.status === "fulfilled" ? tipsRes.value : null;
+      const tipsters = tipstersRes.status === "fulfilled" ? tipstersRes.value : null;
+      const tipsterLeaderboard = tipsterLbRes.status === "fulfilled" ? tipsterLbRes.value : null;
+      const leaderboard = userLbRes.status === "fulfilled" ? userLbRes.value : null;
+      const purchases = purchasesRes.status === "fulfilled" ? purchasesRes.value : null;
+      const purchased = await entitledPurchaseRows(purchases, tips);
+
+      const warnings = [];
+      if (tipsRes.status === "rejected") warnings.push("Tips unavailable right now.");
+      if (tipstersRes.status === "rejected") warnings.push("Tipsters directory unavailable.");
+      if (tipsterLbRes.status === "rejected") warnings.push("Tipster rankings unavailable.");
+      if (userLbRes.status === "rejected") warnings.push("Prediction leaderboard unavailable.");
+
       setState({
         loading: false,
-        tips: tipsData,
+        tips,
         purchased,
-        tipsters: tipsters.status === "fulfilled" ? tipsters.value : null,
-        tipsterLeaderboard: tipsterLeaderboard.status === "fulfilled" ? tipsterLeaderboard.value : null,
-        leaderboard: leaderboard.status === "fulfilled" ? leaderboard.value : null,
+        tipsters,
+        tipsterLeaderboard,
+        leaderboard,
         warnings,
       });
     });
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [attempt]);
 
   useEffect(() => {
@@ -300,29 +293,35 @@ export default function Phase4BReadOnlyHub() {
     }
   }, [subTab]);
 
+  let colors = C;
+  try {
+    const theme = useTheme();
+    if (theme?.colors) colors = theme.colors;
+  } catch {}
+
+  const openPredictionApp = () => {
+    Linking.openURL("mstprediction://").catch(() => {
+      Linking.openURL("https://prediction.myanmarsportstalk.com").catch(() => {});
+    });
+  };
+
   if (state.loading) {
     return (
-      <View style={s.loading}>
-        <ActivityIndicator color={C.red} />
-        <Text style={s.loadingText}>Loading shared MST tips and leaderboards…</Text>
+      <View style={[s.loading, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+        <ActivityIndicator color={colors.red} />
+        <Text style={[s.loadingText, { color: colors.muted }]}>Loading predictions and tips…</Text>
       </View>
     );
   }
 
   return (
     <View>
-      <View style={s.boundary}>
-        <Ionicons name="shield-checkmark-outline" size={18} color={C.green} />
-        <Text style={s.boundaryText}>
-          MST Scores provides read-only Tip intelligence and verified leaderboards. Exact-score prediction creation, editing and submission are exclusive to MST Prediction.
-        </Text>
-      </View>
-
-      <View style={s.segmentedNav} accessibilityRole="tablist">
+      <View style={[s.segmentedNav, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]} accessibilityRole="tablist">
         {[
-          { id: "tips", label: "Tips", icon: "diamond-outline" },
-          { id: "tipsters", label: "Tipsters", icon: "people-outline" },
-          { id: "leaderboard", label: "Tipster Leaderboard", icon: "trophy-outline" },
+          { id: "tips", label: "Tips", burmeseLabel: "Tips" },
+          { id: "prediction", label: "Prediction", shortLabel: "Predict", burmeseLabel: "ခန့်မှန်းချက်" },
+          { id: "tipsters", label: "Tipsters", burmeseLabel: "Tipsters" },
+          { id: "leaderboard", label: "Leaderboard", shortLabel: "Rank", burmeseLabel: "အဆင့်" },
         ].map((tab) => {
           const active = subTab === tab.id;
           return (
@@ -331,74 +330,128 @@ export default function Phase4BReadOnlyHub() {
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               onPress={() => setSubTab(tab.id)}
-              style={[s.segmentBtn, active && s.segmentBtnActive]}
+              style={[
+                s.segmentBtn,
+                active && [s.segmentBtnActive, { backgroundColor: colors.red }],
+              ]}
             >
-              <Ionicons
-                name={tab.icon}
-                size={14}
-                color={active ? C.text : C.muted}
-                style={{ marginRight: 4 }}
-              />
-              <Text style={[s.segmentLabel, active && s.segmentLabelActive]}>
-                {tab.label}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.78}
+                style={[
+                  s.segmentLabel,
+                  { color: active ? "#FFFFFF" : colors.muted },
+                  active && s.segmentLabelActive,
+                ]}
+              >
+                {my ? tab.burmeseLabel : (tab.shortLabel || tab.label)}
               </Text>
             </Pressable>
           );
         })}
       </View>
 
+      {subTab === "prediction" ? (
+        <>
+          <View style={[s.predictionHeroCard, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+            <View style={s.predictionHeroHeader}>
+              <View style={[s.predictionBadge, { backgroundColor: colors.redSoft || "rgba(243,38,45,0.12)" }]}>
+                <Ionicons name="trophy" size={13} color={colors.red || C.red} />
+                <Text style={[s.predictionBadgeText, { color: colors.red || C.red }]}>MST PREDICTION ECOSYSTEM</Text>
+              </View>
+            </View>
+            <Text style={[s.predictionHeroTitle, { color: colors.text }]}>{my ? "ပွဲရလဒ်ခန့်မှန်းချက် ပြိုင်ပွဲ" : "Score Prediction Challenge"}</Text>
+            <Text style={[s.predictionHeroDesc, { color: colors.muted }]}>
+              {my ? "ပွဲရလဒ် အတိအကျခန့်မှန်းပြီး အမှတ်များရယူကာ ဆုလာဘ်များ ရယူပါ။ MST Prediction companion app တွင် ခန့်မှန်းချက်များ ပြုလုပ်နိုင်ပါသည်။" : "Predict exact match scores to earn points, climb the leaderboard, and win rewards. Predictions are created and managed in the companion MST Prediction app."}
+            </Text>
+            <View style={s.predictionRulesRow}>
+              <View style={[s.ruleChip, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
+                <Text style={[s.ruleChipBold, { color: colors.text }]}>3 pts</Text>
+                <Text style={[s.ruleChipLabel, { color: colors.muted }]}>{my ? "ရလဒ်မှန်" : "Exact Score"}</Text>
+              </View>
+              <View style={[s.ruleChip, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
+                <Text style={[s.ruleChipBold, { color: colors.text }]}>1 pt</Text>
+                <Text style={[s.ruleChipLabel, { color: colors.muted }]}>{my ? "အနိုင်/သရေမှန်" : "Result Only"}</Text>
+              </View>
+              <View style={[s.ruleChip, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
+                <Text style={[s.ruleChipBold, { color: colors.text }]}>0 pts</Text>
+                <Text style={[s.ruleChipLabel, { color: colors.muted }]}>{my ? "မှားယွင်း" : "Wrong"}</Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open MST Prediction"
+              onPress={openPredictionApp}
+              style={[s.openPredictionBtn, { backgroundColor: colors.red || C.red }]}
+            >
+              <Ionicons name="open-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={s.openPredictionBtnText}>{my ? "MST PREDICTION ဖွင့်မည်" : "OPEN MST PREDICTION"}</Text>
+            </Pressable>
+          </View>
+
+          <DataList
+            title={my ? "ခန့်မှန်းသူများ ဦးဆောင်သူဇယား" : "User Prediction Leaderboard"}
+            eyebrow={my ? "ကမ္ဘာလုံးဆိုင်ရာ အဆင့်" : "GLOBAL RANKINGS"}
+            data={state.leaderboard}
+            empty={my ? "ခန့်မှန်းရမှတ်များ မရှိသေးပါ။ MST Prediction ကိုဖွင့်ပြီး စတင်ခန့်မှန်းပါ!" : "No prediction scores registered yet. Open MST Prediction to make your first pick!"}
+            colors={colors}
+          />
+        </>
+      ) : null}
+
       {subTab === "tips" ? (
         <>
           <DataList
-            title="Entitled tips"
-            eyebrow="ENTITLEMENTS"
+            title={my ? "ရရှိထားသော Tips များ" : "Entitled tips"}
+            eyebrow={my ? "အခွင့်အရေး" : "ENTITLEMENTS"}
             data={state.purchased}
-            empty="No Tip entitlement is available for this signed-in account."
+            empty={my ? "ဤအကောင့်အတွက် ဝယ်ယူထားသော Tip မရှိသေးပါ။" : "No Tip entitlement is available for this signed-in account."}
+            colors={colors}
           />
           <TipList
             data={state.tips}
             onPurchase={buyTip}
             purchaseState={purchaseState}
             purchaseEnabled={PURCHASE_ACTION_ENABLED}
+            colors={colors}
           />
         </>
       ) : null}
 
       {subTab === "tipsters" ? (
-        <DataList
-          title="Verified Tipsters"
-          eyebrow="MST TIPSTERS"
-          data={state.tipsters}
-          empty="No verified Tipsters are available."
-        />
-      ) : null}
-
-      {subTab === "leaderboard" ? (
         <>
           <DataList
-            title="Tipster Leaderboard"
-            eyebrow="TIPSTER RANKINGS · TIPS"
-            data={state.tipsterLeaderboard}
-            empty="No Tipster leaderboard rows are available."
+            title={my ? "အတည်ပြုပြီး Tipsters များ" : "Verified Tipsters"}
+            eyebrow="MST TIPSTERS"
+            data={state.tipsters}
+            empty={my ? "အတည်ပြုပြီး Tipsters များ မရှိသေးပါ။" : "No verified Tipsters are available."}
+            colors={colors}
           />
+        </>
+      ) : null}
+
+      {subTab === "rank" || subTab === "leaderboard" ? (
+        <>
           <DataList
-            title="User Prediction Leaderboard"
-            eyebrow="PREDICTION RANKINGS · READ ONLY"
-            data={state.leaderboard}
-            empty="No prediction leaderboard rows are available."
+            title={my ? "Tipster အဆင့်သတ်မှတ်ချက်" : "Tipster Rankings"}
+            eyebrow="OFFICIAL TIPSTER LEADERBOARD"
+            data={state.tipsterLeaderboard}
+            empty={my ? "Tipster အဆင့်သတ်မှတ်ချက် မရရှိနိုင်သေးပါ။" : "No Tipster rankings are available right now."}
+            colors={colors}
           />
         </>
       ) : null}
 
       {state.warnings.map((warning, index) => (
-        <Text key={`${warning}-${index}`} style={s.warning}>
+        <Text key={`${warning}-${index}`} style={[s.warning, { color: colors.gold || C.amber }]}>
           {warning}
         </Text>
       ))}
 
-      <Pressable onPress={retry} style={s.retry}>
-        <Ionicons name="refresh" size={14} color={C.secondary} />
-        <Text style={s.retryText}>Refresh</Text>
+      <Pressable onPress={retry} style={[s.retry, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
+        <Ionicons name="refresh" size={14} color={colors.secondary || colors.text} />
+        <Text style={[s.retryText, { color: colors.secondary || colors.text }]}>Refresh</Text>
       </Pressable>
     </View>
   );
@@ -440,23 +493,27 @@ const s = StyleSheet.create({
   },
   segmentBtn: {
     flex: 1,
-    height: 38,
-    flexDirection: "row",
+    minHeight: 36,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 7,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
   },
   segmentBtnActive: {
     backgroundColor: C.red,
   },
   segmentLabel: {
     color: C.muted,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
+    textAlign: "center",
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   segmentLabelActive: {
-    color: C.text,
-    fontWeight: "900",
+    color: "#FFFFFF",
+    fontWeight: "800",
   },
   card: {
     borderRadius: 13,
@@ -516,4 +573,46 @@ const s = StyleSheet.create({
   freeTag: { color: C.green, fontSize: 12, fontWeight: "900" },
   purchaseSuccess: { color: C.green, fontSize: 12.5, lineHeight: 16, marginTop: 7 },
   purchaseError: { color: C.amber, fontSize: 12.5, lineHeight: 16, marginTop: 7 },
+  predictionHeroCard: {
+    borderRadius: 13,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
+    marginBottom: 12,
+  },
+  predictionHeroHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
+  predictionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 5,
+  },
+  predictionBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  predictionHeroTitle: { fontSize: 18, fontWeight: "900", marginBottom: 6 },
+  predictionHeroDesc: { fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  predictionRulesRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  ruleChip: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.raised,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    alignItems: "center",
+  },
+  ruleChipBold: { fontSize: 13, fontWeight: "900" },
+  ruleChipLabel: { fontSize: 10, marginTop: 2, fontWeight: "700" },
+  openPredictionBtn: {
+    minHeight: 42,
+    borderRadius: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  openPredictionBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900", letterSpacing: 0.5 },
 });

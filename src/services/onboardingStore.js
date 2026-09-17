@@ -6,7 +6,11 @@ const DEFAULT = {
   language: null,
   teams: [],
   competitions: [],
+  players: [],
+  matches: [],
+  entities: {},
   favoritesSynced: false,
+  pendingSyncEntities: [],
 };
 
 function cleanIds(values) {
@@ -26,8 +30,12 @@ export async function loadOnboardingPreferences() {
       language: parsed?.language === "en" ? "en" : parsed?.language === "my" ? "my" : null,
       teams: cleanIds(parsed?.teams),
       competitions: cleanIds(parsed?.competitions),
+      players: cleanIds(parsed?.players),
+      matches: cleanIds(parsed?.matches),
+      entities: parsed?.entities && typeof parsed.entities === "object" ? parsed.entities : {},
       completed: parsed?.completed === true,
       favoritesSynced: parsed?.favoritesSynced === true,
+      pendingSyncEntities: Array.isArray(parsed?.pendingSyncEntities) ? parsed.pendingSyncEntities : [],
     };
   } catch (_) {
     return { ...DEFAULT };
@@ -41,9 +49,77 @@ export async function saveOnboardingPreferences(next) {
     ...next,
     teams: cleanIds(next?.teams ?? current.teams),
     competitions: cleanIds(next?.competitions ?? current.competitions),
+    players: cleanIds(next?.players ?? current.players),
+    matches: cleanIds(next?.matches ?? current.matches),
+    entities: { ...(current.entities || {}), ...(next?.entities || {}) },
+    pendingSyncEntities: Array.isArray(next?.pendingSyncEntities) ? next.pendingSyncEntities : current.pendingSyncEntities,
   };
   await storage.setItem(KEY, JSON.stringify(merged));
   return merged;
+}
+
+export async function saveGuestFavorite({ kind, id, name, logo, photo, country, active }) {
+  const entityId = String(id || "").trim();
+  const cleanKind = String(kind || "").toLowerCase();
+  if (!entityId || !cleanKind) return false;
+
+  const current = await loadOnboardingPreferences();
+  const field = cleanKind === "competition" || cleanKind.startsWith("comp") || cleanKind.startsWith("league")
+    ? "competitions"
+    : cleanKind === "player"
+    ? "players"
+    : cleanKind === "match"
+    ? "matches"
+    : "teams";
+
+  const list = current[field] || [];
+  const nextList = active
+    ? [...new Set([...list, entityId])]
+    : list.filter((x) => x !== entityId);
+
+  const entityKey = `${cleanKind}:${entityId}`;
+  const entities = { ...(current.entities || {}) };
+  if (active) {
+    entities[entityKey] = {
+      id: entityId,
+      kind: cleanKind,
+      name: String(name || entities[entityKey]?.name || entityId).trim(),
+      logo: logo || photo || entities[entityKey]?.logo || null,
+      country: country || entities[entityKey]?.country || null,
+      savedAt: Date.now(),
+    };
+  } else {
+    delete entities[entityKey];
+  }
+
+  await saveOnboardingPreferences({
+    [field]: nextList,
+    entities,
+    favoritesSynced: false,
+  });
+  return true;
+}
+
+export async function loadGuestFavorites() {
+  const prefs = await loadOnboardingPreferences();
+  const mapEntities = (ids, kind) =>
+    (ids || []).map((id) => {
+      const entity = prefs.entities?.[`${kind}:${id}`] || {};
+      return {
+        id,
+        kind,
+        name: entity.name || id,
+        logo: entity.logo || null,
+        country: entity.country || null,
+      };
+    });
+
+  return {
+    teams: mapEntities(prefs.teams, "team"),
+    competitions: mapEntities(prefs.competitions, "competition"),
+    players: mapEntities(prefs.players, "player"),
+    matches: mapEntities(prefs.matches, "match"),
+  };
 }
 
 const languageListeners = new Set();
@@ -68,11 +144,21 @@ export async function persistAppLanguage(language) {
 export async function syncStoredOnboardingFavorites(setFavorite) {
   if (typeof setFavorite !== "function") return false;
   const prefs = await loadOnboardingPreferences();
-  if (!prefs.completed || prefs.favoritesSynced) return true;
+  if (prefs.favoritesSynced) return true;
 
   const jobs = [
-    ...prefs.teams.map((id) => ({ kind: "team", id })),
-    ...prefs.competitions.map((id) => ({ kind: "competition", id })),
+    ...prefs.teams.map((id) => {
+      const e = prefs.entities?.[`team:${id}`] || {};
+      return { kind: "team", id, name: e.name || id, logo: e.logo || null, country: e.country || null };
+    }),
+    ...prefs.competitions.map((id) => {
+      const e = prefs.entities?.[`competition:${id}`] || {};
+      return { kind: "competition", id, name: e.name || id, logo: e.logo || null, country: e.country || null };
+    }),
+    ...prefs.players.map((id) => {
+      const e = prefs.entities?.[`player:${id}`] || {};
+      return { kind: "player", id, name: e.name || id, photo: e.logo || null, country: e.country || null };
+    }),
   ];
 
   if (!jobs.length) {

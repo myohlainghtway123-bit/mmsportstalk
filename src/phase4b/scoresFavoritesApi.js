@@ -1,6 +1,11 @@
 import { favoriteMetadata } from "../services/favoriteCatalog.js";
 import { MST_API_BASE } from "../services/mstApiConfig.js";
-import { loadOnboardingPreferences, saveOnboardingPreferences } from "../services/onboardingStore.js";
+import {
+  loadGuestFavorites,
+  loadOnboardingPreferences,
+  saveGuestFavorite,
+  saveOnboardingPreferences,
+} from "../services/onboardingStore.js";
 import { getSessionToken, setSessionToken } from "../services/sessionStore.js";
 
 class ScoresAccountError extends Error {
@@ -56,15 +61,23 @@ function extractUser(payload) {
   return raw;
 }
 
+import { reconcileGuestFavorites } from "./favoritesReconciliation.js";
+
+export { loadGuestFavorites, reconcileGuestFavorites };
+
 export async function getAuthStatus(options) {
   try {
     const payload = await request("/auth/status", options);
     const explicit = payload?.authenticated ?? payload?.signedIn ?? payload?.loggedIn;
-    return {
+    const result = {
       authenticated: typeof explicit === "boolean" ? explicit : Boolean(extractUser(payload)),
       user: extractUser(payload),
       payload,
     };
+    if (result.authenticated) {
+      reconcileGuestFavorites().catch(() => {});
+    }
+    return result;
   } catch (error) {
     if (error instanceof ScoresAccountError && error.status === 401) return { authenticated: false, user: null, payload: error.payload };
     throw error;
@@ -159,7 +172,6 @@ export async function readEntityFavorite(type, id) {
       favorite: rows.some((item) => String(item?.id ?? item?.entityId ?? item?.[kind]?.id ?? "") === entityId),
     };
   }
-  if (kind === "player") return { authenticated: false, favorite: false, kind };
   const prefs = await loadOnboardingPreferences();
   const field = keyForKind(kind);
   return { authenticated: false, kind, favorite: (prefs[field] || []).map(String).includes(entityId) };
@@ -169,13 +181,15 @@ export async function toggleEntityFavorite({ type, entity, active, name, imageUr
   const kind = canonicalFavoriteKind(type);
   const id = String(entity?.id ?? "");
   if (!kind || !id) throw new ScoresAccountError("Favorite data is unavailable.");
+  const finalName = name || entity?.name || entity?.title || id;
+  const finalImage = imageUrl || entity?.logo || entity?.photo || entity?.image || null;
   const status = await getAuthStatus().catch(() => ({ authenticated: false }));
   if (status.authenticated) {
     await setFavorite({
       kind,
       id,
-      name: name || entity?.name || entity?.title,
-      imageUrl: imageUrl || entity?.logo || entity?.photo || entity?.image,
+      name: finalName,
+      imageUrl: finalImage,
       country: country || entity?.country,
       teamId: teamId || null,
       teamName: teamName || null,
@@ -186,13 +200,14 @@ export async function toggleEntityFavorite({ type, entity, active, name, imageUr
     return { authenticated: true, favorite: active, requiresAuth: false };
   }
 
-  if (kind === "player" || !favoriteMetadata(kind, id)) {
-    return { authenticated: false, favorite: false, requiresAuth: true };
-  }
-  const prefs = await loadOnboardingPreferences();
-  const field = keyForKind(kind);
-  const current = (prefs[field] || []).map(String);
-  const next = active ? [...new Set([...current, id])] : current.filter((value) => value !== id);
-  await saveOnboardingPreferences({ [field]: next, favoritesSynced: false });
+  // Guest favorite: save into local device storage seamlessly!
+  await saveGuestFavorite({
+    kind,
+    id,
+    name: finalName,
+    logo: finalImage,
+    country: country || entity?.country,
+    active,
+  });
   return { authenticated: false, favorite: active, requiresAuth: false };
 }

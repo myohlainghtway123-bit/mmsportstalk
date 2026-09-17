@@ -1,7 +1,7 @@
 export const MST_SITE_ORIGIN = "https://myanmarsportstalk.com";
 
 const PROD_API_ORIGIN = "https://app-api.myanmarsportstalk.com";
-const STAGING_API_ORIGIN = "https://app-api-staging.myanmarsportstalk.com";
+const STAGING_API_ORIGIN = "https://app-api.myanmarsportstalk.com";
 
 export function resolveMstApiOrigin() {
   const env = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "").trim().toLowerCase();

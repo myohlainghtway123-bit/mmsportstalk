@@ -40,7 +40,28 @@ export default function MatchOddsCard({match,my=false,compact=false,onOpenFull})
 
   if(compact)return <Pressable disabled={!onOpenFull} onPress={onOpenFull} style={[s.card,s.compactCard,paused&&s.paused]}><View style={s.compactHead}><View style={{flex:1}}><Text style={s.eyebrow}>MATCH ODDS · {o.bookmaker||"LIVE ODDS"}</Text><Text style={s.compactTitle}>{paused?tx(my,"Market paused","Market ခေတ္တပိတ်"):mode}</Text></View>{onOpenFull?<View style={s.more}><Text style={s.moreText}>{tx(my,"MORE","အသေးစိတ်")}</Text><Ionicons name="chevron-forward" size={13} color={C.red}/></View>:null}</View>{result?<View style={s.compactMarket}><OddBox compact label="HOME" value={result.home}/><OddBox compact label="DRAW" value={result.draw}/><OddBox compact label="AWAY" value={result.away}/></View>:<Text style={s.muted}>{tx(my,"Main market is not available right now.","Main market မရသေးပါ။")}</Text>}</Pressable>;
 
-  return <View style={[s.card,paused&&s.paused]}><View style={s.head}><View><Text style={s.eyebrow}>MATCH ODDS</Text><Text style={s.bookmaker}>{o.bookmaker||"LIVE ODDS"}</Text><Text style={s.source} numberOfLines={1}>{o.sourceName||"MST Odds"}</Text></View><View style={[s.modeBadge,live&&s.modeLive]}><Text style={[s.modeText,live&&s.modeTextLive]}>{paused?"PAUSED":mode}</Text></View></View>{result?<><Text style={s.marketLabel}>MATCH RESULT</Text><View style={s.marketRow}><OddBox label="HOME" value={result.home}/><OddBox label="DRAW" value={result.draw}/><OddBox label="AWAY" value={result.away}/></View></>:null}{o.overUnder25?<><Text style={s.marketLabel}>TOTAL GOALS · 2.5</Text><View style={s.marketRow}><OddBox label="OVER 2.5" value={o.overUnder25.over}/><OddBox label="UNDER 2.5" value={o.overUnder25.under}/></View></>:null}{o.btts?<><Text style={s.marketLabel}>BOTH TEAMS TO SCORE</Text><View style={s.marketRow}><OddBox label="YES" value={o.btts.yes}/><OddBox label="NO" value={o.btts.no}/></View></>:null}{paused?<Text style={s.notice}>{tx(my,"Market is temporarily paused; displayed prices are the latest received.","Market ခေတ္တပိတ်ထားပြီး ပြထားသော odds များသည် နောက်ဆုံးရရှိထားသော အချက်အလက်ဖြစ်သည်။")}</Text>:null}<Text style={s.foot}>{tx(my,"1xBet priority · Bet365 fallback · odds may change","1xBet ဦးစားပေး · Bet365 အရန် · odds ပြောင်းလဲနိုင်သည်")}</Text></View>;
+  return <View style={[s.card,paused&&s.paused]}>
+    <View style={s.head}>
+      <View>
+        <Text style={s.eyebrow}>MATCH ODDS</Text>
+        <Text style={s.bookmaker}>{o.bookmaker||"LIVE ODDS"}</Text>
+        <Text style={s.source} numberOfLines={1}>{o.sourceName||"MST Odds"}</Text>
+      </View>
+      <View style={[s.modeBadge,live&&s.modeLive]}>
+        <Text style={[s.modeText,live&&s.modeTextLive]}>{paused?"PAUSED":mode}</Text>
+      </View>
+    </View>
+    {result?<><Text style={s.marketLabel}>MATCH RESULT (1X2)</Text><View style={s.marketRow}><OddBox label="HOME" value={result.home}/><OddBox label="DRAW" value={result.draw}/><OddBox label="AWAY" value={result.away}/></View></>:null}
+    {o.doubleChance?<><Text style={s.marketLabel}>DOUBLE CHANCE</Text><View style={s.marketRow}><OddBox label="1X (HOME/DRAW)" value={o.doubleChance.homeOrDraw}/><OddBox label="12 (HOME/AWAY)" value={o.doubleChance.homeOrAway}/><OddBox label="X2 (DRAW/AWAY)" value={o.doubleChance.drawOrAway}/></View></>:null}
+    {o.drawNoBet?<><Text style={s.marketLabel}>DRAW NO BET</Text><View style={s.marketRow}><OddBox label="HOME" value={o.drawNoBet.home}/><OddBox label="AWAY" value={o.drawNoBet.away}/></View></>:null}
+    {o.asianHandicap?<><Text style={s.marketLabel}>ASIAN HANDICAP ({o.asianHandicap.handicap||"0"})</Text><View style={s.marketRow}><OddBox label="HOME" value={o.asianHandicap.home}/><OddBox label="AWAY" value={o.asianHandicap.away}/></View></>:null}
+    {o.overUnder25?<><Text style={s.marketLabel}>TOTAL GOALS · 2.5</Text><View style={s.marketRow}><OddBox label="OVER 2.5" value={o.overUnder25.over}/><OddBox label="UNDER 2.5" value={o.overUnder25.under}/></View></>:null}
+    {o.overUnder15?<><Text style={s.marketLabel}>TOTAL GOALS · 1.5</Text><View style={s.marketRow}><OddBox label="OVER 1.5" value={o.overUnder15.over}/><OddBox label="UNDER 1.5" value={o.overUnder15.under}/></View></>:null}
+    {o.overUnder35?<><Text style={s.marketLabel}>TOTAL GOALS · 3.5</Text><View style={s.marketRow}><OddBox label="OVER 3.5" value={o.overUnder35.over}/><OddBox label="UNDER 3.5" value={o.overUnder35.under}/></View></>:null}
+    {o.btts?<><Text style={s.marketLabel}>BOTH TEAMS TO SCORE</Text><View style={s.marketRow}><OddBox label="YES" value={o.btts.yes}/><OddBox label="NO" value={o.btts.no}/></View></>:null}
+    {paused?<Text style={s.notice}>{tx(my,"Market is temporarily paused; displayed prices are the latest received.","Market ခေတ္တပိတ်ထားပြီး ပြထားသော odds များသည် နောက်ဆုံးရရှိထားသော အချက်အလက်ဖြစ်သည်။")}</Text>:null}
+    <Text style={s.foot}>{tx(my,"1xBet priority · Bet365 fallback · odds may change","1xBet ဦးစားပေး · Bet365 အရန် · odds ပြောင်းလဲနိုင်သည်")}</Text>
+  </View>;
 }
 
 const s=StyleSheet.create({

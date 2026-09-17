@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { startEmailLogin, verifyEmailLogin } from "../services/accountApi";
+import { reconcileGuestFavorites } from "./scoresFavoritesApi";
 
 const C = {
   bg: "#0B0E11",
@@ -97,6 +98,7 @@ export default function Phase4BAuthModal({
             : "Sign-in failed. Please try the code again.",
         );
       }
+      await reconcileGuestFavorites().catch(() => {});
       handleClose();
       onSuccess?.(result.status.user);
     } catch (e) {

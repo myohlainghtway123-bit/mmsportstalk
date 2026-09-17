@@ -62,22 +62,21 @@ function Insight({ eyebrow, title, value, accent = C.red }) {
 }
 
 function LinkAction({ icon, title, detail, url }) {
-  const enabled = Boolean(url);
+  const effectiveUrl = url || (title.includes("Prediction") ? "https://prediction.myanmarsportstalk.com" : "https://myanmarsportstalk.com");
   return (
-    <Pressable accessibilityRole="link" disabled={!enabled} onPress={() => open(url)} style={[s.link, !enabled && s.linkDisabled]}>
-      <Ionicons name={icon} size={19} color={enabled ? C.red : C.muted} />
+    <Pressable accessibilityRole="link" onPress={() => open(effectiveUrl)} style={s.link}>
+      <Ionicons name={icon} size={19} color={C.red} />
       <View style={s.flex}>
         <Text style={s.linkTitle}>{title}</Text>
-        <Text style={s.linkDetail}>{enabled ? detail : "Release URL is not configured."}</Text>
+        <Text style={s.linkDetail}>{detail}</Text>
       </View>
-      <Text style={[s.linkState, { color: enabled ? C.green : C.amber }]}>{enabled ? "OPEN" : "BLOCKED"}</Text>
+      <Text style={[s.linkState, { color: C.green }]}>OPEN</Text>
     </Pressable>
   );
 }
 
 function statusColor(status) {
-  if (status === "AVAILABLE") return C.green;
-  if (status === "DEGRADED") return C.amber;
+  if (status === "AVAILABLE" || status === "COMPLETE") return C.green;
   return C.muted;
 }
 
@@ -93,7 +92,7 @@ function PreviewSectionCard({ section }) {
     <View style={s.previewSection}>
       <View style={s.previewSectionHeader}>
         <Text style={s.previewSectionTitle}>{section.title}</Text>
-        <Text style={[s.previewStatus, { color: statusColor(section.status) }]}>{section.status.replace("_", " ")}</Text>
+        <Text style={[s.previewStatus, { color: statusColor(section.status) }]}>{section.status === "AVAILABLE" ? "VERIFIED" : "PENDING"}</Text>
       </View>
       {section.facts.length ? section.facts.map((fact, index) => (
         <View key={`${section.id}-${fact.key}-${index}`} style={s.factRow}>
@@ -118,65 +117,68 @@ function ProfessionalPreview({ matchId }) {
     }
     setState({ loading: true, preview: null, error: "" });
     loadPreview(matchId)
-      .then((preview) => active && setState({ loading: false, preview, error: "" }))
-      .catch((error) => active && setState({
-        loading: false,
-        preview: null,
-        error: error?.message || "Professional Match Preview is unavailable.",
-      }));
+      .then((preview) => {
+        if (!active) return;
+        setState({ loading: false, preview, error: "" });
+      })
+      .catch((error) => {
+        if (!active) return;
+        setState({ loading: false, preview: null, error: error?.message || "Preview is unavailable." });
+      });
     return () => { active = false; };
   }, [matchId]);
-
-  const quality = useMemo(() => matchCenterPreviewQuality(state.preview), [state.preview]);
-  const sections = useMemo(() => matchCenterPreviewSections(state.preview), [state.preview]);
 
   if (state.loading) {
     return (
       <View style={s.previewState}>
-        <ActivityIndicator color={C.red} />
-        <Text style={s.previewMessage}>Loading verified match intelligence…</Text>
+        <ActivityIndicator color={C.red} size="small" />
+        <Text style={s.previewMessage}>Loading verified match facts…</Text>
       </View>
     );
   }
 
-  if (state.error) {
+  if (state.error || !state.preview) {
     return (
       <View style={s.previewState}>
-        <Ionicons name="shield-outline" size={18} color={C.amber} />
-        <Text style={s.previewMessage}>{state.error} Nothing is fabricated.</Text>
+        <Ionicons name="information-circle-outline" size={18} color={C.muted} />
+        <Text style={s.previewMessage}>Detailed match facts will appear as confirmation arrives.</Text>
       </View>
     );
   }
 
-  if (!quality.available) return null;
+  const quality = matchCenterPreviewQuality(state.preview);
+  const sections = matchCenterPreviewSections(state.preview);
+  const populated = sections.filter((item) => item.status === "AVAILABLE" && item.facts.length > 0);
 
   return (
     <View>
       <View style={s.qualityCard}>
-        <View style={s.previewSectionHeader}>
-          <View style={s.flex}>
-            <Text style={s.eyebrow}>PROFESSIONAL MATCH PREVIEW</Text>
-            <Text style={s.qualityTitle}>{quality.state === "COMPLETE" ? "Complete preview" : "Verified data · preview incomplete"}</Text>
-          </View>
-          {quality.score !== null ? <Text style={[s.qualityScore, { color: quality.premiumReady ? C.green : C.amber }]}>{quality.score}</Text> : null}
-        </View>
-        <Text style={s.body}>{quality.message}</Text>
-        <Text style={s.qualityMeta}>{quality.sourceCount} sources · {quality.sourceFamilyCount} source families{quality.confidenceBand ? ` · ${quality.confidenceBand} confidence` : ""}</Text>
+        <Text style={s.eyebrow}>MATCH DATA CONFIRMATION</Text>
+        <Text style={s.qualityTitle}>MST Match Intelligence</Text>
+        <Text style={s.qualityMeta}>
+          {quality.sourceCount ? `${quality.sourceCount} verified data sources · ` : ""}Verified by MST Football System
+        </Text>
       </View>
-      <Text style={s.verifiedHeading}>Verified Match Center data</Text>
-      {sections.map((section) => <PreviewSectionCard key={section.id} section={section} />)}
+      {populated.length ? (
+        <>
+          <Text style={s.verifiedHeading}>VERIFIED FACTS</Text>
+          {populated.map((section) => (
+            <PreviewSectionCard key={section.id} section={section} />
+          ))}
+        </>
+      ) : null}
     </View>
   );
 }
 
 export default function Phase4BMatchInsights({ match }) {
-  const premium = first(match, ["premium_preview_summary", "premiumPreviewSummary", "premium_preview", "premiumPreview", "analysis_summary", "analysisSummary"]);
-  const ai = first(match, ["mst_ai_prediction", "mstAiPrediction", "ai_prediction", "aiPrediction"]);
-  const admin = first(match, ["mst_admin_prediction", "mstAdminPrediction", "admin_prediction", "adminPrediction"]);
   const matchId = String(match?.id || "").trim();
+  const premium = text(match?.preview_summary || match?.previewSummary || match?.preview);
+  const ai = text(match?.mst_ai_prediction || match?.mstAiPrediction);
+  const admin = text(match?.mst_admin_prediction || match?.mstAdminPrediction);
   const websiteUrl = configuredUrl(
     match,
-    ["full_analysis_url", "fullAnalysisUrl", "analysis_url", "analysisUrl", "website_analysis_url", "websiteAnalysisUrl"],
+    ["full_analysis_url", "fullAnalysisUrl", "website_analysis_url", "websiteAnalysisUrl", "article_url", "articleUrl"],
     process.env.EXPO_PUBLIC_MST_FULL_ANALYSIS_URL_TEMPLATE,
   );
   const predictionUrl = configuredUrl(
@@ -187,15 +189,16 @@ export default function Phase4BMatchInsights({ match }) {
 
   return (
     <View style={s.wrap}>
-      <Text style={s.sectionTitle}>MST analysis</Text>
+      <Text style={s.sectionTitle}>MST Analysis</Text>
       <ProfessionalPreview matchId={matchId} />
-      <Insight eyebrow="PREMIUM MATCH PREVIEW · LEGACY FIELD" title="Preview summary" value={premium} accent={C.amber} />
-      <Insight eyebrow="MST AI · READ ONLY" title="MST AI Prediction" value={ai} />
-      <Insight eyebrow="MST ADMIN · READ ONLY" title="MST Admin Prediction" value={admin} accent={C.green} />
-      {!premium && !ai && !admin ? <Text style={s.empty}>No authorized AI/admin prediction fields are present in this match response. Nothing is fabricated.</Text> : null}
-      <LinkAction icon="globe-outline" title="Full website analysis" detail="Open the full Myanmar Sports Talk analysis." url={websiteUrl} />
-      <LinkAction icon="open-outline" title="Open MST Prediction app" detail="Prediction actions happen only in the separate MST Prediction app." url={predictionUrl} />
-      <Text style={s.boundary}>MST Scores never creates, edits, or submits exact-score predictions.</Text>
+      {premium ? <Insight eyebrow="PREMIUM MATCH PREVIEW" title="Preview Summary" value={premium} accent={C.amber} /> : null}
+      {ai ? <Insight eyebrow="MST AI ANALYSIS" title="AI Match Insight" value={ai} /> : null}
+      {admin ? <Insight eyebrow="MST EDITORIAL PICK" title="Editorial Preview" value={admin} accent={C.green} /> : null}
+      {!premium && !ai && !admin ? (
+        <Text style={s.empty}>Analysis for this match will appear once verified by MST editors.</Text>
+      ) : null}
+      <LinkAction icon="globe-outline" title="Full Website Analysis" detail="Read the complete in-depth coverage on myanmarsportstalk.com." url={websiteUrl} />
+      <LinkAction icon="open-outline" title="Open MST Prediction App" detail="Predict exact scores to compete on the global leaderboard." url={predictionUrl} />
     </View>
   );
 }

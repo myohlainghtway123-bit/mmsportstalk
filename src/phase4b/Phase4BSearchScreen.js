@@ -2,12 +2,19 @@ import React, { useEffect } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import ScreenHeader from "../components/ScreenHeader";
 import Phase4BSearchPanel from "./Phase4BSearchPanel";
+import { useTheme } from "../theme/ThemeContext";
 
 const C = {
   bg: "#080A0C",
 };
 
-export default function Phase4BSearchScreen({ onBack }) {
+export default function Phase4BSearchScreen({ onBack, onOpenEntity, onOpenMatch, matches = [], language = "my" }) {
+  let colors = C;
+  try {
+    const theme = useTheme();
+    if (theme?.colors) colors = theme.colors;
+  } catch {}
+
   useEffect(() => {
     const handleHardwareBack = () => {
       if (onBack) {
@@ -21,10 +28,10 @@ export default function Phase4BSearchScreen({ onBack }) {
   }, [onBack]);
 
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: colors.bg }]}>
       <ScreenHeader
-        title="Search"
-        subtitle="TEAMS & PLAYERS"
+        title={language === "my" ? "ရှာဖွေရန်" : "Search"}
+        subtitle={language === "my" ? "ပွဲစဉ်များ၊ ပြိုင်ပွဲများနှင့် အသင်းများ" : "MATCHES, LEAGUES & CLUBS"}
         onBack={onBack}
       />
       <ScrollView
@@ -32,7 +39,12 @@ export default function Phase4BSearchScreen({ onBack }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Phase4BSearchPanel />
+        <Phase4BSearchPanel
+          onOpenEntity={onOpenEntity}
+          onOpenMatch={onOpenMatch}
+          matches={matches}
+          language={language}
+        />
       </ScrollView>
     </View>
   );
