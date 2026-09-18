@@ -42,17 +42,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
 
       - name: Resolve requested build
         id: release
         shell: bash
-        env:
-          PRODUCTION_TRIGGER_CHANGED: ${{ contains(github.event.head_commit.modified, '.release/v1-production-build.trigger') || contains(github.event.head_commit.added, '.release/v1-production-build.trigger') }}
-          INTERNAL_TRIGGER_CHANGED: ${{ contains(github.event.head_commit.modified, '.release/android-preview.txt') || contains(github.event.head_commit.added, '.release/android-preview.txt') }}
         run: |
           set -euo pipefail
 
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$PRODUCTION_TRIGGER_CHANGED" == "true" ]]; then
+          changed_files=""
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            changed_files="$(git show --pretty='' --name-only "$GITHUB_SHA")"
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]] && grep -qx '.release/v1-production-build.trigger' <<<"$changed_files"; then
             trigger="$(tr -d '\r\n' < .release/v1-production-build.trigger)"
             case "$trigger" in
               RUN_MST_SCORES_V1_ANDROID_BUILD)
@@ -71,7 +75,7 @@ jobs:
             esac
             echo "platform=$platform" >> "$GITHUB_OUTPUT"
             echo 'profile=production' >> "$GITHUB_OUTPUT"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$INTERNAL_TRIGGER_CHANGED" == "true" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]] && grep -qx '.release/android-preview.txt' <<<"$changed_files"; then
             echo 'platform=android' >> "$GITHUB_OUTPUT"
             echo 'profile=phase4b-internal' >> "$GITHUB_OUTPUT"
           else
