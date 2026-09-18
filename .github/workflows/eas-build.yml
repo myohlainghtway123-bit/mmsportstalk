@@ -77,7 +77,7 @@ jobs:
             echo 'profile=production' >> "$GITHUB_OUTPUT"
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]] && grep -qx '.release/android-preview.txt' <<<"$changed_files"; then
             echo 'platform=android' >> "$GITHUB_OUTPUT"
-            echo 'profile=phase4b-internal' >> "$GITHUB_OUTPUT"
+            echo 'profile=preview' >> "$GITHUB_OUTPUT"
           else
             echo "platform=${{ inputs.platform || 'android' }}" >> "$GITHUB_OUTPUT"
             echo "profile=${{ inputs.profile || 'preview' }}" >> "$GITHUB_OUTPUT"
