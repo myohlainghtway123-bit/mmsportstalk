@@ -48,7 +48,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "push" && -f .release/v1-production-build.trigger ]]; then
+
+          changed_files="$(git show --pretty='' --name-only "$GITHUB_SHA")"
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]] && grep -qx '.release/v1-production-build.trigger' <<<"$changed_files"; then
             trigger="$(tr -d '\r\n' < .release/v1-production-build.trigger)"
             case "$trigger" in
               RUN_MST_SCORES_V1_ANDROID_BUILD)
@@ -67,6 +70,9 @@ jobs:
             esac
             echo "platform=$platform" >> "$GITHUB_OUTPUT"
             echo 'profile=production' >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]] && grep -qx '.release/android-preview.txt' <<<"$changed_files"; then
+            echo 'platform=android' >> "$GITHUB_OUTPUT"
+            echo 'profile=phase4b-internal' >> "$GITHUB_OUTPUT"
           else
             echo "platform=${{ inputs.platform || 'android' }}" >> "$GITHUB_OUTPUT"
             echo "profile=${{ inputs.profile || 'preview' }}" >> "$GITHUB_OUTPUT"
