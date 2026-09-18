@@ -17,6 +17,69 @@ if (!root.__MST_SCORES_GET_INFLIGHT__) root.__MST_SCORES_GET_INFLIGHT__ = new Ma
 const getCache = root.__MST_SCORES_GET_CACHE__;
 const getInflight = root.__MST_SCORES_GET_INFLIGHT__;
 
+const PERSISTED_OVERVIEW_KEY = "@mst_scores_overview_v2";
+const PERSISTED_DATE_PREFIX = "@mst_scores_date_v2:";
+const PERSISTED_CACHE_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+let asyncStoragePromise = null;
+
+async function resolveAsyncStorage() {
+  asyncStoragePromise ||= import("@react-native-async-storage/async-storage")
+    .then((module) => module.default || module)
+    .catch(() => null);
+  return asyncStoragePromise;
+}
+
+function shouldPersistAppCache(options = {}) {
+  return options.persistCache !== false
+    && !options.fetchImpl
+    && options.sessionStore === undefined;
+}
+
+async function readPersistedSnapshot(key, maxAgeMs = PERSISTED_CACHE_MAX_AGE_MS) {
+  const storage = await resolveAsyncStorage();
+  if (!storage) return null;
+  try {
+    const raw = await storage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const savedAt = Number(parsed?.savedAt || 0);
+    if (!savedAt || Date.now() - savedAt > maxAgeMs || !Array.isArray(parsed?.matches)) return null;
+    return {
+      matches: parsed.matches,
+      requestIds: parsed.requestIds && typeof parsed.requestIds === "object" ? parsed.requestIds : {},
+      warnings: [],
+      savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writePersistedSnapshot(key, snapshot) {
+  const storage = await resolveAsyncStorage();
+  if (!storage || !Array.isArray(snapshot?.matches)) return;
+  try {
+    await storage.setItem(key, JSON.stringify({
+      savedAt: Date.now(),
+      matches: snapshot.matches,
+      requestIds: snapshot.requestIds || {},
+    }));
+  } catch {
+    // Persistent cache is best-effort only; network data remains authoritative.
+  }
+}
+
+export const loadPersistedScoresOverview = (options) => readPersistedSnapshot(PERSISTED_OVERVIEW_KEY, options?.maxAgeMs);
+export const loadPersistedScoresForDate = (date, options) => (
+  readPersistedSnapshot(`${PERSISTED_DATE_PREFIX}${String(date || "").trim()}`, options?.maxAgeMs)
+);
+
+function publicScoresReadPath(path) {
+  if (/^\/v1\/(fixtures|live|results|standings)(?:\?|$)/.test(path)) return true;
+  if (/^\/v1\/matches\/[^/?]+(?:\?.*)?$/.test(path)) return true;
+  return false;
+}
+
 function cacheableScoresPath(path) {
   if (/^\/v1\/(fixtures|live|results)(?:\?|$)/.test(path)) return true;
   if (/^\/v1\/standings(?:\?|$)/.test(path)) return true;
@@ -184,10 +247,18 @@ export async function scoresStagingGet(path, options = {}) {
     ...requestOptions
   } = options;
 
+  // Public score feeds must never wait on SecureStore before rendering.
+  // Authenticated/private paths still resolve the shared MST session normally.
+  const effectiveRequestOptions = (
+    publicScoresReadPath(path) && requestOptions.token === undefined
+      ? { ...requestOptions, token: null }
+      : requestOptions
+  );
+
   // Contract tests and explicit callers can inject a fetch implementation.
   // Never let the app-level cache leak responses across those isolated requests.
-  if (!cacheableScoresPath(path) || (requestOptions.fetchImpl && requestOptions.fetchImpl !== fetch)) {
-    return scoresProductRequest(path, { ...requestOptions, method: "GET" });
+  if (!cacheableScoresPath(path) || (effectiveRequestOptions.fetchImpl && effectiveRequestOptions.fetchImpl !== fetch)) {
+    return scoresProductRequest(path, { ...effectiveRequestOptions, method: "GET" });
   }
 
   const saved = getCache.get(path);
@@ -197,11 +268,11 @@ export async function scoresStagingGet(path, options = {}) {
   if (!force && saved && age < ttl) return saved.result;
 
   if (!force && saved && staleWhileRevalidate) {
-    startCachedGet(path, requestOptions).catch(() => {});
+    startCachedGet(path, effectiveRequestOptions).catch(() => {});
     return saved.result;
   }
 
-  return startCachedGet(path, requestOptions);
+  return startCachedGet(path, effectiveRequestOptions);
 }
 
 export async function loginScoresAccount(identifier, password, options = {}) {
@@ -295,7 +366,7 @@ export async function loadScoresFeed(kind, options) {
   };
 }
 
-export async function loadScoresOverview(options) {
+export async function loadScoresOverview(options = {}) {
   const feeds = Object.keys(FEED_ROUTES);
   const settled = await Promise.allSettled(feeds.map((feed) => loadScoresFeed(feed, options)));
   const successful = settled
@@ -322,11 +393,15 @@ export async function loadScoresOverview(options) {
       : []
   ));
 
-  return {
+  const snapshot = {
     matches: [...matches.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
     requestIds,
     warnings,
   };
+  if (shouldPersistAppCache(options)) {
+    writePersistedSnapshot(PERSISTED_OVERVIEW_KEY, snapshot).catch(() => {});
+  }
+  return snapshot;
 }
 
 export async function loadScoresForDate(date, options = {}) {
@@ -362,11 +437,16 @@ export async function loadScoresForDate(date, options = {}) {
   }
 
   if (matches.size > 0 || fixturesResult.status === "fulfilled" || resultsResult.status === "fulfilled") {
-    return {
+    const snapshot = {
       matches: [...matches.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
       requestId,
+      requestIds: requestId ? { date: requestId } : {},
       warnings,
     };
+    if (shouldPersistAppCache(options)) {
+      writePersistedSnapshot(`${PERSISTED_DATE_PREFIX}${cleanDate}`, snapshot).catch(() => {});
+    }
+    return snapshot;
   }
 
   const overview = await loadScoresOverview(options);
