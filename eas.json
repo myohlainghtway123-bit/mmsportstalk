@@ -12,6 +12,11 @@
     },
     "phase4b-internal": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MST_ENVIRONMENT": "staging",
+        "EXPO_PUBLIC_MST_INTERNAL": "true",
+        "EXPO_PUBLIC_MST_SCORES_API_ORIGIN": "https://scores-api-staging.myanmarsportstalk.com"
+      },
       "android": {
         "buildType": "apk"
       },
