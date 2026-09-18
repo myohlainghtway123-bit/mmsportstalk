@@ -40,6 +40,8 @@ import Phase4BSearchScreen from "./Phase4BSearchScreen";
 import Phase4BProfileScreen from "./Phase4BProfileScreen";
 import Phase4BAuthModal from "./Phase4BAuthModal.js";
 import Phase4BStartupGate from "./Phase4BStartupGate.js";
+import Phase4BRewardedPrediction from "./Phase4BRewardedPrediction";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { loadOnboardingPreferences, persistAppLanguage, subscribeAppLanguage } from "../services/onboardingStore.js";
 import { t } from "../i18n/translations";
 import { ThemeProvider, useTheme } from "../theme/ThemeContext";
@@ -127,14 +129,48 @@ function kickoffText(value) {
   if (!value) return "TBD";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "TBD";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function MatchListSkeleton({ isDark = true }) {
+  return (
+    <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+      {[1, 2, 3].map((i) => (
+        <View
+          key={`skel-${i}`}
+          style={{
+            borderRadius: 10,
+            backgroundColor: isDark ? "#121214" : "#FFFFFF",
+            borderWidth: 1,
+            borderColor: isDark ? "#1A1A1E" : "#E5E7EB",
+            marginBottom: 12,
+            padding: 12,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 8 }}>
+            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? "#222228" : "#E5E7EB" }} />
+            <View style={{ width: 140, height: 14, borderRadius: 4, backgroundColor: isDark ? "#222228" : "#E5E7EB" }} />
+          </View>
+          {[1, 2].map((r) => (
+            <View key={`skel-row-${r}`} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, gap: 10 }}>
+              <View style={{ width: 44, height: 14, borderRadius: 4, backgroundColor: isDark ? "#1A1A20" : "#F3F4F6" }} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <View style={{ width: "70%", height: 12, borderRadius: 3, backgroundColor: isDark ? "#1A1A20" : "#F3F4F6" }} />
+                <View style={{ width: "55%", height: 12, borderRadius: 3, backgroundColor: isDark ? "#1A1A20" : "#F3F4F6" }} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function fullKickoff(value) {
   if (!value) return "Kickoff unavailable";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Kickoff unavailable";
-  return date.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function statusText(match, language = "en") {
@@ -178,7 +214,12 @@ const MAJOR_LEAGUE_PATTERNS = [
   { regex: /afc champions league/i, score: 1600 },
 
   // Tier 2: Top 5 European Leagues
-  { regex: /premier league|epl/i, score: 1500 },
+  // "Premier League" strictly means English Premier League only, never generic leagues with "Premier League" in their name
+  {
+    regex: /^(english\s+)?premier\s+league$|premier\s+league\s*[-–]\s*england|\bepl\b/i,
+    exclude: /russia|egypt|kuwait|ghana|ukraine|bosnia|kazakhstan|malta|wales|singapore|nigeria|israel|ethiopia|kenya/i,
+    score: 1500,
+  },
   { regex: /la liga|primera divisi[oó]n/i, score: 1450 },
   { regex: /serie a/i, score: 1400 },
   { regex: /bundesliga/i, score: 1350 },
@@ -239,6 +280,9 @@ function getCompetitionScore(compName, matches = []) {
   const name = String(compName || "").trim();
   for (const item of MAJOR_LEAGUE_PATTERNS) {
     if (item.regex.test(name)) {
+      if (item.exclude && item.exclude.test(name)) {
+        continue;
+      }
       score = item.score;
       break;
     }
@@ -669,21 +713,38 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
   const textColor = isDark ? (colors.text || "#FFFFFF") : "#111827";
   const mutedColor = isDark ? (colors.muted || "#8E8E93") : "#8E9297";
 
+  const statusStr = String(match?.status || match?.statusCode || "").trim().toLowerCase();
+  const isPostponed = ["pst", "postponed", "delayed"].includes(statusStr);
+  const isCancelled = ["canc", "cancelled", "canceled"].includes(statusStr);
+  const isAbandoned = ["abd", "abandoned", "interrupted"].includes(statusStr);
+
   let timeLabel = "";
-  if (live) {
-    const st = String(match?.status || "").toLowerCase();
-    if (["ht", "halftime"].includes(st)) timeLabel = "HT";
+  let statusColor = textColor;
+  if (isPostponed) {
+    timeLabel = "PST";
+    statusColor = colors.gold || T.color.amber;
+  } else if (isCancelled) {
+    timeLabel = "CANC";
+    statusColor = red;
+  } else if (isAbandoned) {
+    timeLabel = "ABD";
+    statusColor = red;
+  } else if (live) {
+    if (["ht", "halftime"].includes(statusStr)) timeLabel = "HT";
     else if (match?.minute != null) timeLabel = `${match.minute}'`;
     else timeLabel = "LIVE";
+    statusColor = red;
   } else if (finished) {
     timeLabel = "FT";
+    statusColor = mutedColor;
   } else {
     timeLabel = kickoffText(match?.kickoff_at || match?.kickoff);
+    statusColor = textColor;
   }
 
   const homeScoreVal = match?.home_score ?? match?.homeScore;
   const awayScoreVal = match?.away_score ?? match?.awayScore;
-  const hasScores = (live || finished) && homeScoreVal != null && awayScoreVal != null;
+  const hasScores = !isPostponed && !isCancelled && !isAbandoned && (live || finished) && homeScoreVal != null && awayScoreVal != null;
 
   const homeWin = finished && hasScores && Number(homeScoreVal) > Number(awayScoreVal);
   const awayWin = finished && hasScores && Number(awayScoreVal) > Number(homeScoreVal);
@@ -715,8 +776,8 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
           numberOfLines={1}
           style={[
             s.fotmobTimeText,
-            { color: live ? red : (finished ? mutedColor : textColor) },
-            live && { fontWeight: "900" },
+            { color: statusColor },
+            (live || isPostponed || isCancelled) && { fontWeight: "900" },
           ]}
         >
           {timeLabel}
@@ -1105,16 +1166,36 @@ function MatchesScreen({
     let alive = true;
     if (dateMatches[selectedDate]) return;
 
+    // 1. Immediately read from local disk cache to eliminate cold loading delay
+    AsyncStorage.getItem(`mst:cache:matches:${selectedDate}`)
+      .then((cached) => {
+        if (!alive || !cached) return;
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setDateMatches((prev) => ({ ...prev, [selectedDate]: parsed }));
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
+
+    // 2. Silently fetch fresh data from backend
     setDateLoading(true);
     loadScoresForDate(selectedDate)
       .then((result) => {
         if (!alive) return;
-        setDateMatches((prev) => ({ ...prev, [selectedDate]: result?.matches || [] }));
+        const fresh = result?.matches || [];
+        setDateMatches((prev) => ({ ...prev, [selectedDate]: fresh }));
+        if (fresh.length > 0) {
+          AsyncStorage.setItem(`mst:cache:matches:${selectedDate}`, JSON.stringify(fresh)).catch(() => {});
+        }
       })
       .catch(() => {
         if (!alive) return;
         const fallback = overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate);
-        setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
+        if (fallback.length > 0) {
+          setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
+        }
       })
       .finally(() => {
         if (alive) setDateLoading(false);
@@ -1179,14 +1260,13 @@ function MatchesScreen({
   const handleRefresh = useCallback(async () => {
     setDateLoading(true);
     try {
-      await Promise.allSettled([
-        loadScoresForDate(selectedDate).then((result) => {
-          if (result?.matches) {
-            setDateMatches((prev) => ({ ...prev, [selectedDate]: result.matches }));
-          }
-        }),
-        onRetry ? Promise.resolve(onRetry()) : Promise.resolve(),
-      ]);
+      const result = await loadScoresForDate(selectedDate);
+      const fresh = result?.matches || [];
+      setDateMatches((prev) => ({ ...prev, [selectedDate]: fresh }));
+      if (fresh.length > 0) {
+        AsyncStorage.setItem(`mst:cache:matches:${selectedDate}`, JSON.stringify(fresh)).catch(() => {});
+      }
+      if (onRetry) await Promise.resolve(onRetry()).catch(() => {});
     } finally {
       setDateLoading(false);
     }
@@ -1307,32 +1387,37 @@ function MatchesScreen({
             ) : null}
           </View>
 
-          <TerminalState
-            loading={overview.loading || dateLoading}
-            error={overview.error}
-            empty={!overview.loading && !dateLoading && !overview.error && filteredMatches.length === 0}
-            emptyTitle={
-              language === "my"
-                ? (filter === "live" ? "တိုက်ရိုက်ပွဲစဉ်များ မရှိသေးပါ" : filter === "favorites" ? "အကြိုက်ဆုံးပွဲစဉ်များ မရှိသေးပါ" : t("noMatchesScheduled", language))
-                : (filter === "live" ? "No live matches" : filter === "favorites" ? "No favorite matches" : "No matches scheduled")
-            }
-            emptyText={
-              language === "my"
-                ? (filter === "live"
-                    ? "လတ်တလော တိုက်ရိုက်ကစားနေသော ပွဲစဉ် မရှိသေးပါ။ ပွဲစဉ်အားလုံးကို ကြည့်ရှုရန် 'ပွဲအားလုံး' ကို နှိပ်ပါ။"
-                    : filter === "favorites"
-                      ? "သင် အကြိုက်ဆုံးအဖြစ် ရွေးထားသော အသင်းများ ယနေ့ ပွဲစဉ်မရှိသေးပါ။ အသင်းများကို အကြိုက်ဆုံးစာရင်း ထည့်သွင်းရန် ကြယ်ပွင့်ကို နှိပ်ပါ။"
-                      : t("noMatchesSub", language))
-                : (filter === "live"
-                    ? "No matches are live right now. Switch to 'All Matches' to view the full fixture schedule."
-                    : filter === "favorites"
-                      ? "None of your favorited teams are playing on this date. Tap the star on any match or team to follow."
-                      : "No real match is scheduled for this date. Choose another date or retry.")
-            }
-            onRetry={handleRefresh}
-            language={language}
-          />
-          {featuredMatch && filter === "all" && (
+          {filteredMatches.length === 0 && (overview.loading || dateLoading) ? (
+            <MatchListSkeleton isDark={isDark} />
+          ) : (
+            <TerminalState
+              loading={false}
+              error={overview.error}
+              empty={!overview.loading && !dateLoading && !overview.error && filteredMatches.length === 0}
+              emptyTitle={
+                language === "my"
+                  ? (filter === "live" ? "တိုက်ရိုက်ပွဲစဉ်များ မရှိသေးပါ" : filter === "favorites" ? "အကြိုက်ဆုံးပွဲစဉ်များ မရှိသေးပါ" : t("noMatchesScheduled", language))
+                  : (filter === "live" ? "No live matches" : filter === "favorites" ? "No favorite matches" : "No matches scheduled")
+              }
+              emptyText={
+                language === "my"
+                  ? (filter === "live"
+                      ? "လတ်တလော တိုက်ရိုက်ကစားနေသော ပွဲစဉ် မရှိသေးပါ။ ပွဲစဉ်အားလုံးကို ကြည့်ရှုရန် 'ပွဲအားလုံး' ကို နှိပ်ပါ။"
+                      : filter === "favorites"
+                        ? "သင် အကြိုက်ဆုံးအဖြစ် ရွေးထားသော အသင်းများ ယနေ့ ပွဲစဉ်မရှိသေးပါ။ အသင်းများကို အကြိုက်ဆုံးစာရင်း ထည့်သွင်းရန် ကြယ်ပွင့်ကို နှိပ်ပါ။"
+                        : t("noMatchesSub", language))
+                  : (filter === "live"
+                      ? "No matches are live right now. Switch to 'All Matches' to view the full fixture schedule."
+                      : filter === "favorites"
+                        ? "None of your favorited teams are playing on this date. Tap the star on any match or team to follow."
+                        : "No real match is scheduled for this date. Choose another date or retry.")
+              }
+              onRetry={handleRefresh}
+              language={language}
+            />
+          )}
+
+          {featuredMatch && filter === "all" && groups.length > 0 && (
             <BigMatchPreview
               match={featuredMatch}
               onOpenPreview={onOpenPreview}
@@ -1340,20 +1425,26 @@ function MatchesScreen({
               language={language}
             />
           )}
-          {groups.map((group, idx) => (
-            <React.Fragment key={group.id}>
-              <LeagueGroup
-                group={group}
-                isCollapsed={collapsedLeagues.has(group.id)}
-                onToggleCollapse={toggleLeague}
-                onOpen={onOpenMatch}
-                onOpenEntity={onOpenEntity}
-                language={language}
-              />
-              {idx === 0 && <Phase4BAdBanner />}
-            </React.Fragment>
-          ))}
-          {groups.length === 0 && <Phase4BAdBanner />}
+
+          {groups.map((group, idx) => {
+            // Distribute multiple AdMob units throughout the match list after league sections
+            // Frequency limit: placed after 2nd league (idx 1), 5th league (idx 4), and 9th league (idx 8) - max 3 banners
+            const renderAd = idx === 1 || idx === 4 || idx === 8;
+            return (
+              <React.Fragment key={group.id}>
+                <LeagueGroup
+                  group={group}
+                  isCollapsed={collapsedLeagues.has(group.id)}
+                  onToggleCollapse={toggleLeague}
+                  onOpen={onOpenMatch}
+                  onOpenEntity={onOpenEntity}
+                  language={language}
+                />
+                {renderAd && <Phase4BAdBanner />}
+              </React.Fragment>
+            );
+          })}
+          {groups.length === 1 && <Phase4BAdBanner />}
         </ScrollView>
       </View>
     </View>
@@ -1795,6 +1886,15 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview, onOpenEntity, langu
                 <Phase4BMatchFavorites match={match} />
                 <Phase4BMatchVote match={match} />
                 <Phase4BMatchInsights match={match} />
+
+                {/* Rewarded Video MST Prediction for Major Matches */}
+                {(matchHasBigTeam(match) || isBigTeam(match?.home_team_name) || isBigTeam(match?.away_team_name)) && (
+                  <Phase4BRewardedPrediction
+                    match={match}
+                    language={language}
+                    colors={colors}
+                  />
+                )}
 
                 {/* Match Information */}
                 <View style={[s.dataSection, { backgroundColor: colors.surface || T.color.surface, borderColor: colors.border }]}>

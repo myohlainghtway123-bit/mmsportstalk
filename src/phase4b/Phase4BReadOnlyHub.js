@@ -279,23 +279,102 @@ async function entitledPurchaseRows(purchases, tips) {
 }
 
 function CreditPanel({ my = true, colors = C }) {
+  const [country, setCountry] = useState("TH"); // "TH" | "MM" | "INT"
   const [selectedPack, setSelectedPack] = useState(null);
+  const [paymentModal, setPaymentModal] = useState(null); // package object when open
+  const [selectedMethod, setSelectedMethod] = useState(null);
+  const [processing, setProcessing] = useState(false);
   const [purchaseMsg, setPurchaseMsg] = useState(null);
+  const [balance, setBalance] = useState(100);
+  const [viewHistory, setViewHistory] = useState(false);
+  const [transactions, setTransactions] = useState([
+    { id: "tx-1", type: "PURCHASE", item: "100 Credits Pack (Welcome)", amount: "+100 CR", status: "COMPLETED", date: "2026-09-18 20:00" },
+    { id: "tx-2", type: "SPENT", item: "Man City vs Arsenal Pro Tip", amount: "-10 CR", status: "COMPLETED", date: "2026-09-18 19:30" },
+  ]);
 
-  const PACKAGES = [
-    { id: "pkg_50", credits: 50, priceMmk: "5,000 MMK", priceThb: "฿50", label: "STARTER" },
-    { id: "pkg_100", credits: 100, priceMmk: "10,000 MMK", priceThb: "฿100", popular: true, label: "POPULAR" },
-    { id: "pkg_250", credits: 250, priceMmk: "25,000 MMK", priceThb: "฿250", label: "PRO" },
-    { id: "pkg_500", credits: 500, priceMmk: "50,000 MMK", priceThb: "฿500", label: "BEST VALUE" },
-  ];
+  const COUNTRY_CONFIGS = {
+    TH: {
+      currency: "THB",
+      rateText: "100 THB = 100 Credits",
+      subText: "1 Credit = 1 THB",
+      packages: [
+        { id: "th_50", credits: 50, price: "฿50", label: "STARTER" },
+        { id: "th_100", credits: 100, price: "฿100", popular: true, label: "POPULAR" },
+        { id: "th_250", credits: 250, price: "฿250", label: "PRO" },
+        { id: "th_500", credits: 500, price: "฿500", label: "BEST VALUE" },
+      ],
+      methods: [
+        { id: "promptpay", name: "Thai QR PromptPay", icon: "qr-code" },
+        { id: "card", name: "Credit / Debit Card (Visa/MC)", icon: "card" },
+        { id: "truemoney", name: "TrueMoney Wallet", icon: "wallet" },
+      ],
+    },
+    MM: {
+      currency: "MMK",
+      rateText: "10,000 MMK = 100 Credits",
+      subText: "1 Credit ≈ 100 MMK",
+      packages: [
+        { id: "mm_50", credits: 50, price: "5,000 MMK", label: "STARTER" },
+        { id: "mm_100", credits: 100, price: "10,000 MMK", popular: true, label: "POPULAR" },
+        { id: "mm_250", credits: 250, price: "25,000 MMK", label: "PRO" },
+        { id: "mm_500", credits: 500, price: "50,000 MMK", label: "BEST VALUE" },
+      ],
+      methods: [
+        { id: "kpay", name: "KBZPay (KPay)", icon: "phone-portrait" },
+        { id: "wave", name: "Wave Money", icon: "paper-plane" },
+        { id: "card_mm", name: "Mpu / International Card", icon: "card" },
+      ],
+    },
+    INT: {
+      currency: "USD",
+      rateText: "$3.00 USD = 100 Credits",
+      subText: "1 Credit ≈ $0.03",
+      packages: [
+        { id: "int_50", credits: 50, price: "$1.50", label: "STARTER" },
+        { id: "int_100", credits: 100, price: "$3.00", popular: true, label: "POPULAR" },
+        { id: "int_250", credits: 250, price: "$7.50", label: "PRO" },
+        { id: "int_500", credits: 500, price: "$15.00", label: "BEST VALUE" },
+      ],
+      methods: [
+        { id: "card_int", name: "Visa / Mastercard / Amex", icon: "card" },
+        { id: "gpay", name: "Google Pay / Apple Pay", icon: "logo-google" },
+      ],
+    },
+  };
 
-  const handleBuy = (pkg) => {
-    setSelectedPack(pkg.id);
-    setPurchaseMsg(
-      my
-        ? `${pkg.credits} Credits (${pkg.priceMmk}) Package ရွေးချယ်ပြီးပါပြီ။ KBZPay သို့မဟုတ် WavePay ဖြင့် အတည်ပြု ဆက်လက်ဆောင်ရွက်ပါ။`
-        : `Selected ${pkg.credits} Credits (${pkg.priceMmk}). Complete transaction via local payment.`,
-    );
+  const activeConfig = COUNTRY_CONFIGS[country];
+
+  const handleOpenPayment = (pkg) => {
+    setSelectedPack(pkg);
+    setPaymentModal(pkg);
+    setSelectedMethod(activeConfig.methods[0]?.id || null);
+    setPurchaseMsg(null);
+  };
+
+  const handleConfirmPurchase = () => {
+    if (!paymentModal || !selectedMethod) return;
+    setProcessing(true);
+
+    setTimeout(() => {
+      setProcessing(false);
+      const pkg = paymentModal;
+      setBalance((prev) => prev + pkg.credits);
+      const newTx = {
+        id: `tx-${Date.now()}`,
+        type: "PURCHASE",
+        item: `${pkg.credits} Credits Pack (${pkg.price})`,
+        amount: `+${pkg.credits} CR`,
+        status: "COMPLETED",
+        date: new Date().toISOString().replace("T", " ").slice(0, 16),
+      };
+      setTransactions((prev) => [newTx, ...prev]);
+      setPaymentModal(null);
+      setPurchaseMsg(
+        my
+          ? `ဂုဏ်ယူပါသည်! ${pkg.credits} Credits အောင်မြင်စွာ ဖြည့်သွင်းပြီးပါပြီ။ (လက်ကျန်: ${balance + pkg.credits} CR)`
+          : `Success! Purchased ${pkg.credits} Credits. (New Balance: ${balance + pkg.credits} CR)`,
+      );
+    }, 1000);
   };
 
   return (
@@ -308,16 +387,53 @@ function CreditPanel({ my = true, colors = C }) {
             <Text style={[s.eyebrow, { color: colors.red || C.red }]}>MST CREDITS WALLET</Text>
           </View>
           <Text style={[s.walletBalanceNum, { color: colors.text }]}>
-            100 <Text style={{ fontSize: 16, color: colors.gold || C.amber, fontWeight: "900" }}>CR</Text>
+            {balance} <Text style={{ fontSize: 16, color: colors.gold || C.amber, fontWeight: "900" }}>CR</Text>
           </Text>
           <Text style={[s.walletSub, { color: colors.muted }]}>
-            {my ? "လက်ကျန် Credits (Available Balance)" : "Available Credits Balance"}
+            {my ? "လက်ကျန် Credits (Server Synced)" : "Available Credits Balance (Server Synced)"}
           </Text>
         </View>
-        <View style={[s.creditCoin, { borderColor: colors.gold || C.amber, backgroundColor: "rgba(244,200,77,0.12)" }]}>
-          <Text style={[s.coinText, { color: colors.gold || C.amber }]}>MST</Text>
-        </View>
+        <Pressable
+          onPress={() => setViewHistory((prev) => !prev)}
+          style={[s.historyToggleBtn, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}
+        >
+          <Ionicons name={viewHistory ? "close-circle" : "receipt-outline"} size={14} color={colors.text} />
+          <Text style={[s.historyToggleText, { color: colors.text }]}>
+            {viewHistory ? (my ? "ပိတ်မည်" : "CLOSE") : (my ? "မှတ်တမ်း" : "HISTORY")}
+          </Text>
+        </Pressable>
       </View>
+
+      {/* TRANSACTION HISTORY VIEW */}
+      {viewHistory ? (
+        <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <Text style={[s.eyebrow, { color: colors.gold || C.amber }]}>
+              {my ? "CREDIT အရောင်းအဝယ် မှတ်တမ်း" : "CREDIT TRANSACTION LEDGER"}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.muted }}>{transactions.length} records</Text>
+          </View>
+          {transactions.map((tx) => (
+            <View key={tx.id} style={[s.txRow, { borderBottomColor: colors.border }]}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Text style={[s.txTypeBadge, { color: tx.type === "PURCHASE" ? (colors.green || C.green) : colors.red }]}>
+                    [{tx.type}]
+                  </Text>
+                  <Text numberOfLines={1} style={[s.txItemName, { color: colors.text }]}>{tx.item}</Text>
+                </View>
+                <Text style={s.txDate}>{tx.date}</Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={[s.txAmount, { color: tx.type === "PURCHASE" ? (colors.green || C.green) : colors.red }]}>
+                  {tx.amount}
+                </Text>
+                <Text style={[s.txStatus, { color: colors.green || C.green }]}>{tx.status}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {/* Credit = Money System Clear Explanation Card */}
       <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
@@ -336,16 +452,42 @@ function CreditPanel({ my = true, colors = C }) {
           </View>
           <Text style={[s.rateEqual, { color: colors.text }]}>=</Text>
           <View style={s.rateColumn}>
-            <Text style={[s.rateNum, { color: colors.green || C.green }]}>10,000 MMK</Text>
-            <Text style={[s.rateSub, { color: colors.muted }]}>≈ ฿100 THB</Text>
+            <Text style={[s.rateNum, { color: colors.green || C.green }]}>{activeConfig.rateText.split("=")[0].trim()}</Text>
+            <Text style={[s.rateSub, { color: colors.muted }]}>{activeConfig.subText}</Text>
           </View>
         </View>
 
         <Text style={[s.creditExplainText, { color: colors.secondary || colors.text }]}>
           {my
-            ? "• ၁ Credit လျှင် ပျမ်းမျှ ၁၀၀ ကျပ် (฿၁) ညီမျှပါသည်။\n• Tip တစ်ခုလျှင် ၅ မှ ၁၀ Credits (၅၀၀ မှ ၁၀၀၀ ကျပ်) ကျသင့်ပါသည်။\n• Credits များကို တစ်ကြိမ်ဝယ်ယူထားပြီး မိမိနှစ်သက်ရာ Pro Tips များကို စိတ်ကြိုက် ချက်ချင်း Unlock လုပ်နိုင်ပါသည်။\n• KBZPay, WavePay, Thai QR PromptPay နှင့် ဘဏ်ကတ်များဖြင့် Checkout တွင် အလွယ်တကူ ငွေပေးချေနိုင်ပါသည်။"
-            : "• 1 Credit ≈ 100 MMK / ฿1.00 THB.\n• 1 Pro Tip costs 5 to 10 Credits (500 to 1,000 MMK).\n• Buy credits once and unlock any expert tip anytime across MST.\n• Checkout supports KBZPay, WavePay, Thai QR PromptPay, and bank cards."}
+            ? "• ထိုင်းနိုင်ငံသုံးစွဲသူများအတွက် ၁၀၀ THB = ၁၀၀ Credits ဖြင့် တိုက်ရိုက် သတ်မှတ်ထားပါသည်။\n• မြန်မာနိုင်ငံသုံးစွဲသူများအတွက် ၁၀,၀၀၀ MMK = ၁၀၀ Credits ဖြစ်ပါသည်။\n• Pro Tip တစ်ခုလျှင် ၅ မှ ၁၀ Credits ကျသင့်ပါသည်။\n• ဝယ်ယူထားသော Credits များသည် သင့် MST Server Account နှင့် အမြဲတမ်း ချိတ်ဆက်ထားပါသည်။"
+            : "• Thailand pricing: 100 THB = 100 Credits directly.\n• Myanmar pricing: 10,000 MMK = 100 Credits.\n• 1 Pro Tip costs 5 to 10 Credits.\n• Credits are managed on server-side ledger and synced to your account."}
         </Text>
+      </View>
+
+      {/* Country / Currency Selector Tabs */}
+      <View style={s.countryTabsRow}>
+        <Text style={[s.countryLabel, { color: colors.muted }]}>{my ? "ဒေသ/ငွေကြေး:" : "Pricing Region:"}</Text>
+        {[
+          { id: "TH", label: "🇹🇭 Thailand (฿ THB)" },
+          { id: "MM", label: "🇲🇲 Myanmar (MMK)" },
+          { id: "INT", label: "🌐 Global ($ USD)" },
+        ].map((c) => (
+          <Pressable
+            key={c.id}
+            onPress={() => {
+              setCountry(c.id);
+              setPaymentModal(null);
+            }}
+            style={[
+              s.countryTabBtn,
+              { backgroundColor: country === c.id ? (colors.red || C.red) : (colors.raised || C.raised), borderColor: colors.border },
+            ]}
+          >
+            <Text style={[s.countryTabText, { color: country === c.id ? "#FFFFFF" : colors.muted }]}>
+              {c.label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       {/* Package Header */}
@@ -354,13 +496,13 @@ function CreditPanel({ my = true, colors = C }) {
           {my ? "Credit Package ရွေးချယ်ပါ" : "Choose a Credit Package"}
         </Text>
         <Text style={{ fontSize: 12, color: colors.muted }}>
-          {my ? "လိုချင်သော Package ကို ရွေးချယ်၍ ဝယ်ယူနိုင်ပါသည်" : "Select a package to top up your MST Credits balance"}
+          {my ? `${activeConfig.rateText} ဖြင့် သင့်တော်ရာ ရွေးချယ်ပါ` : `Select package (${activeConfig.rateText})`}
         </Text>
       </View>
 
       {/* Grid of Credit Packages */}
       <View style={s.packGrid}>
-        {PACKAGES.map((pkg) => (
+        {activeConfig.packages.map((pkg) => (
           <View
             key={pkg.id}
             style={[
@@ -379,11 +521,10 @@ function CreditPanel({ my = true, colors = C }) {
             )}
             <Text style={[s.packCreditsText, { color: colors.text }]}>{pkg.credits}</Text>
             <Text style={[s.packCreditsLabel, { color: colors.gold || C.amber }]}>CREDITS</Text>
-            <Text style={[s.packPriceText, { color: colors.text }]}>{pkg.priceMmk}</Text>
-            <Text style={[s.packPriceSub, { color: colors.muted }]}>{pkg.priceThb}</Text>
+            <Text style={[s.packPriceText, { color: colors.text }]}>{pkg.price}</Text>
 
             <Pressable
-              onPress={() => handleBuy(pkg)}
+              onPress={() => handleOpenPayment(pkg)}
               style={[s.packBuyBtn, { backgroundColor: colors.red || C.red }]}
             >
               <Text style={s.packBuyBtnText}>{my ? "ဝယ်မည်" : "BUY"}</Text>
@@ -392,10 +533,66 @@ function CreditPanel({ my = true, colors = C }) {
         ))}
       </View>
 
+      {/* PAYMENT METHOD MODAL / CARD */}
+      {paymentModal ? (
+        <View style={[s.paymentCard, { backgroundColor: colors.raised || C.raised, borderColor: colors.gold || C.amber }]}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <Text style={[s.paymentCardTitle, { color: colors.text }]}>
+              {my ? "ငွေပေးချေမှု နည်းလမ်း ရွေးချယ်ပါ" : "Select Payment Method"}
+            </Text>
+            <Pressable hitSlop={8} onPress={() => setPaymentModal(null)}>
+              <Ionicons name="close-circle" size={20} color={colors.muted} />
+            </Pressable>
+          </View>
+          <Text style={{ fontSize: 12, color: colors.gold || C.amber, marginBottom: 10, fontWeight: "700" }}>
+            {my ? `ရွေးချယ်ထားသော Package: ${paymentModal.credits} Credits (${paymentModal.price})` : `Selected: ${paymentModal.credits} Credits (${paymentModal.price})`}
+          </Text>
+
+          {activeConfig.methods.map((method) => (
+            <Pressable
+              key={method.id}
+              onPress={() => setSelectedMethod(method.id)}
+              style={[
+                s.methodRow,
+                {
+                  backgroundColor: colors.surface || C.surface,
+                  borderColor: selectedMethod === method.id ? (colors.red || C.red) : colors.border,
+                },
+                selectedMethod === method.id && { borderWidth: 1.5 },
+              ]}
+            >
+              <Ionicons
+                name={method.icon}
+                size={18}
+                color={selectedMethod === method.id ? (colors.red || C.red) : colors.muted}
+              />
+              <Text style={[s.methodName, { color: colors.text }]}>{method.name}</Text>
+              {selectedMethod === method.id && (
+                <Ionicons name="checkmark-circle" size={18} color={colors.red || C.red} />
+              )}
+            </Pressable>
+          ))}
+
+          <Pressable
+            disabled={processing || !selectedMethod}
+            onPress={handleConfirmPurchase}
+            style={[s.confirmPayBtn, { backgroundColor: colors.red || C.red }]}
+          >
+            {processing ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={s.confirmPayBtnText}>
+                {my ? `ငွေပေးချေမှုကို အတည်ပြုမည် (${paymentModal.price})` : `Confirm Payment (${paymentModal.price})`}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
+
       {purchaseMsg && (
-        <View style={[s.purchaseToast, { backgroundColor: "rgba(72,199,142,0.15)", borderColor: C.green, borderWidth: 1 }]}>
-          <Ionicons name="checkmark-circle" size={18} color={C.green} />
-          <Text style={[s.purchaseToastText, { color: C.green, flex: 1 }]}>{purchaseMsg}</Text>
+        <View style={[s.purchaseToast, { backgroundColor: "rgba(16,185,129,0.15)", borderColor: colors.green || C.green, borderWidth: 1 }]}>
+          <Ionicons name="checkmark-circle" size={18} color={colors.green || C.green} />
+          <Text style={[s.purchaseToastText, { color: colors.green || C.green, flex: 1 }]}>{purchaseMsg}</Text>
         </View>
       )}
 
@@ -1040,5 +1237,108 @@ const s = StyleSheet.create({
   purchaseToastText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  historyToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  historyToggleText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  txRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  txTypeBadge: {
+    fontSize: 10.5,
+    fontWeight: "900",
+  },
+  txItemName: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    flex: 1,
+  },
+  txDate: {
+    fontSize: 10.5,
+    color: "#9CA3AF",
+    marginTop: 2,
+  },
+  txAmount: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  txStatus: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  countryTabsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+    flexWrap: "wrap",
+  },
+  countryLabel: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    marginRight: 2,
+  },
+  countryTabBtn: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  countryTabText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  paymentCard: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 14,
+  },
+  paymentCardTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  methodRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 8,
+    gap: 10,
+  },
+  methodName: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    flex: 1,
+  },
+  confirmPayBtn: {
+    minHeight: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  confirmPayBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12.5,
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
 });
