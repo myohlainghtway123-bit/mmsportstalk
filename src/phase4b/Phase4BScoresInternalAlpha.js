@@ -4,6 +4,7 @@ import {
   BackHandler,
   FlatList,
   Image,
+  InteractionManager,
   Platform,
   Pressable,
   RefreshControl,
@@ -938,6 +939,11 @@ export default function Phase4BScoresInternalAlpha() {
   const [userAvatar, setUserAvatar] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [language, setLanguage] = useState("my");
+  const [visitedPrimary, setVisitedPrimary] = useState({
+    matches: true,
+    news: false,
+    favorites: false,
+  });
 
   const loadUserData = useCallback(() => {
     getAuthStatus()
@@ -950,7 +956,8 @@ export default function Phase4BScoresInternalAlpha() {
 
   // Load user avatar for top header
   useEffect(() => {
-    loadUserData();
+    const task = InteractionManager.runAfterInteractions(loadUserData);
+    return () => task?.cancel?.();
   }, [loadUserData]);
 
   useEffect(() => {
@@ -992,6 +999,11 @@ export default function Phase4BScoresInternalAlpha() {
     setPreviewMatch(null);
     setSelectedMatch(null);
     setSubScreen(null);
+    if (next === "matches" || next === "news" || next === "favorites") {
+      setVisitedPrimary((current) => (
+        current[next] ? current : { ...current, [next]: true }
+      ));
+    }
     setActive(next);
 
     // Scroll horizontal pager if navigating to core content screens
@@ -1113,6 +1125,13 @@ export default function Phase4BScoresInternalAlpha() {
         bounces={false}
         scrollEventThrottle={16}
         nestedScrollEnabled
+        onScrollBeginDrag={() => {
+          setVisitedPrimary((current) => (
+            current.news && current.favorites
+              ? current
+              : { ...current, news: true, favorites: true }
+          ));
+        }}
         onMomentumScrollEnd={(event) => {
           const offsetX = event.nativeEvent.contentOffset.x;
           const pageIndex = Math.round(offsetX / screenWidth);
@@ -1135,20 +1154,28 @@ export default function Phase4BScoresInternalAlpha() {
           />
         </View>
         <View style={{ width: screenWidth, flex: 1 }}>
-          <NewsScreen
-            onOpenSearch={openSearch}
-            onOpenProfile={openProfile}
-            userAvatar={userAvatar}
-          />
+          {visitedPrimary.news ? (
+            <NewsScreen
+              onOpenSearch={openSearch}
+              onOpenProfile={openProfile}
+              userAvatar={userAvatar}
+            />
+          ) : (
+            <View style={s.flex} />
+          )}
         </View>
         <View style={{ width: screenWidth, flex: 1 }}>
-          <FavoritesScreen
-            matches={overview.matches}
-            onOpenMatch={openMatch}
-            onOpenSearch={openSearch}
-            onOpenProfile={openProfile}
-            userAvatar={userAvatar}
-          />
+          {visitedPrimary.favorites ? (
+            <FavoritesScreen
+              matches={overview.matches}
+              onOpenMatch={openMatch}
+              onOpenSearch={openSearch}
+              onOpenProfile={openProfile}
+              userAvatar={userAvatar}
+            />
+          ) : (
+            <View style={s.flex} />
+          )}
         </View>
       </ScrollView>
     );
