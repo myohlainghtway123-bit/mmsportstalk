@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, BackHandler, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import {
   createTipPurchase,
@@ -657,9 +658,32 @@ export default function Phase4BReadOnlyHub({ language = "my" }) {
     }
   }, []);
 
+  const TIPS_DISK_KEY = "mst:cache:tips-hub:v1";
+
   useEffect(() => {
     let active = true;
-    setState((current) => ({ ...current, loading: true, warnings: [] }));
+
+    // ── Step 1: Paint immediately from disk cache ──
+    AsyncStorage.getItem(TIPS_DISK_KEY)
+      .then((raw) => {
+        if (!active || !raw) return;
+        try {
+          const cached = JSON.parse(raw);
+          if (cached?.tips) {
+            setState((prev) => prev.tips ? prev : {
+              ...prev,
+              loading: true,
+              tips: cached.tips,
+              tipsters: cached.tipsters || null,
+              tipsterLeaderboard: cached.tipsterLeaderboard || null,
+              leaderboard: cached.leaderboard || null,
+            });
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
+
+    // ── Step 2: Fetch fresh data in parallel ──
     Promise.allSettled([
       loadTips(),
       loadTipsters(),
@@ -690,6 +714,11 @@ export default function Phase4BReadOnlyHub({ language = "my" }) {
         leaderboard,
         warnings,
       });
+
+      // Persist to disk so next mount is instant
+      if (tips) {
+        AsyncStorage.setItem(TIPS_DISK_KEY, JSON.stringify({ tips, tipsters, tipsterLeaderboard, leaderboard })).catch(() => {});
+      }
     });
     return () => { active = false; };
   }, [attempt]);

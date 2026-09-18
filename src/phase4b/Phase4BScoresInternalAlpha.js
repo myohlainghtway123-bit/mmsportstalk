@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "
 import {
   ActivityIndicator,
   BackHandler,
+  FlatList,
   Image,
   Linking,
   Platform,
@@ -673,7 +674,7 @@ const KNOWN_COMP_LOGOS = {
   "world cup": "https://media.api-sports.io/football/leagues/1.png",
 };
 
-function TeamMark({ name, uri, size = 24 }) {
+const TeamMark = memo(function TeamMark({ name, uri, size = 24 }) {
   const [failed, setFailed] = useState(false);
   const cleanName = String(name || "").trim().toLowerCase();
   const effectiveUri = (!failed && uri) ? uri : (KNOWN_TEAM_LOGOS[cleanName] || KNOWN_COMP_LOGOS[cleanName] || null);
@@ -694,7 +695,7 @@ function TeamMark({ name, uri, size = 24 }) {
       <Text style={[s.fallbackMarkText, { fontSize: size < 22 ? 9 : 11 }]}>{initials}</Text>
     </View>
   );
-}
+});
 
 const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
   let colors = { text: "#111827", muted: "#6B7280", border: "#E5E7EB", red: T.color.red, surface: "#FFFFFF", card: "#FFFFFF" };
@@ -1308,6 +1309,120 @@ function MatchesScreen({
     if (theme?.isDark !== undefined) isDark = theme.isDark;
   } catch {}
 
+  // ── Stable render callbacks for FlatList ──
+  const renderGroup = useCallback(({ item: group, index: idx }) => {
+    const renderAd = idx === 1 || idx === 4 || idx === 8;
+    return (
+      <React.Fragment key={group.id}>
+        <LeagueGroup
+          group={group}
+          isCollapsed={collapsedLeagues.has(group.id)}
+          onToggleCollapse={toggleLeague}
+          onOpen={onOpenMatch}
+          onOpenEntity={onOpenEntity}
+          language={language}
+        />
+        {renderAd && <Phase4BAdBanner />}
+      </React.Fragment>
+    );
+  }, [collapsedLeagues, toggleLeague, onOpenMatch, onOpenEntity, language]);
+
+  const keyExtractor = useCallback((group) => group.id, []);
+
+  const listHeader = useMemo(() => (
+    <View>
+      <View style={s.filterRow}>
+        <View style={s.filterChipsGroup}>
+          {[
+            { id: "all", label: t("allMatches", language) },
+            { id: "live", label: t("liveOnly", language) },
+            { id: "favorites", label: t("favorites", language) },
+          ].map((f) => {
+            const active = filter === f.id;
+            return (
+              <Pressable
+                key={f.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                onPress={() => setFilter(f.id)}
+                style={[
+                  s.filterChip,
+                  {
+                    backgroundColor: active
+                      ? (colors.red || T.color.red)
+                      : (isDark ? "#121214" : "#FFFFFF"),
+                    borderColor: active
+                      ? (colors.red || T.color.red)
+                      : (isDark ? "#1C1C20" : "#E5E7EB"),
+                  },
+                ]}
+              >
+                {f.id === "live" && <View style={[s.filterLiveDot, active && s.filterLiveDotActive]} />}
+                <Text
+                  style={[
+                    s.filterChipText,
+                    { color: active ? "#FFFFFF" : (isDark ? "#A1A1AA" : "#4B5563") },
+                    active && s.filterChipTextActive,
+                  ]}
+                >
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {filteredMatches.length > 0 ? (
+          <Text style={[s.matchCountCompact, { color: isDark ? "#71717A" : "#6B7280" }]}>
+            {t("matchesCount", language, { count: filteredMatches.length })}
+          </Text>
+        ) : null}
+      </View>
+
+      {filteredMatches.length === 0 && (overview.loading || dateLoading) ? (
+        <MatchListSkeleton isDark={isDark} />
+      ) : (
+        <TerminalState
+          loading={false}
+          error={overview.error}
+          empty={!overview.loading && !dateLoading && !overview.error && filteredMatches.length === 0}
+          emptyTitle={
+            language === "my"
+              ? (filter === "live" ? "တိုက်ရိုက်ပွဲစဉ်များ မရှိသေးပါ" : filter === "favorites" ? "အကြိုက်ဆုံးပွဲစဉ်များ မရှိသေးပါ" : t("noMatchesScheduled", language))
+              : (filter === "live" ? "No live matches" : filter === "favorites" ? "No favorite matches" : "No matches scheduled")
+          }
+          emptyText={
+            language === "my"
+              ? (filter === "live"
+                  ? "လတ်တလော တိုက်ရိုက်ကစားနေသော ပွဲစဉ် မရှိသေးပါ။ ပွဲစဉ်အားလုံးကို ကြည့်ရှုရန် 'ပွဲအားလုံး' ကို နှိပ်ပါ။"
+                  : filter === "favorites"
+                    ? "သင် အကြိုက်ဆုံးအဖြစ် ရွေးထားသော အသင်းများ ယနေ့ ပွဲစဉ်မရှိသေးပါ။ အသင်းများကို အကြိုက်ဆုံးစာရင်း ထည့်သွင်းရန် ကြယ်ပွင့်ကို နှိပ်ပါ။"
+                    : t("noMatchesSub", language))
+              : (filter === "live"
+                  ? "No matches are live right now. Switch to 'All Matches' to view the full fixture schedule."
+                  : filter === "favorites"
+                    ? "None of your favorited teams are playing on this date. Tap the star on any match or team to follow."
+                    : "No real match is scheduled for this date. Choose another date or retry.")
+          }
+          onRetry={handleRefresh}
+          language={language}
+        />
+      )}
+
+      {featuredMatch && filter === "all" && groups.length > 0 && (
+        <BigMatchPreview
+          match={featuredMatch}
+          onOpenPreview={onOpenPreview}
+          onOpenMatch={onOpenMatch}
+          language={language}
+        />
+      )}
+    </View>
+  ), [filter, filteredMatches.length, overview.loading, overview.error, dateLoading, isDark, colors, featuredMatch, groups.length, language, onOpenPreview, onOpenMatch, handleRefresh]);
+
+  const listFooter = useMemo(() => (
+    groups.length === 1 ? <Phase4BAdBanner /> : null
+  ), [groups.length]);
+
   return (
     <View style={s.flex}>
       <HomeBrandHeader
@@ -1328,8 +1443,12 @@ function MatchesScreen({
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        <ScrollView
-          nestedScrollEnabled
+        <FlatList
+          data={groups}
+          keyExtractor={keyExtractor}
+          renderItem={renderGroup}
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
           contentContainerStyle={s.scrollContent}
           refreshControl={
             <RefreshControl
@@ -1339,113 +1458,12 @@ function MatchesScreen({
               colors={[T.color.red]}
             />
           }
-        >
-          <View style={s.filterRow}>
-            <View style={s.filterChipsGroup}>
-              {[
-                { id: "all", label: t("allMatches", language) },
-                { id: "live", label: t("liveOnly", language) },
-                { id: "favorites", label: t("favorites", language) },
-              ].map((f) => {
-                const active = filter === f.id;
-                return (
-                  <Pressable
-                    key={f.id}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => setFilter(f.id)}
-                    style={[
-                      s.filterChip,
-                      {
-                        backgroundColor: active
-                          ? (colors.red || T.color.red)
-                          : (isDark ? "#121214" : "#FFFFFF"),
-                        borderColor: active
-                          ? (colors.red || T.color.red)
-                          : (isDark ? "#1C1C20" : "#E5E7EB"),
-                      },
-                    ]}
-                  >
-                    {f.id === "live" && <View style={[s.filterLiveDot, active && s.filterLiveDotActive]} />}
-                    <Text
-                      style={[
-                        s.filterChipText,
-                        { color: active ? "#FFFFFF" : (isDark ? "#A1A1AA" : "#4B5563") },
-                        active && s.filterChipTextActive,
-                      ]}
-                    >
-                      {f.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {filteredMatches.length > 0 ? (
-              <Text style={[s.matchCountCompact, { color: isDark ? "#71717A" : "#6B7280" }]}>
-                {t("matchesCount", language, { count: filteredMatches.length })}
-              </Text>
-            ) : null}
-          </View>
-
-          {filteredMatches.length === 0 && (overview.loading || dateLoading) ? (
-            <MatchListSkeleton isDark={isDark} />
-          ) : (
-            <TerminalState
-              loading={false}
-              error={overview.error}
-              empty={!overview.loading && !dateLoading && !overview.error && filteredMatches.length === 0}
-              emptyTitle={
-                language === "my"
-                  ? (filter === "live" ? "တိုက်ရိုက်ပွဲစဉ်များ မရှိသေးပါ" : filter === "favorites" ? "အကြိုက်ဆုံးပွဲစဉ်များ မရှိသေးပါ" : t("noMatchesScheduled", language))
-                  : (filter === "live" ? "No live matches" : filter === "favorites" ? "No favorite matches" : "No matches scheduled")
-              }
-              emptyText={
-                language === "my"
-                  ? (filter === "live"
-                      ? "လတ်တလော တိုက်ရိုက်ကစားနေသော ပွဲစဉ် မရှိသေးပါ။ ပွဲစဉ်အားလုံးကို ကြည့်ရှုရန် 'ပွဲအားလုံး' ကို နှိပ်ပါ။"
-                      : filter === "favorites"
-                        ? "သင် အကြိုက်ဆုံးအဖြစ် ရွေးထားသော အသင်းများ ယနေ့ ပွဲစဉ်မရှိသေးပါ။ အသင်းများကို အကြိုက်ဆုံးစာရင်း ထည့်သွင်းရန် ကြယ်ပွင့်ကို နှိပ်ပါ။"
-                        : t("noMatchesSub", language))
-                  : (filter === "live"
-                      ? "No matches are live right now. Switch to 'All Matches' to view the full fixture schedule."
-                      : filter === "favorites"
-                        ? "None of your favorited teams are playing on this date. Tap the star on any match or team to follow."
-                        : "No real match is scheduled for this date. Choose another date or retry.")
-              }
-              onRetry={handleRefresh}
-              language={language}
-            />
-          )}
-
-          {featuredMatch && filter === "all" && groups.length > 0 && (
-            <BigMatchPreview
-              match={featuredMatch}
-              onOpenPreview={onOpenPreview}
-              onOpenMatch={onOpenMatch}
-              language={language}
-            />
-          )}
-
-          {groups.map((group, idx) => {
-            // Distribute multiple AdMob units throughout the match list after league sections
-            // Frequency limit: placed after 2nd league (idx 1), 5th league (idx 4), and 9th league (idx 8) - max 3 banners
-            const renderAd = idx === 1 || idx === 4 || idx === 8;
-            return (
-              <React.Fragment key={group.id}>
-                <LeagueGroup
-                  group={group}
-                  isCollapsed={collapsedLeagues.has(group.id)}
-                  onToggleCollapse={toggleLeague}
-                  onOpen={onOpenMatch}
-                  onOpenEntity={onOpenEntity}
-                  language={language}
-                />
-                {renderAd && <Phase4BAdBanner />}
-              </React.Fragment>
-            );
-          })}
-          {groups.length === 1 && <Phase4BAdBanner />}
-        </ScrollView>
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === "android"}
+          showsVerticalScrollIndicator={false}
+        />
       </View>
     </View>
   );
@@ -2246,18 +2264,49 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview, onOpenEntity, langu
   );
 }
 
+const OVERVIEW_DISK_KEY = "mst:cache:overview:v1";
+
 function useScoresOverview() {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState({ loading: true, matches: [], requestIds: {}, warnings: [], error: "" });
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
+
   useEffect(() => {
     let active = true;
-    setState((current) => ({ ...current, loading: true, error: "" }));
+
+    // ── Step 1: Show disk-cached data immediately (stale-while-revalidate) ──
+    AsyncStorage.getItem(OVERVIEW_DISK_KEY)
+      .then((raw) => {
+        if (!active || !raw) return;
+        try {
+          const cached = JSON.parse(raw);
+          if (Array.isArray(cached?.matches) && cached.matches.length > 0) {
+            setState((prev) => prev.matches.length === 0
+              ? { loading: true, matches: cached.matches, requestIds: cached.requestIds || {}, warnings: [], error: "" }
+              : prev,
+            );
+          }
+        } catch (_) {}
+      })
+      .catch(() => {});
+
+    // ── Step 2: Fetch fresh data in the background ──
     loadScoresOverview()
-      .then((result) => active && setState({ loading: false, matches: result.matches, requestIds: result.requestIds, warnings: result.warnings, error: "" }))
-      .catch((error) => active && setState({ loading: false, matches: [], requestIds: {}, warnings: [], error: error?.message || "Could not load matches." }));
+      .then((result) => {
+        if (!active) return;
+        setState({ loading: false, matches: result.matches, requestIds: result.requestIds, warnings: result.warnings, error: "" });
+        // Persist to disk in background – non-blocking
+        AsyncStorage.setItem(OVERVIEW_DISK_KEY, JSON.stringify({ matches: result.matches, requestIds: result.requestIds })).catch(() => {});
+      })
+      .catch((error) => {
+        if (!active) return;
+        // Keep existing cached matches visible; only mark loading done
+        setState((prev) => ({ ...prev, loading: false, error: error?.message || "Could not load matches." }));
+      });
+
     return () => { active = false; };
   }, [attempt]);
+
   return { ...state, retry };
 }
 
@@ -2480,20 +2529,6 @@ function Phase4BScoresInternalAlphaContent() {
         language={language}
       />
     );
-  } else if (subScreen === "settings" || active === "settings") {
-    content = (
-      <SettingsScreenV2
-        goBack={() => {
-          if (subScreen === "settings") setSubScreen(null);
-          else selectNav("matches");
-        }}
-        openProfile={() => setSubScreen("profile")}
-        onOpenSignIn={() => setAuthModalVisible(true)}
-        openAccount={() => setAuthModalVisible(true)}
-        language={language}
-        setLanguage={handleSetLanguage}
-      />
-    );
   } else if (selectedMatch) {
     content = (
       <MatchCenter
@@ -2507,21 +2542,30 @@ function Phase4BScoresInternalAlphaContent() {
         language={language}
       />
     );
-  } else if (active === "tips") {
-    content = (
-      <TipsScreen
-        featuredMatch={overview.matches[0]}
-        onOpenSearch={openSearch}
-        onOpenProfile={openProfile}
-        userAvatar={userAvatar}
-        language={language}
-      />
-    );
   } else {
-    // Primary core tab sequence: Matches, News, Favorites (instant switching, zero lag)
+    // All 5 core tabs are kept permanently mounted — switching is instant with zero remount/refetch.
+    // Settings tab kept inline here (not as a subScreen) so it stays alive too.
+    const isOverlayScreen = subScreen === "settings" || active === "settings";
     content = (
       <View style={s.flex}>
-        <View style={[s.flex, active === "matches" ? null : { display: "none" }]}>
+        {/* Settings overlay — keep-alive inside the tab layer */}
+        {(subScreen === "settings" || active === "settings") && (
+          <View style={[s.flex, isOverlayScreen ? null : { display: "none" }]}>
+            <SettingsScreenV2
+              goBack={() => {
+                if (subScreen === "settings") setSubScreen(null);
+                else selectNav("matches");
+              }}
+              openProfile={() => setSubScreen("profile")}
+              onOpenSignIn={() => setAuthModalVisible(true)}
+              openAccount={() => setAuthModalVisible(true)}
+              language={language}
+              setLanguage={handleSetLanguage}
+            />
+          </View>
+        )}
+        {/* Primary core tabs — zero-remount instant switching */}
+        <View style={[s.flex, !isOverlayScreen && active === "matches" ? null : { display: "none" }]}>
           <MatchesScreen
             overview={overview}
             onOpenMatch={openMatch}
@@ -2538,7 +2582,7 @@ function Phase4BScoresInternalAlphaContent() {
             todayResetTrigger={todayResetCounter}
           />
         </View>
-        <View style={[s.flex, active === "news" ? null : { display: "none" }]}>
+        <View style={[s.flex, !isOverlayScreen && active === "news" ? null : { display: "none" }]}>
           <NewsScreen
             onOpenSearch={openSearch}
             onOpenProfile={openProfile}
@@ -2546,7 +2590,7 @@ function Phase4BScoresInternalAlphaContent() {
             language={language}
           />
         </View>
-        <View style={[s.flex, active === "favorites" ? null : { display: "none" }]}>
+        <View style={[s.flex, !isOverlayScreen && active === "favorites" ? null : { display: "none" }]}>
           <FavoritesScreen
             matches={overview.matches}
             onOpenMatch={openMatch}
@@ -2555,6 +2599,15 @@ function Phase4BScoresInternalAlphaContent() {
             userAvatar={userAvatar}
             onOpenEntity={(type, entity) => setSelectedEntity({ type, entity })}
             onOpenSignIn={() => setAuthModalVisible(true)}
+            language={language}
+          />
+        </View>
+        <View style={[s.flex, !isOverlayScreen && active === "tips" ? null : { display: "none" }]}>
+          <TipsScreen
+            featuredMatch={overview.matches[0]}
+            onOpenSearch={openSearch}
+            onOpenProfile={openProfile}
+            userAvatar={userAvatar}
             language={language}
           />
         </View>

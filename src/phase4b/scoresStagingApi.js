@@ -78,13 +78,26 @@ function validateSessionStore(sessionStore) {
   return sessionStore;
 }
 
+let cachedSessionStore = null;
 async function resolveSessionStore(sessionStore) {
   if (sessionStore !== undefined) return validateSessionStore(sessionStore);
+  if (!cachedSessionStore) {
+    const accountSession = await import("../services/sessionStore.js");
+    cachedSessionStore = validateSessionStore(accountSession);
+  }
+  return cachedSessionStore;
+}
 
-  // Keep React Native secure-storage dependencies out of plain Node contract
-  // tests while loading the same SecureStore-backed session in the real app.
-  const accountSession = await import("../services/sessionStore.js");
-  return validateSessionStore(accountSession);
+const SCORES_MEMORY_CACHE = new Map();
+const INFLIGHT_GETS = new Map();
+
+function defaultTTL(path) {
+  if (path.startsWith("/v1/standings")) return 5 * 60 * 1000;
+  if (path.startsWith("/v1/leaderboards")) return 2 * 60 * 1000;
+  if (path.startsWith("/v1/tips")) return 60 * 1000;
+  if (path.startsWith("/v1/matches/")) return 20 * 1000;
+  if (path.startsWith("/v1/fixtures") || path.startsWith("/v1/results")) return 20 * 1000;
+  return 15 * 1000;
 }
 
 export async function scoresProductRequest(path, {
@@ -143,7 +156,37 @@ export async function scoresProductRequest(path, {
 }
 
 export async function scoresStagingGet(path, options = {}) {
-  return scoresProductRequest(path, { ...options, method: "GET" });
+  if (options?.fetchImpl || options?.force) {
+    return scoresProductRequest(path, { ...options, method: "GET" });
+  }
+
+  const cacheKey = path;
+  const cached = SCORES_MEMORY_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < cached.ttl) {
+    return cached.result;
+  }
+
+  if (INFLIGHT_GETS.has(cacheKey)) {
+    return INFLIGHT_GETS.get(cacheKey);
+  }
+
+  const promise = scoresProductRequest(path, { ...options, method: "GET" })
+    .then((result) => {
+      SCORES_MEMORY_CACHE.set(cacheKey, {
+        result,
+        timestamp: Date.now(),
+        ttl: defaultTTL(path),
+      });
+      return result;
+    })
+    .finally(() => {
+      if (INFLIGHT_GETS.get(cacheKey) === promise) {
+        INFLIGHT_GETS.delete(cacheKey);
+      }
+    });
+
+  INFLIGHT_GETS.set(cacheKey, promise);
+  return promise;
 }
 
 export async function loginScoresAccount(identifier, password, options = {}) {
@@ -237,7 +280,10 @@ export async function loadScoresFeed(kind, options) {
   };
 }
 
-export async function loadScoresOverview(options) {
+const INFLIGHT_OVERVIEWS = new Map();
+let memoryOverviewCache = null;
+
+async function executeScoresOverview(options) {
   const feeds = Object.keys(FEED_ROUTES);
   const settled = await Promise.allSettled(feeds.map((feed) => loadScoresFeed(feed, options)));
   const successful = settled
@@ -271,10 +317,36 @@ export async function loadScoresOverview(options) {
   };
 }
 
-export async function loadScoresForDate(date, options = {}) {
-  const cleanDate = String(date || "").trim();
-  if (!cleanDate) return loadScoresOverview(options);
+export async function loadScoresOverview(options) {
+  if (options?.fetchImpl) {
+    return executeScoresOverview(options);
+  }
 
+  if (!options?.force && memoryOverviewCache && Date.now() - memoryOverviewCache.timestamp < 20_000) {
+    return memoryOverviewCache.result;
+  }
+
+  if (INFLIGHT_OVERVIEWS.has("overview")) {
+    return INFLIGHT_OVERVIEWS.get("overview");
+  }
+
+  const promise = executeScoresOverview(options)
+    .then((result) => {
+      memoryOverviewCache = { result, timestamp: Date.now() };
+      return result;
+    })
+    .finally(() => {
+      INFLIGHT_OVERVIEWS.delete("overview");
+    });
+
+  INFLIGHT_OVERVIEWS.set("overview", promise);
+  return promise;
+}
+
+const INFLIGHT_DATES = new Map();
+const DATE_CACHE = new Map();
+
+async function executeScoresForDate(cleanDate, options = {}) {
   const encoded = encodeURIComponent(cleanDate);
   const [fixturesRes, resultsRes] = await Promise.allSettled([
     scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options),
@@ -372,7 +444,7 @@ export async function loadScoresForDate(date, options = {}) {
   }
 
   try {
-    const overview = await loadScoresOverview(options);
+    const overview = await executeScoresOverview(options);
     const filtered = overview.matches.filter((m) => {
       const matchDate = String(m?.kickoff_at || m?.kickoff || "").slice(0, 10);
       return matchDate === cleanDate;
@@ -389,6 +461,40 @@ export async function loadScoresForDate(date, options = {}) {
       warnings: [],
     };
   }
+}
+
+export async function loadScoresForDate(date, options = {}) {
+  const cleanDate = String(date || "").trim();
+  if (!cleanDate) return loadScoresOverview(options);
+
+  if (options?.fetchImpl) {
+    return executeScoresForDate(cleanDate, options);
+  }
+
+  const cached = DATE_CACHE.get(cleanDate);
+  const isToday = cleanDate === new Date().toISOString().slice(0, 10);
+  const ttl = isToday ? 20_000 : 300_000;
+  if (!options?.force && cached && Date.now() - cached.timestamp < ttl) {
+    return cached.result;
+  }
+
+  if (INFLIGHT_DATES.has(cleanDate)) {
+    return INFLIGHT_DATES.get(cleanDate);
+  }
+
+  const promise = executeScoresForDate(cleanDate, options)
+    .then((result) => {
+      DATE_CACHE.set(cleanDate, { result, timestamp: Date.now() });
+      return result;
+    })
+    .finally(() => {
+      if (INFLIGHT_DATES.get(cleanDate) === promise) {
+        INFLIGHT_DATES.delete(cleanDate);
+      }
+    });
+
+  INFLIGHT_DATES.set(cleanDate, promise);
+  return promise;
 }
 
 export async function loadStandings({ competitionId, season } = {}, options = {}) {
@@ -423,12 +529,10 @@ export function normalizeTipPreview(tip) {
   };
 }
 
-export async function loadMatchCenter(matchId, options) {
-  const canonicalId = String(matchId ?? "").trim();
-  if (!canonicalId) {
-    throw new ScoresStagingError("Canonical match ID is required.", { code: "MATCH_ID_REQUIRED" });
-  }
+const INFLIGHT_MATCH_CENTER = new Map();
+const MATCH_CENTER_CACHE = new Map();
 
+async function executeMatchCenter(canonicalId, options) {
   const detail = await scoresStagingGet(`/v1/matches/${encodeURIComponent(canonicalId)}`, options);
   const resolvedId = canonicalMatchId(detail.data);
   if (resolvedId !== canonicalId) {
@@ -457,4 +561,38 @@ export async function loadMatchCenter(matchId, options) {
       preview: previewResult.status === "fulfilled" ? previewResult.value.requestId : previewResult.reason?.requestId || null,
     },
   };
+}
+
+export async function loadMatchCenter(matchId, options) {
+  const canonicalId = String(matchId ?? "").trim();
+  if (!canonicalId) {
+    throw new ScoresStagingError("Canonical match ID is required.", { code: "MATCH_ID_REQUIRED" });
+  }
+
+  if (options?.fetchImpl) {
+    return executeMatchCenter(canonicalId, options);
+  }
+
+  const cached = MATCH_CENTER_CACHE.get(canonicalId);
+  if (!options?.force && cached && Date.now() - cached.timestamp < 30_000) {
+    return cached.result;
+  }
+
+  if (INFLIGHT_MATCH_CENTER.has(canonicalId)) {
+    return INFLIGHT_MATCH_CENTER.get(canonicalId);
+  }
+
+  const promise = executeMatchCenter(canonicalId, options)
+    .then((result) => {
+      MATCH_CENTER_CACHE.set(canonicalId, { result, timestamp: Date.now() });
+      return result;
+    })
+    .finally(() => {
+      if (INFLIGHT_MATCH_CENTER.get(canonicalId) === promise) {
+        INFLIGHT_MATCH_CENTER.delete(canonicalId);
+      }
+    });
+
+  INFLIGHT_MATCH_CENTER.set(canonicalId, promise);
+  return promise;
 }
