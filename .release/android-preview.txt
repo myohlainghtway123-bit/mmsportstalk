@@ -1,1 +1,1 @@
-MST Android P0 dead-touch fix internal build — 2026-09-19
+MST Scores 1.5.3 cache-first Android internal build — 2026-09-19
