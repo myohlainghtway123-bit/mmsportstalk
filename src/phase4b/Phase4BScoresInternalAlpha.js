@@ -19,6 +19,8 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   canonicalMatchId,
   loadMatchCenter,
+  loadPersistedScoresForDate,
+  loadPersistedScoresOverview,
   loadScoresForDate,
   loadScoresOverview,
 } from "./scoresStagingApi";
@@ -499,27 +501,39 @@ function MatchesScreen({
       return;
     }
 
-    // Avoid competing with the three-feed overview request during startup.
-    // Once overview settles, only fetch the selected date when it truly is not
-    // already represented by the overview data.
-    if (overview.loading) return;
+    // Let persistent overview hydration finish first. If the selected date is
+    // not already present, hydrate its own last-known snapshot before fetching.
+    if (overview.hydrating) return;
 
     setDateLoading(true);
-    loadScoresForDate(selectedDate)
-      .then((result) => {
+    (async () => {
+      const cached = await loadPersistedScoresForDate(selectedDate).catch(() => null);
+      if (!alive) return;
+
+      if (cached?.matches?.length) {
+        setDateMatches((prev) => ({ ...prev, [selectedDate]: cached.matches }));
+        setDateLoading(false);
+      }
+
+      try {
+        const result = await loadScoresForDate(selectedDate);
         if (!alive) return;
-        setDateMatches((prev) => ({ ...prev, [selectedDate]: result?.matches || [] }));
-      })
-      .catch(() => {
+        setDateMatches((prev) => ({
+          ...prev,
+          [selectedDate]: result?.matches || prev[selectedDate] || fallback,
+        }));
+      } catch (_) {
         if (!alive) return;
-        setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
-      })
-      .finally(() => {
+        if (!cached?.matches?.length) {
+          setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
+        }
+      } finally {
         if (alive) setDateLoading(false);
-      });
+      }
+    })();
 
     return () => { alive = false; };
-  }, [selectedDate, overview.loading, overview.matches, dateMatches]);
+  }, [selectedDate, overview.hydrating, overview.matches]);
 
   const selectedMatches = useMemo(() => {
     if (dateMatches[selectedDate]) return dateMatches[selectedDate];
@@ -578,12 +592,14 @@ function MatchesScreen({
                 <Text style={s.sectionEyebrow}>MATCHES</Text>
                 <Text style={s.sectionTitle}>Follow the game</Text>
               </View>
-              <Text style={s.matchCount}>{selectedMatches.length} matches</Text>
+              <Text style={s.matchCount}>
+                {overview.updating || dateLoading ? "Updating…" : `${selectedMatches.length} matches`}
+              </Text>
             </View>
             <TerminalState
-              loading={(overview.loading || dateLoading) && selectedMatches.length === 0}
-              error={overview.error && selectedMatches.length === 0 ? overview.error : ""}
-              empty={!overview.loading && !dateLoading && !overview.error && selectedMatches.length === 0}
+              loading={false}
+              error={!overview.updating && !dateLoading && overview.error && selectedMatches.length === 0 ? overview.error : ""}
+              empty={!overview.hydrating && !overview.updating && !dateLoading && !overview.error && selectedMatches.length === 0}
               emptyText="No real match is scheduled for this date. Choose another date or retry."
               onRetry={handleRefresh}
             />
@@ -908,20 +924,78 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview }) {
 
 function useScoresOverview() {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState({ loading: true, matches: [], requestIds: {}, warnings: [], error: "" });
+  const [state, setState] = useState({
+    loading: false,
+    hydrating: true,
+    updating: true,
+    matches: [],
+    requestIds: {},
+    warnings: [],
+    error: "",
+  });
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
+
   useEffect(() => {
     let active = true;
-    setState((current) => ({ ...current, loading: true, error: "" }));
-    loadScoresOverview()
-      .then((result) => active && setState({ loading: false, matches: result.matches, requestIds: result.requestIds, warnings: result.warnings, error: "" }))
-      .catch((error) => active && setState((current) => ({
+
+    (async () => {
+      setState((current) => ({
         ...current,
         loading: false,
-        error: error?.message || "Could not load matches.",
-      })));
+        hydrating: attempt === 0 && current.matches.length === 0,
+        updating: true,
+        error: "",
+      }));
+
+      if (attempt === 0) {
+        const cached = await loadPersistedScoresOverview().catch(() => null);
+        if (!active) return;
+        if (cached?.matches?.length) {
+          setState((current) => ({
+            ...current,
+            loading: false,
+            hydrating: false,
+            updating: true,
+            matches: cached.matches,
+            requestIds: cached.requestIds || {},
+            warnings: [],
+            error: "",
+          }));
+        } else {
+          setState((current) => ({ ...current, hydrating: false }));
+        }
+      }
+
+      try {
+        const result = await loadScoresOverview({
+          force: attempt > 0,
+          staleWhileRevalidate: attempt === 0,
+        });
+        if (!active) return;
+        setState({
+          loading: false,
+          hydrating: false,
+          updating: false,
+          matches: result.matches,
+          requestIds: result.requestIds,
+          warnings: result.warnings,
+          error: "",
+        });
+      } catch (error) {
+        if (!active) return;
+        setState((current) => ({
+          ...current,
+          loading: false,
+          hydrating: false,
+          updating: false,
+          error: error?.message || "Could not load matches.",
+        }));
+      }
+    })();
+
     return () => { active = false; };
   }, [attempt]);
+
   return { ...state, retry };
 }
 
@@ -946,10 +1020,17 @@ export default function Phase4BScoresInternalAlpha() {
       .catch(() => {});
   }, []);
 
-  // Load user avatar for top header
+  // Keep account/status I/O off the first-interaction path. Scores and
+  // navigation become usable first; avatar/auth status can arrive afterwards.
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(loadUserData);
-    return () => task?.cancel?.();
+    let task = null;
+    const timer = setTimeout(() => {
+      task = InteractionManager.runAfterInteractions(loadUserData);
+    }, 2500);
+    return () => {
+      clearTimeout(timer);
+      task?.cancel?.();
+    };
   }, [loadUserData]);
 
   useEffect(() => {
