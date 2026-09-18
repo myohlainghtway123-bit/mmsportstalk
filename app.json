@@ -4,7 +4,7 @@
     "slug": "mst-app",
     "owner": "myohlainghtway",
     "description": "MST Scores — live football scores, fixtures, results, news, transfers, favorites and match-day updates by Myanmar Sports Talk.",
-    "version": "1.5.3",
+    "version": "1.5.4",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#07090B",
