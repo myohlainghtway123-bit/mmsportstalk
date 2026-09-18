@@ -1158,7 +1158,23 @@ function MatchesScreen({
     return filteredMatches.find((m) => isLive(m) || matchHasBigTeam(m)) || filteredMatches[0] || null;
   }, [filteredMatches]);
 
-  const groups = useMemo(() => groupByCompetition(filteredMatches), [filteredMatches]);
+  const groups = useMemo(() => {
+    const list = groupByCompetition(filteredMatches);
+    return list;
+  }, [filteredMatches]);
+
+  // Performance optimization: auto-collapse minor leagues beyond top 6 to prevent mounting 300+ views at once
+  useEffect(() => {
+    if (groups.length > 6) {
+      setCollapsedLeagues((prev) => {
+        const next = new Set(prev);
+        for (let i = 6; i < groups.length; i++) {
+          next.add(groups[i].id);
+        }
+        return next;
+      });
+    }
+  }, [groups]);
 
   const handleRefresh = useCallback(async () => {
     setDateLoading(true);
@@ -1324,7 +1340,7 @@ function MatchesScreen({
               language={language}
             />
           )}
-          {groups.map((group) => (
+          {groups.map((group, idx) => (
             <React.Fragment key={group.id}>
               <LeagueGroup
                 group={group}
@@ -1334,9 +1350,10 @@ function MatchesScreen({
                 onOpenEntity={onOpenEntity}
                 language={language}
               />
-              <Phase4BAdBanner />
+              {idx === 0 && <Phase4BAdBanner />}
             </React.Fragment>
           ))}
+          {groups.length === 0 && <Phase4BAdBanner />}
         </ScrollView>
       </View>
     </View>
