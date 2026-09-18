@@ -26,11 +26,12 @@ assert.match(alpha, /handleNext/, "Date selector must support tapping next date"
 assert.match(alpha, /height:\s*42/, "Date selector container height must be 42px");
 assert.match(alpha, /width:\s*48,\s*height:\s*34/, "Date pills must have stable fixed dimensions (48x34)");
 
-// 2. PRIMARY SWIPE NAVIGATION CONTRACT
-assert.match(alpha, /pagingEnabled/, "Horizontal pager must have pagingEnabled");
-assert.match(alpha, /nestedScrollEnabled/, "Horizontal pager must enable nested scrolling for vertical lists");
-assert.match(alpha, /onMomentumScrollEnd/, "Horizontal pager must update active state on scroll end");
-assert.match(alpha, /MatchesScreen[\s\S]*NewsScreen[\s\S]*FavoritesScreen/, "Pager must sequence Matches <-> News <-> Favorites");
+// 2. PRIMARY TAB NAVIGATION CONTRACT
+assert.doesNotMatch(alpha, /pagingEnabled/, "Primary navigation must not use the old horizontal pager on Android");
+assert.doesNotMatch(alpha, /onMomentumScrollEnd/, "Primary navigation must not depend on horizontal scroll momentum");
+assert.match(alpha, /else if \(active === "news"\)/, "News must render directly from active tab state");
+assert.match(alpha, /else if \(active === "favorites"\)/, "Favorites must render directly from active tab state");
+assert.match(alpha, /<MatchesScreen[\s\S]*overview=\{overview\}/, "Matches must render directly without a parent horizontal pager");
 
 // 3. BOTTOM NAVIGATION & COLOR SYSTEM CONTRACT
 assert.doesNotMatch(alpha, /id:\s*"more"/, "More tab must be removed from NAV_ITEMS");
