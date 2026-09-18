@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "
 import {
   ActivityIndicator,
   BackHandler,
+  FlatList,
   Image,
   Platform,
   Pressable,
@@ -492,6 +493,17 @@ function MatchesScreen({
     let alive = true;
     if (dateMatches[selectedDate]) return;
 
+    const fallback = overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate);
+    if (fallback.length > 0) {
+      setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
+      return;
+    }
+
+    // Avoid competing with the three-feed overview request during startup.
+    // Once overview settles, only fetch the selected date when it truly is not
+    // already represented by the overview data.
+    if (overview.loading) return;
+
     setDateLoading(true);
     loadScoresForDate(selectedDate)
       .then((result) => {
@@ -500,7 +512,6 @@ function MatchesScreen({
       })
       .catch(() => {
         if (!alive) return;
-        const fallback = overview.matches.filter((match) => dateKey(match?.kickoff_at) === selectedDate);
         setDateMatches((prev) => ({ ...prev, [selectedDate]: fallback }));
       })
       .finally(() => {
@@ -508,7 +519,7 @@ function MatchesScreen({
       });
 
     return () => { alive = false; };
-  }, [selectedDate, overview.matches, dateMatches]);
+  }, [selectedDate, overview.loading, overview.matches, dateMatches]);
 
   const selectedMatches = useMemo(() => {
     if (dateMatches[selectedDate]) return dateMatches[selectedDate];
@@ -517,10 +528,24 @@ function MatchesScreen({
 
   const groups = useMemo(() => groupByCompetition(selectedMatches), [selectedMatches]);
 
-  const handleRefresh = useCallback(() => {
-    setDateMatches({});
+  const handleRefresh = useCallback(async () => {
+    setDateLoading(true);
     onRetry?.();
-  }, [onRetry]);
+    try {
+      const result = await loadScoresForDate(selectedDate, {
+        force: true,
+        staleWhileRevalidate: false,
+      });
+      setDateMatches((prev) => ({
+        ...prev,
+        [selectedDate]: result?.matches || prev[selectedDate] || [],
+      }));
+    } catch (_) {
+      // Keep the currently rendered data on refresh failure.
+    } finally {
+      setDateLoading(false);
+    }
+  }, [onRetry, selectedDate]);
 
   return (
     <View style={s.flex}>
@@ -530,9 +555,14 @@ function MatchesScreen({
         userAvatar={userAvatar}
       />
       <DateNavigation selected={selectedDate} onSelect={setSelectedDate} />
-      <ScrollView
-        nestedScrollEnabled
+      <FlatList
+        data={groups}
+        keyExtractor={(group) => String(group.id)}
         contentContainerStyle={s.scrollContent}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === "android"}
         refreshControl={
           <RefreshControl
             refreshing={overview.loading || dateLoading}
@@ -541,31 +571,34 @@ function MatchesScreen({
             colors={[T.color.red]}
           />
         }
-      >
-        <View style={s.sectionHeadingRow}>
-          <View>
-            <Text style={s.sectionEyebrow}>MATCHES</Text>
-            <Text style={s.sectionTitle}>Follow the game</Text>
-          </View>
-          <Text style={s.matchCount}>{selectedMatches.length} matches</Text>
-        </View>
-        <TerminalState
-          loading={overview.loading || dateLoading}
-          error={overview.error}
-          empty={!overview.loading && !dateLoading && !overview.error && selectedMatches.length === 0}
-          emptyText="No real match is scheduled for this date. Choose another date or retry."
-          onRetry={handleRefresh}
-        />
-        {overview.warnings.map((warning) => (
-          <View key={warning.feed} style={s.inlineWarning}>
-            <Ionicons name="warning-outline" color={T.color.amber} size={16} />
-            <Text style={s.inlineWarningText}>
-              {warning.feed}: {warning.message}
-            </Text>
-          </View>
-        ))}
-        {groups.map((group, index) => (
-          <React.Fragment key={group.id}>
+        ListHeaderComponent={
+          <>
+            <View style={s.sectionHeadingRow}>
+              <View>
+                <Text style={s.sectionEyebrow}>MATCHES</Text>
+                <Text style={s.sectionTitle}>Follow the game</Text>
+              </View>
+              <Text style={s.matchCount}>{selectedMatches.length} matches</Text>
+            </View>
+            <TerminalState
+              loading={(overview.loading || dateLoading) && selectedMatches.length === 0}
+              error={overview.error && selectedMatches.length === 0 ? overview.error : ""}
+              empty={!overview.loading && !dateLoading && !overview.error && selectedMatches.length === 0}
+              emptyText="No real match is scheduled for this date. Choose another date or retry."
+              onRetry={handleRefresh}
+            />
+            {overview.warnings.map((warning) => (
+              <View key={warning.feed} style={s.inlineWarning}>
+                <Ionicons name="warning-outline" color={T.color.amber} size={16} />
+                <Text style={s.inlineWarningText}>
+                  {warning.feed}: {warning.message}
+                </Text>
+              </View>
+            ))}
+          </>
+        }
+        renderItem={({ item: group, index }) => (
+          <>
             <LeagueGroup group={group} onOpen={onOpenMatch} />
             {index === 0 ? (
               <BigMatchPreview
@@ -574,12 +607,16 @@ function MatchesScreen({
                 onOpenMatch={onOpenMatch}
               />
             ) : null}
-          </React.Fragment>
-        ))}
-        <RequestId label="fixtures" value={overview.requestIds.fixtures} />
-        <RequestId label="live" value={overview.requestIds.live} />
-        <RequestId label="results" value={overview.requestIds.results} />
-      </ScrollView>
+          </>
+        )}
+        ListFooterComponent={
+          <>
+            <RequestId label="fixtures" value={overview.requestIds.fixtures} />
+            <RequestId label="live" value={overview.requestIds.live} />
+            <RequestId label="results" value={overview.requestIds.results} />
+          </>
+        }
+      />
     </View>
   );
 }
@@ -744,7 +781,7 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview }) {
 
   useEffect(() => {
     let active = true;
-    setState({ loading: true, data: null, error: "", requestId: null });
+    setState((current) => ({ ...current, loading: true, error: "" }));
     loadMatchCenter(selectedId)
       .then((data) => active && setState({ loading: false, data, error: "", requestId: data.requestIds.match }))
       .catch((error) => active && setState({ loading: false, data: null, error: error?.message || "Could not load Match Center.", requestId: error?.requestId || null }));
@@ -765,28 +802,28 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview }) {
         }
       />
       <ScrollView contentContainerStyle={s.matchCenterContent}>
+        <View style={s.matchHero}>
+          <Text style={s.heroCompetition}>{match?.competition_name || "Football"}</Text>
+          <Text style={s.heroKickoff}>{fullKickoff(match?.kickoff_at)}</Text>
+          <View style={s.heroTeams}>
+            <View style={s.heroTeam}>
+              <TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={48} />
+              <Text style={s.heroTeamName}>{match?.home_team_name || "Home"}</Text>
+            </View>
+            <View style={s.heroScoreWrap}>
+              <Text style={s.heroScore}>{scoreText(match)}</Text>
+              <Text style={[s.heroStatus, isLive(match) && s.liveText]}>{statusText(match)}</Text>
+            </View>
+            <View style={s.heroTeam}>
+              <TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={48} />
+              <Text style={s.heroTeamName}>{match?.away_team_name || "Away"}</Text>
+            </View>
+          </View>
+        </View>
+
         <TerminalState loading={state.loading} error={state.error} onRetry={retry} />
         {!state.loading && !state.error ? (
           <>
-            <View style={s.matchHero}>
-              <Text style={s.heroCompetition}>{match?.competition_name || "Football"}</Text>
-              <Text style={s.heroKickoff}>{fullKickoff(match?.kickoff_at)}</Text>
-              <View style={s.heroTeams}>
-                <View style={s.heroTeam}>
-                  <TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={48} />
-                  <Text style={s.heroTeamName}>{match?.home_team_name || "Home"}</Text>
-                </View>
-                <View style={s.heroScoreWrap}>
-                  <Text style={s.heroScore}>{scoreText(match)}</Text>
-                  <Text style={[s.heroStatus, isLive(match) && s.liveText]}>{statusText(match)}</Text>
-                </View>
-                <View style={s.heroTeam}>
-                  <TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={48} />
-                  <Text style={s.heroTeamName}>{match?.away_team_name || "Away"}</Text>
-                </View>
-              </View>
-            </View>
-
             {/* In-App Professional Match Preview CTA */}
             <Pressable
               accessibilityRole="button"
@@ -878,7 +915,11 @@ function useScoresOverview() {
     setState((current) => ({ ...current, loading: true, error: "" }));
     loadScoresOverview()
       .then((result) => active && setState({ loading: false, matches: result.matches, requestIds: result.requestIds, warnings: result.warnings, error: "" }))
-      .catch((error) => active && setState({ loading: false, matches: [], requestIds: {}, warnings: [], error: error?.message || "Could not load matches." }));
+      .catch((error) => active && setState((current) => ({
+        ...current,
+        loading: false,
+        error: error?.message || "Could not load matches.",
+      })));
     return () => { active = false; };
   }, [attempt]);
   return { ...state, retry };
@@ -910,7 +951,7 @@ export default function Phase4BScoresInternalAlpha() {
   // Load user avatar for top header
   useEffect(() => {
     loadUserData();
-  }, [subScreen, loadUserData]);
+  }, [loadUserData]);
 
   useEffect(() => {
     loadOnboardingPreferences()
