@@ -14,7 +14,7 @@ import { MST_SITE_ORIGIN } from "../services/mstApiConfig";
 import { useTheme } from "../theme/ThemeContext";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
-const PURCHASE_ACTION_ENABLED = ENVIRONMENT !== "production";
+const PURCHASE_ACTION_ENABLED = true;
 
 const C = {
   surface: "#101417",
@@ -109,37 +109,101 @@ function DataList({ title, eyebrow, data, empty, colors = C }) {
 }
 
 function TipList({ data, onPurchase, purchaseState, purchaseEnabled, colors = C }) {
-  const list = rows(data)
-    .filter((row) => purchaseEnabled || String(row?.access_level || row?.accessLevel || "").toLowerCase() !== "paid")
-    .slice(0, 10);
+  const list = rows(data).slice(0, 15);
   return (
     <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
-      <Text style={[s.eyebrow, { color: colors.red }]}>MST TIPS</Text>
-      <Text style={[s.title, { color: colors.text }]}>Tips</Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <View>
+          <Text style={[s.eyebrow, { color: colors.red }]}>MST VERIFIED TIPS</Text>
+          <Text style={[s.title, { color: colors.text }]}>Featured Tipster Cards</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open MST website for premium tips"
+          onPress={() => Linking.openURL(`${MST_SITE_ORIGIN}/tips`).catch(() => {})}
+          style={s.webTipButton}
+        >
+          <Ionicons name="open-outline" size={11} color={C.amber} />
+          <Text style={s.webTipText}>PREMIUM WEB</Text>
+        </Pressable>
+      </View>
+
       {list.length ? (
         list.map((row, index) => {
           const tipId = String(row?.id || "").trim();
           const accessLevel = String(row?.access_level || row?.accessLevel || "").toLowerCase();
           const paid = accessLevel === "paid";
           const busy = purchaseEnabled && paid && purchaseState.tipId === tipId && purchaseState.loading;
+          const tipsterName = label(row, `Pro Tipster ${index + 1}`);
+          const matchTitle = row?.match_title || row?.title || row?.fixture || `Match Tip #${index + 1}`;
+          const isPurchased = Boolean(row?.is_purchased || row?.purchased || row?.entitled || row?.unlocked);
+          const selection = row?.selection;
+
           return (
-            <View key={tipId || `tip-${index}`} style={[s.row, index > 0 && [s.rowBorder, { borderTopColor: colors.border }]]}>
-              <Text style={[s.rank, { color: colors.muted }]}>{index + 1}</Text>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={[s.name, { color: colors.secondary || colors.text }]}>
-                  {label(row, `Tip ${index + 1}`)}
-                </Text>
-                <Text numberOfLines={1} style={[s.meta, { color: colors.muted }]}>
-                  {meta(row)}
-                </Text>
+            <View
+              key={tipId || `tip-card-${index}`}
+              style={[
+                s.tipCardWrap,
+                {
+                  backgroundColor: colors.raised || C.raised,
+                  borderColor: isPurchased ? C.green : (paid ? colors.border : C.border),
+                },
+              ]}
+            >
+              <View style={s.tipCardTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text numberOfLines={1} style={[s.name, { color: colors.secondary || colors.text }]}>
+                    {tipsterName}
+                  </Text>
+                  <Text numberOfLines={1} style={[s.meta, { color: colors.muted }]}>
+                    {meta(row)}
+                  </Text>
+                </View>
+                <View style={[s.tagBadge, { backgroundColor: paid ? "rgba(244,200,77,0.14)" : "rgba(72,199,142,0.14)" }]}>
+                  <Text style={[s.tagBadgeText, { color: paid ? C.amber : C.green }]}>
+                    {isPurchased ? "UNLOCKED" : (paid ? "PREMIUM" : "FREE")}
+                  </Text>
+                </View>
               </View>
-              {row?.selection ? (
-                <Text numberOfLines={1} style={s.selection}>
-                  {String(row.selection)}
-                </Text>
-              ) : null}
-              {paid && tipId ? (
-                purchaseEnabled ? (
+
+              <View
+                style={[
+                  s.tipPickBox,
+                  {
+                    backgroundColor: isPurchased ? "rgba(72,199,142,0.08)" : (paid ? "rgba(0,0,0,0.25)" : "rgba(72,199,142,0.08)"),
+                    borderColor: isPurchased ? C.green : (paid ? colors.border : "transparent"),
+                  },
+                ]}
+              >
+                {selection ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="checkmark-circle" size={15} color={C.green} />
+                    <Text numberOfLines={1} style={[s.selection, { color: C.green }]}>
+                      Pick: {String(selection)}
+                    </Text>
+                  </View>
+                ) : paid && !isPurchased ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="lock-closed" size={14} color={C.amber} />
+                    <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "600" }}>
+                      Locked Tip · Unlock to reveal pick & analysis
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={{ color: C.green, fontSize: 12, fontWeight: "700" }}>
+                    Free Tip Included
+                  </Text>
+                )}
+              </View>
+
+              <View style={s.tipCardBottomRow}>
+                <View>
+                  <Text style={{ fontSize: 10, color: colors.muted, fontWeight: "700" }}>PRICE</Text>
+                  <Text style={{ fontSize: 13, fontWeight: "900", color: colors.text }}>
+                    {paid ? (row?.amountMinor != null ? `${row.amountMinor} MMK` : "500 MMK") : "FREE"}
+                  </Text>
+                </View>
+                {paid && !isPurchased ? (
                   <Pressable
                     disabled={busy}
                     onPress={() => onPurchase(row)}
@@ -148,28 +212,24 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled, colors = C 
                     {busy ? (
                       <ActivityIndicator size="small" color={C.text} />
                     ) : (
-                      <Text style={s.buyText}>BUY TIP</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Ionicons name="cart" size={13} color="#FFFFFF" />
+                        <Text style={s.buyText}>BUY TIP</Text>
+                      </View>
                     )}
                   </Pressable>
                 ) : (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Open MST website for premium tips"
-                    onPress={() => Linking.openURL(`${MST_SITE_ORIGIN}/tips`).catch(() => {})}
-                    style={s.webTipButton}
-                  >
-                    <Ionicons name="open-outline" size={11} color={C.amber} />
-                    <Text style={s.webTipText}>PREMIUM</Text>
-                  </Pressable>
-                )
-              ) : accessLevel === "free" ? (
-                <Text style={s.freeTag}>FREE</Text>
-              ) : null}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <Ionicons name="checkmark-done" size={15} color={C.green} />
+                    <Text style={{ color: C.green, fontSize: 11, fontWeight: "800" }}>Ready</Text>
+                  </View>
+                )}
+              </View>
             </View>
           );
         })
       ) : (
-        <Text style={[s.empty, { color: colors.muted }]}>No free Tips are available right now.</Text>
+        <Text style={[s.empty, { color: colors.muted }]}>No tips are available right now.</Text>
       )}
       {purchaseEnabled && purchaseState.message ? (
         <Text style={purchaseState.error ? s.purchaseError : s.purchaseSuccess}>
@@ -558,6 +618,44 @@ const s = StyleSheet.create({
   },
   buyButtonDisabled: { opacity: 0.6 },
   buyText: { color: C.text, fontSize: 12, fontWeight: "900", letterSpacing: 0.3 },
+  tipCardWrap: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+    gap: 8,
+  },
+  tipCardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  tagBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  tagBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  tipPickBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  tipCardBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.06)",
+    paddingTop: 8,
+    marginTop: 2,
+  },
   webTipButton: {
     minHeight: 30,
     borderRadius: 6,

@@ -668,22 +668,21 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
   const red = colors.red || T.color.red;
   const textColor = isDark ? (colors.text || "#FFFFFF") : "#111827";
   const mutedColor = isDark ? (colors.muted || "#8E8E93") : "#8E9297";
-  const pillBg = isDark ? (live ? "rgba(229,9,20,0.2)" : "#202026") : (live ? "rgba(229,29,36,0.12)" : "#F1F3F5");
 
-  let minuteLabel = "";
+  let timeLabel = "";
   if (live) {
     const st = String(match?.status || "").toLowerCase();
-    if (["ht", "halftime"].includes(st)) {
-      minuteLabel = "HT";
-    } else if (match?.minute != null) {
-      minuteLabel = `${match.minute}'`;
-    } else {
-      minuteLabel = "LIVE";
-    }
+    if (["ht", "halftime"].includes(st)) timeLabel = "HT";
+    else if (match?.minute != null) timeLabel = `${match.minute}'`;
+    else timeLabel = "LIVE";
+  } else if (finished) {
+    timeLabel = "FT";
+  } else {
+    timeLabel = kickoffText(match?.kickoff_at || match?.kickoff);
   }
 
-  const homeScoreVal = match?.home_score;
-  const awayScoreVal = match?.away_score;
+  const homeScoreVal = match?.home_score ?? match?.homeScore;
+  const awayScoreVal = match?.away_score ?? match?.awayScore;
   const hasScores = (live || finished) && homeScoreVal != null && awayScoreVal != null;
 
   const homeWin = finished && hasScores && Number(homeScoreVal) > Number(awayScoreVal);
@@ -691,6 +690,8 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
 
   const homeName = match?.home_team_name || match?.homeTeam?.name || match?.home?.name || "Home";
   const awayName = match?.away_team_name || match?.awayTeam?.name || match?.away?.name || "Away";
+  const homeLogo = match?.home_team_logo_url || match?.homeTeam?.logo || match?.home?.logo;
+  const awayLogo = match?.away_team_logo_url || match?.awayTeam?.logo || match?.away?.logo;
 
   return (
     <Pressable
@@ -698,7 +699,7 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
       accessibilityLabel={`${homeName} vs ${awayName}`}
       onPress={() => id && onOpen(match)}
       style={({ pressed }) => [
-        s.matchRow,
+        s.fotmobRow,
         {
           backgroundColor: isDark ? (colors.surface || "#121214") : "#FFFFFF",
         },
@@ -708,83 +709,83 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
       {/* Live Accent Bar on left edge */}
       {live && <View style={[s.liveAccentBar, { backgroundColor: red }]} />}
 
-      {/* Status column: narrow 24dp for LIVE/FINISHED only */}
-      {(live || finished) && (
-        <View style={s.statusColumn}>
-          {live ? (
-            <Text numberOfLines={1} style={[s.liveStatusText, { color: red }]}>{minuteLabel}</Text>
-          ) : (
-            <Text numberOfLines={1} style={[s.finishedStatusText, { color: mutedColor }]}>FT</Text>
-          )}
-        </View>
-      )}
-
-      {/* Home Team Side (flex: 1): [Logo] + Home Name */}
-      <View style={s.homeSide}>
-        <TeamMark name={homeName} uri={match?.home_team_logo_url} size={20} />
+      {/* Time / Status Column (52dp fixed) */}
+      <View style={s.fotmobTimeCol}>
         <Text
           numberOfLines={1}
-          ellipsizeMode="tail"
           style={[
-            s.teamNameSingle,
-            {
-              textAlign: "left",
-              color: homeWin ? textColor : (finished ? mutedColor : textColor),
-              fontWeight: homeWin ? "700" : (live ? "700" : "600"),
-            },
+            s.fotmobTimeText,
+            { color: live ? red : (finished ? mutedColor : textColor) },
+            live && { fontWeight: "900" },
           ]}
         >
-          {homeName}
+          {timeLabel}
         </Text>
-      </View>
-
-      {/* Center Score / Kickoff Time (60dp fixed, dead center) */}
-      <View style={s.scoreCenter}>
-        {hasScores ? (
-          <Text
-            numberOfLines={1}
-            style={[
-              s.scoreTextSingle,
-              {
-                color: live ? red : textColor,
-              },
-            ]}
-          >
-            {`${homeScoreVal} - ${awayScoreVal}`}
-          </Text>
-        ) : (
-          <Text numberOfLines={1} style={[s.kickoffCenterText, { color: isDark ? "#A1A1AA" : "#374151" }]}>
-            {kickoffText(match?.kickoff_at)}
-          </Text>
+        {live && (
+          <View style={[s.fotmobLivePill, { backgroundColor: red }]}>
+            <Text style={s.fotmobLivePillText}>LIVE</Text>
+          </View>
         )}
       </View>
 
-      {/* Away Team Side (flex: 1): Away Name + [Logo] */}
-      <View style={s.awaySide}>
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={[
-            s.teamNameSingle,
-            {
-              textAlign: "right",
-              color: awayWin ? textColor : (finished ? mutedColor : textColor),
-              fontWeight: awayWin ? "700" : (live ? "700" : "600"),
-            },
-          ]}
-        >
-          {awayName}
-        </Text>
-        <TeamMark name={awayName} uri={match?.away_team_logo_url} size={20} />
+      {/* Vertical divider */}
+      <View style={[s.fotmobDivider, { backgroundColor: isDark ? "#22222A" : "#F0F2F5" }]} />
+
+      {/* Teams and Scores (FotMob Stacked Layout - Full Width!) */}
+      <View style={s.fotmobTeamsCol}>
+        {/* Home Team */}
+        <View style={s.fotmobTeamRow}>
+          <TeamMark name={homeName} uri={homeLogo} size={20} />
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[
+              s.fotmobTeamText,
+              {
+                color: homeWin ? textColor : (finished ? mutedColor : textColor),
+                fontWeight: homeWin ? "800" : (live ? "700" : "600"),
+              },
+            ]}
+          >
+            {homeName}
+          </Text>
+          {hasScores && (
+            <Text style={[s.fotmobScoreNum, { color: homeWin ? textColor : mutedColor, fontWeight: homeWin ? "900" : "600" }]}>
+              {homeScoreVal}
+            </Text>
+          )}
+        </View>
+
+        {/* Away Team */}
+        <View style={s.fotmobTeamRow}>
+          <TeamMark name={awayName} uri={awayLogo} size={20} />
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[
+              s.fotmobTeamText,
+              {
+                color: awayWin ? textColor : (finished ? mutedColor : textColor),
+                fontWeight: awayWin ? "800" : (live ? "700" : "600"),
+              },
+            ]}
+          >
+            {awayName}
+          </Text>
+          {hasScores && (
+            <Text style={[s.fotmobScoreNum, { color: awayWin ? textColor : mutedColor, fontWeight: awayWin ? "900" : "600" }]}>
+              {awayScoreVal}
+            </Text>
+          )}
+        </View>
       </View>
 
-      {/* Right Balance Column (24dp) only when status column is present, to keep center mathematically dead-centered */}
-      {(live || finished) && <View style={s.rightBalanceColumn} />}
+      <Ionicons name="chevron-forward" size={14} color={mutedColor} style={s.fotmobChevron} />
     </Pressable>
   );
 });
 
-const LeagueGroup = memo(function LeagueGroup({ group, onOpen, onOpenEntity, language = "en" }) {
+const LeagueGroup = memo(function LeagueGroup({ group, isCollapsed = false, onToggleCollapse, onOpen, onOpenEntity, language = "en" }) {
   let colors = { surface: "#FFFFFF", border: "#E5E7EB", secondary: "#6B7280", muted: "#8E9297", text: "#111827", card: "#FFFFFF" };
   let isDark = false;
   try {
@@ -794,12 +795,6 @@ const LeagueGroup = memo(function LeagueGroup({ group, onOpen, onOpenEntity, lan
   } catch {}
 
   const liveCount = group.matches.filter(isLive).length;
-
-  const handleOpenComp = () => {
-    if (onOpenEntity && group?.id) {
-      onOpenEntity("competition", { id: group.id, name: group.name, logo: group.logo });
-    }
-  };
 
   return (
     <View
@@ -812,7 +807,7 @@ const LeagueGroup = memo(function LeagueGroup({ group, onOpen, onOpenEntity, lan
       ]}
     >
       <Pressable
-        onPress={handleOpenComp}
+        onPress={() => onToggleCollapse?.(group.id)}
         style={[
           s.leagueHeader,
           {
@@ -831,9 +826,19 @@ const LeagueGroup = memo(function LeagueGroup({ group, onOpen, onOpenEntity, lan
             <Text style={s.leagueLivePillText}>{liveCount} LIVE</Text>
           </View>
         )}
-        <Ionicons name="chevron-up" size={14} color={isDark ? "#71717A" : "#9CA3AF"} style={{ marginLeft: "auto" }} />
+        <View style={[s.leagueCountBadge, { backgroundColor: isDark ? "#22222A" : "#EAEDF2", borderColor: isDark ? "#2A2A34" : "#DDE1E6" }]}>
+          <Text style={[s.leagueCountText, { color: isDark ? "#A1A1AA" : "#5A636E" }]}>
+            {group.matches.length}
+          </Text>
+        </View>
+        <Ionicons
+          name={isCollapsed ? "chevron-down" : "chevron-up"}
+          size={16}
+          color={isDark ? "#A1A1AA" : "#6B7280"}
+          style={{ marginLeft: 2 }}
+        />
       </Pressable>
-      {group.matches.map((match, idx) => (
+      {!isCollapsed && group.matches.map((match, idx) => (
         <View key={canonicalMatchId(match)}>
           {idx > 0 && (
             <View
@@ -1139,6 +1144,20 @@ function MatchesScreen({
     return list;
   }, [selectedMatches, filter, favData]);
 
+  const [collapsedLeagues, setCollapsedLeagues] = useState(() => new Set());
+  const toggleLeague = useCallback((id) => {
+    setCollapsedLeagues((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const featuredMatch = useMemo(() => {
+    return filteredMatches.find((m) => isLive(m) || matchHasBigTeam(m)) || filteredMatches[0] || null;
+  }, [filteredMatches]);
+
   const groups = useMemo(() => groupByCompetition(filteredMatches), [filteredMatches]);
 
   const handleRefresh = useCallback(async () => {
@@ -1297,9 +1316,24 @@ function MatchesScreen({
             onRetry={handleRefresh}
             language={language}
           />
+          {featuredMatch && filter === "all" && (
+            <BigMatchPreview
+              match={featuredMatch}
+              onOpenPreview={onOpenPreview}
+              onOpenMatch={onOpenMatch}
+              language={language}
+            />
+          )}
           {groups.map((group) => (
             <React.Fragment key={group.id}>
-              <LeagueGroup group={group} onOpen={onOpenMatch} onOpenEntity={onOpenEntity} language={language} />
+              <LeagueGroup
+                group={group}
+                isCollapsed={collapsedLeagues.has(group.id)}
+                onToggleCollapse={toggleLeague}
+                onOpen={onOpenMatch}
+                onOpenEntity={onOpenEntity}
+                language={language}
+              />
               <Phase4BAdBanner />
             </React.Fragment>
           ))}
@@ -2698,6 +2732,76 @@ const s = StyleSheet.create({
   leagueLivePillText: { color: T.color.red, fontSize: 9.5, fontWeight: "900", letterSpacing: 0.5 },
   matchDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 12 },
   viewAll: { color: T.color.muted, fontSize: 12, fontWeight: "800" },
+  fotmobRow: {
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  fotmobTimeCol: {
+    width: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  fotmobTimeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  fotmobLivePill: {
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  fotmobLivePillText: {
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  fotmobDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    marginHorizontal: 8,
+    marginVertical: 2,
+  },
+  fotmobTeamsCol: {
+    flex: 1,
+    gap: 6,
+    justifyContent: "center",
+  },
+  fotmobTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  fotmobTeamText: {
+    flex: 1,
+    fontSize: 13,
+  },
+  fotmobScoreNum: {
+    fontSize: 13.5,
+    paddingHorizontal: 4,
+    minWidth: 18,
+    textAlign: "right",
+  },
+  fotmobChevron: {
+    marginLeft: 4,
+  },
+  leagueCountBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderWidth: 1,
+    marginLeft: "auto",
+    marginRight: 4,
+  },
+  leagueCountText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+  },
   matchRow: {
     height: 44,
     paddingHorizontal: 6,

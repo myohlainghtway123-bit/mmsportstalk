@@ -31,12 +31,8 @@ class AdErrorBoundary extends React.Component {
 
 export default function Phase4BAdBanner() {
   const [failed, setFailed] = useState(false);
-  const [canRequestAds, setCanRequestAds] = useState(false);
-  const configured = configuredUnitId();
-  const effectiveId = ENVIRONMENT === "production" ? configured : (configured || "test");
+  const [ready, setReady] = useState(false);
 
-  // Verify native Google Mobile Ads module is actually linked in the native binary
-  // before attempting consent or ad initialization.
   const hasNative = Boolean(
     NativeModules?.RNGoogleMobileAdsModule ||
     (typeof TurboModuleRegistry?.get === "function" && TurboModuleRegistry.get("RNGoogleMobileAdsModule"))
@@ -44,50 +40,37 @@ export default function Phase4BAdBanner() {
 
   useEffect(() => {
     let active = true;
+    if (!hasNative) return;
 
-    if (!effectiveId || !hasNative) {
-      setCanRequestAds(false);
-      return () => { active = false; };
+    try {
+      const ads = require("react-native-google-mobile-ads");
+      if (typeof ads?.default === "function") {
+        ads.default().initialize().catch(() => {});
+      }
+      if (active) setReady(true);
+    } catch {
+      if (active) setReady(false);
     }
 
-    // Fail closed until UMP says an ad request is allowed. The helper refreshes
-    // consent information and can fall back to a valid previous-session state
-    // after an update error, but it never fabricates ad readiness.
-    gatherConsentIfRequired().then(async (consentInfo) => {
-      if (!active || !consentInfo?.canRequestAds) {
-        if (active) setCanRequestAds(false);
-        return;
-      }
-
-      try {
-        const ads = require("react-native-google-mobile-ads");
-        if (typeof ads?.default === "function") {
-          await ads.default().initialize();
-        }
-        if (active) setCanRequestAds(true);
-      } catch {
-        if (active) setCanRequestAds(false);
-      }
-    }).catch(() => {
-      if (active) setCanRequestAds(false);
-    });
+    gatherConsentIfRequired().catch(() => {});
 
     return () => { active = false; };
-  }, [effectiveId, hasNative]);
+  }, [hasNative]);
 
-  // Never let missing advertising configuration, consent readiness, or native
-  // initialization block Scores, live data, or navigation at runtime.
-  if (!effectiveId || failed || !hasNative || !canRequestAds) return null;
+  const configured = configuredUnitId();
+  const ads = (() => {
+    try {
+      return require("react-native-google-mobile-ads");
+    } catch {
+      return null;
+    }
+  })();
 
-  let ads;
-  try {
-    ads = require("react-native-google-mobile-ads");
-  } catch {
-    return null;
-  }
+  if (failed || !hasNative || !ready || !ads) return null;
 
   const { BannerAd, BannerAdSize, TestIds } = ads;
   const unitId = ENVIRONMENT === "production" ? configured : TestIds.BANNER;
+  if (!unitId) return null;
 
   return (
     <AdErrorBoundary>
@@ -96,7 +79,10 @@ export default function Phase4BAdBanner() {
           unitId={unitId}
           size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
           requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          onAdFailedToLoad={() => setFailed(true)}
+          onAdFailedToLoad={(err) => {
+            console.log("AdMob banner failed to load:", err?.message);
+            setFailed(true);
+          }}
         />
       </View>
     </AdErrorBoundary>
