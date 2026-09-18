@@ -177,7 +177,7 @@ function EnvironmentBanner() {
   return (
     <View style={s.environmentBanner} accessibilityLabel="STAGING INTERNAL build">
       <Ionicons name="flask-outline" size={14} color={T.color.bg} />
-      <Text style={s.environmentText}>STAGING / INTERNAL · 1.5.4</Text>
+      <Text style={s.environmentText}>STAGING / INTERNAL - 1.5.4</Text>
       <Text style={s.environmentSub}>REAL SCORES API · NO PRODUCTION</Text>
     </View>
   );
