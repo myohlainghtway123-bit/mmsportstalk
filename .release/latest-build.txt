@@ -1,6 +1,6 @@
 MST EAS BUILD
-Commit: 9ce9ba73922c2172c0b8dd00095581ff8057f7fa
-Profile: phase4b-internal
+Commit: b6ce4968685eb0d95aa1a20c23fcd41e6ac8d891
+Profile: preview
 Platform: android
 Exit code: 0
 
@@ -15,10 +15,9 @@ npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and con
 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 Resolved "preview" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
 No environment variables with visibility "Plain text" and "Sensitive" found for the "preview" environment on EAS.
-Environment variables loaded from the "phase4b-internal" build profile "env" configuration: EXPO_PUBLIC_MST_ENVIRONMENT, EXPO_PUBLIC_MST_INTERNAL, EXPO_PUBLIC_MST_SCORES_API_ORIGIN.
 
-- Incrementing versionCode from 6 to 7.
-✔ Incremented versionCode from 6 to 7.
+- Incrementing versionCode from 7 to 8.
+✔ Incremented versionCode from 7 to 8.
 
 
 android.versionCode field in app config is ignored when version source is set to remote, but this value will still be in the manifest available via expo-constants. It's recommended to remove this value from app config.
@@ -28,37 +27,37 @@ android.versionCode field in app config is ignored when version source is set to
 Compressing project files and uploading to EAS Build. Learn more: https://expo.fyi/eas-build-archive
 - Compressing project files
 - Uploading to EAS Build (0 / 99.9 MB)
-✔ Uploaded to EAS 
+✔ Uploaded to EAS 1s
 - Computing project fingerprint
 ✔ Computed project fingerprint
 
-See logs: https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/42ce5a22-180e-47fe-a859-e271ccb8c72b
+See logs: https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/2c0ce033-5821-4507-a0b0-ec2ee2efdcd9
 
 Waiting for build to complete. You can press Ctrl+C to exit.
 - Waiting for build to complete.
 ✔ Build finished
 
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █ ▄▄▄▄▄ █▄▄████▄██▀ ▄▄█▀ ▀▄▀█ █ ▄▄▄▄▄ █
-  █ █   █ █ ▀█ ▄ ▄█ ▀ ███▀    ▀▄█ █   █ █
-  █ █▄▄▄█ █▄ ▄▄▀ █▄█▄  █▀ █▀▄ ▄ █ █▄▄▄█ █
-  █▄▄▄▄▄▄▄█▄▀▄▀▄█▄█▄▀ ▀ █ █▄█ █ █▄▄▄▄▄▄▄█
-  █  ▄▄▀▀▄▀ ████▀██ ▄  ▄ ▀▀▄█▄▄ ▄█▀▄  ▀▄█
-  █▄▄██▄▄▄▄█▀▀▀▀▀▀█▄▄▀▀ █ ▄▀ ▀█▀ ▀ ▄█  ▀█
-  █▄█  █ ▄▄█   ▄▄ ▀█  ▀ ▀██▀  ▀▀  ▀   █ █
-  █▄▄▄▀██▄▀▄▀ ▀▀▄ ▀▀▄▀  ▀▀▀ ▄██▀▀█▀  █▄▀█
-  █▀██▄ █▄ █▄  ▀  ▀██▀▄▄▄  ▀ ▀ ██▀▀█▀▄ ▀█
-  █▀▀ █▄ ▄▀▀  █▄▄▀ ▀ ▄▀ ▄▀▀▀█ ▄▄▄▀▀ ▀▄ ▄█
-  ███▄ ▀█▄█ ▀█▀ █▀█  ▀   ▀▀██ ▄▀ █▀▄██ ██
-  ██ ▄▀ █▄█ ▄    ▀▀▄▄ ▀ █▀ █ ▀█▄▀█▄▄ ▀███
-  ███  ██▄▀▄ ▄██▄█ ▄  ▀██ ▄ ▄ ▀▀  ▀ █ ▄ █
-  █▀▄  ▄▄▄▄ ██▀ ▄▀▀ ██▄▀▀▄▀▄▄▀█▀▄▄ ██▄▄▀█
-  ████▄██▄▄  ▄ ▀ █▀ ▀▀▄  ▀▀▀▄▀▄ ▄▄▄ ▄ ▄ █
-  █ ▄▄▄▄▄ ██  ▀▄▄█▄ ▀▄█ █ █▄███ █▄█  █▄▄█
-  █ █   █ █▀▀█  █▄▄▄▄█▀▀ █▀▄▀██   ▄ █▀▄██
-  █ █▄▄▄█ █ ▄▄ █  █▄▄█▀▀▄▀▄█ ▀▀█▀▄  ▄ ███
-  █▄▄▄▄▄▄▄█▄███▄▄▄▄█▄██▄█▄██▄▄███▄▄▄▄▄▄▄█
+  █ ▄▄▄▄▄ █▄▄███▀▀█▄█▄▄ █▀ ▀▄▀█ █ ▄▄▄▄▄ █
+  █ █   █ █ ▀█ ▄ █▀ ▀▄▄▀█▀    ▀▄█ █   █ █
+  █ █▄▄▄█ █▄ ▄▄▀▀█▄█▄▀  ▀ █▀▄ ▄ █ █▄▄▄█ █
+  █▄▄▄▄▄▄▄█▄▀▄▀▄█ █▄▀ ▀ █ █▄█ █ █▄▄▄▄▄▄▄█
+  █▄▄▄▄█▀▄█ ▀███▀██ ▄█ ▀ ▀▀▄█▄▄ ▄█▀▄  ▀▄█
+  █▀▀ ▄▀▄▄████▀▀▀▀█▄▄██▄█ ▄▀ ▀█▀ ▀ ▄█  ▀█
+  █ ████ ▄▀ ██ ▄▄ ▀█  ▀ ▀██▀  ▀▀  ▀   █ █
+  █▀ ██ █▄▄▄ ▄█ ▄ █▀▄█  ▀▀▀ ▄██▀▀█▀  █▄▀█
+  ███ ▄▄█▄▄▀██▀▄ █▀ █▀▄▄▄  ▀ ▀ ██▀▀█▀▄ ▀█
+  █ █ ▀▀ ▄▄ ██▀ ▄█▄█  ▀ ▄▀▀▀█ ▄▄▄▀▀ ▀▄ ▄█
+  █ █▀█ ▀▄▀  ▀▀██▀██ ▀   ▀▀██ ▄▀ █▀▄██ ██
+  █▀▀█▄▄ ▄ █   ▄ ▄█▄▄ ▀ █▀ █ ▀█▄▀█▄▄ ▀███
+  ██▄▀ ▄█▄▄▀█▄█ ▄  ▄  ▀██ ▄ ▄ ▀▀  ▀ █ ▄ █
+  █▀▄▄▄  ▄█▄  ██▄ ▀ █▄▄▀▀▄▀▄▄▀█▀▄▄ ██▄▄▀█
+  ███▄▄██▄█ █▀ ▀ █▀ ▀▀▄  ▀▀▀▄▀▄ ▄▄▄ ▄ ▄ █
+  █ ▄▄▄▄▄ ██▀██ █▄▄ ▀▄█ █ █▄███ █▄█  █▄▄█
+  █ █   █ █▀ ▀▀██▀▄▄▄█▀▀ █▀▄▀██   ▄ █▀▄██
+  █ █▄▄▄█ █ █ ▄  ▄█ ██▀▀▄▀▄█ ▀▀█▀▄  ▄ ███
+  █▄▄▄▄▄▄▄█▄▄██▄▄▄▄▄▄▄█▄█▄██▄▄███▄▄▄▄▄▄▄█
 
 
 🤖 Open this link on your Android devices (or scan the QR code) to install the app:
-https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/42ce5a22-180e-47fe-a859-e271ccb8c72b
+https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/2c0ce033-5821-4507-a0b0-ec2ee2efdcd9
