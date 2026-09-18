@@ -184,7 +184,9 @@ export async function scoresStagingGet(path, options = {}) {
     ...requestOptions
   } = options;
 
-  if (!cacheableScoresPath(path)) {
+  // Contract tests and explicit callers can inject a fetch implementation.
+  // Never let the app-level cache leak responses across those isolated requests.
+  if (!cacheableScoresPath(path) || (requestOptions.fetchImpl && requestOptions.fetchImpl !== fetch)) {
     return scoresProductRequest(path, { ...requestOptions, method: "GET" });
   }
 
