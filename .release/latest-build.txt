@@ -1,6 +1,6 @@
 MST EAS BUILD
-Commit: 64fc73592077e9de589ce2e5dcc0b7d484d792d4
-Profile: preview
+Commit: 1d64798325a36ac51c50c585ab90cd10c15f6b27
+Profile: phase4b-internal
 Platform: android
 Exit code: 0
 
@@ -15,7 +15,10 @@ npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and con
 npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 Resolved "preview" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
 No environment variables with visibility "Plain text" and "Sensitive" found for the "preview" environment on EAS.
+Environment variables loaded from the "phase4b-internal" build profile "env" configuration: EXPO_PUBLIC_MST_ENVIRONMENT, EXPO_PUBLIC_MST_INTERNAL, EXPO_PUBLIC_MST_SCORES_API_ORIGIN.
 
+- Incrementing versionCode from 5 to 6.
+✔ Incremented versionCode from 5 to 6.
 
 
 android.versionCode field in app config is ignored when version source is set to remote, but this value will still be in the manifest available via expo-constants. It's recommended to remove this value from app config.
@@ -29,33 +32,33 @@ Compressing project files and uploading to EAS Build. Learn more: https://expo.f
 - Computing project fingerprint
 ✔ Computed project fingerprint
 
-See logs: https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/96b97dfd-3362-415c-8bda-1ab8458ad434
+See logs: https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/fcaf15d4-bb2e-4b59-bf0e-6a93a8d5019b
 
 Waiting for build to complete. You can press Ctrl+C to exit.
 - Waiting for build to complete.
 ✔ Build finished
 
   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-  █ ▄▄▄▄▄ █▄▄▄ ▀ ▄███▀▀ █ ██▀ █▀█ ▄▄▄▄▄ █
-  █ █   █ ██▄▀ █ ██ ▀▀█▀ █ ▀ ▄▄ █ █   █ █
-  █ █▄▄▄█ ██▀▄ ▄█▄█ ▄█▄█  ▀▄  █ █ █▄▄▄█ █
-  █▄▄▄▄▄▄▄█ ▀▄█ ▀▄█▄█▄█▄█ ▀ ▀ █ █▄▄▄▄▄▄▄█
-  █  ▀  █▄██▄▀█▄▀▀▀▀▄▀  ██▀██ ▀▄█▄▀▀██▀▄█
-  █▄ ▀▄ ▀▄▀▄▄▀█▄█▀▄▄ ▀██▄  ▄▄▀▄▀▄▄▄▄▄ ▄▄█
-  █▀▄▄   ▄  ▀▄█ ▀▄▀▄█▀█▀▀▄ ██▀▀ █▄▄▀ ▀ ▄█
-  █ ▀▀▄▄ ▄▄▄ ▀█▄▄█ ▀▄▀ ▄▄█▀▀▄▀ █▀▄▀▄█▀▄ █
-  █▄  ▄█▄▄ ▀▀▄▄▀▄█ █▀▀ ▄█ ▄▄▄▀▀█▀▄██ ▄▄▄█
-  ██▄ █▄ ▄▄ ██ ▀ ▄▄▀▄▀▄▀▄ ▄█ ▀▄█▀█▄▀▀██ █
-  █▄▄▄▀▄▀▄██▀▀▀▀█  ▀   ▄██▀▄█▄▀█ ▄▀  ▀ ▄█
-  █▀▄█▄█▀▄▀▄▄  ▄▄▄▄  ██ ▄▀▄ ▄▀▄▄█  ▄▀▀▀ █
-  █ ▄ ▄▀█▄▄▄▄█ ▀█▄ ██▄▄▄█▀▀▄▀▀▀ █▄▄▀█▀▀▄█
-  █ ▄ █  ▄ █▀▄█▄▄▀▄▄▄▄▄█▄ ▀█▄█ █▄█ ▀  ▄ █
-  █▄█▄███▄█▀█ ▄▄▄   ▀▄  ▀▀█▄ ▀█ ▄▄▄ █  ██
-  █ ▄▄▄▄▄ ██▄▀▄▀ ▀▄▀█▄ ▀█▀   ▄█ █▄█  ▄▀ █
-  █ █   █ █ ██▀▄██▀ ▄▄▀██▀▀█▀▀ ▄  ▄▄ █▄▄█
-  █ █▄▄▄█ █▀█▀  █▀ ▀▀▀█▀█▀  ▄▀ ██▀▄ █ ▀ █
-  █▄▄▄▄▄▄▄█▄▄████▄▄██▄▄███▄████▄▄▄██▄██▄█
+  █ ▄▄▄▄▄ █▄▄▄ ▀ ▀█▄ ▄▀██ ██▀ █▀█ ▄▄▄▄▄ █
+  █ █   █ ██▄▀ █ ██▀▀ ▄▀ █ ▀ ▄▄ █ █   █ █
+  █ █▄▄▄█ ██▀▄ ▄█ █  ▀▄▀  ▀▄  █ █ █▄▄▄█ █
+  █▄▄▄▄▄▄▄█ ▀▄█ ▀▄▀▄█▄█ █ ▀ ▀ █ █▄▄▄▄▄▄▄█
+  █▄▄▀  ▀▄▀█▄▀█▄▀▀ ▄▄▄ ███▀██ ▀▄█▄▀▀██▀▄█
+  ██▄▀▀▀█▄ ▀ ▀█▄█▀▄▄ █▀ ▄  ▄▄▀▄▀▄▄▄▄▄ ▄▄█
+  █ █▀▀ █▄▄ █▀█ ▀▄▀▄█▀▄▄▀▄ ██▀▀ █▄▄▀ ▀ ▄█
+  █ ▄▄ ▄ ▄▀▄▀▄▀ █ ▄▀█▀ ▄▄█▀▀▄▀ █▀▄▀▄█▀▄ █
+  █▄▀ ▀▀▀▄█▀█ ▄▄▄█▀ ▀▄ ▄█ ▄▄▄▀▀█▀▄██ ▄▄▄█
+  █▀▄█▀█ ▄██  ▄▀ ▄▄▀▄▀▄▀▄ ▄█ ▀▄█▀█▄▀▀██ █
+  ████▀▀█▄█ █▀ ▀▀█ ▀   ▄██▀▄█▄▀█ ▄▀  ▀ ▄█
+  █▀█ ▄▀▄▄▄ ▄  ▀█  ▀ ██ ▄▀▄ ▄▀▄▄█  ▄▀▀▀ █
+  █▀ ▀▄▀▀▄▀▄▄▄ ▀▀▄  █▀▄▄█▀▀▄▀▀▀ █▄▄▀█▀▀▄█
+  █ ▄▄  ▄▄▄██ █ ██▄▄▄ ▄█▄ ▀█▄█ █▄█ ▀  ▄ █
+  █▄████▄▄▄  ▀▄▀▄█  ▀▀  ▀▀█▄ ▀█ ▄▄▄ █  ██
+  █ ▄▄▄▄▄ ██▀ ▄█ ▄▄▀█  ▀█▀   ▄█ █▄█  ▄▀ █
+  █ █   █ █  ▀▀▀▀█▀ ▄▄▀██▀▀█▀▀ ▄  ▄▄ █▄▄█
+  █ █▄▄▄█ █▀ █ ▄█▄▄▄▀ █▀█▀  ▄▀ ██▀▄ █ ▀ █
+  █▄▄▄▄▄▄▄█▄█▄▄▄██▄▄██▄███▄████▄▄▄██▄██▄█
 
 
 🤖 Open this link on your Android devices (or scan the QR code) to install the app:
-https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/96b97dfd-3362-415c-8bda-1ab8458ad434
+https://expo.dev/accounts/myohlainghtway/projects/mst-app/builds/fcaf15d4-bb2e-4b59-bf0e-6a93a8d5019b
