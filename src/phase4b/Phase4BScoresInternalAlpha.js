@@ -584,12 +584,60 @@ function TerminalState({ loading, error, empty, emptyTitle = "No matches availab
   );
 }
 
+const KNOWN_TEAM_LOGOS = {
+  "arsenal": "https://media.api-sports.io/football/teams/42.png",
+  "chelsea": "https://media.api-sports.io/football/teams/49.png",
+  "liverpool": "https://media.api-sports.io/football/teams/40.png",
+  "manchester united": "https://media.api-sports.io/football/teams/33.png",
+  "man utd": "https://media.api-sports.io/football/teams/33.png",
+  "manchester city": "https://media.api-sports.io/football/teams/50.png",
+  "man city": "https://media.api-sports.io/football/teams/50.png",
+  "tottenham": "https://media.api-sports.io/football/teams/47.png",
+  "tottenham hotspur": "https://media.api-sports.io/football/teams/47.png",
+  "real madrid": "https://media.api-sports.io/football/teams/541.png",
+  "barcelona": "https://media.api-sports.io/football/teams/529.png",
+  "atletico madrid": "https://media.api-sports.io/football/teams/530.png",
+  "atlético madrid": "https://media.api-sports.io/football/teams/530.png",
+  "bayern munich": "https://media.api-sports.io/football/teams/157.png",
+  "bayern": "https://media.api-sports.io/football/teams/157.png",
+  "borussia dortmund": "https://media.api-sports.io/football/teams/165.png",
+  "dortmund": "https://media.api-sports.io/football/teams/165.png",
+  "paris saint-germain": "https://media.api-sports.io/football/teams/85.png",
+  "psg": "https://media.api-sports.io/football/teams/85.png",
+  "inter": "https://media.api-sports.io/football/teams/505.png",
+  "inter milan": "https://media.api-sports.io/football/teams/505.png",
+  "ac milan": "https://media.api-sports.io/football/teams/489.png",
+  "milan": "https://media.api-sports.io/football/teams/489.png",
+  "juventus": "https://media.api-sports.io/football/teams/496.png",
+  "aston villa": "https://media.api-sports.io/football/teams/66.png",
+  "newcastle": "https://media.api-sports.io/football/teams/34.png",
+  "bayer leverkusen": "https://media.api-sports.io/football/teams/168.png",
+  "leverkusen": "https://media.api-sports.io/football/teams/168.png",
+};
+
+const KNOWN_COMP_LOGOS = {
+  "premier league": "https://media.api-sports.io/football/leagues/39.png",
+  "uefa champions league": "https://media.api-sports.io/football/leagues/2.png",
+  "champions league": "https://media.api-sports.io/football/leagues/2.png",
+  "la liga": "https://media.api-sports.io/football/leagues/140.png",
+  "serie a": "https://media.api-sports.io/football/leagues/135.png",
+  "bundesliga": "https://media.api-sports.io/football/leagues/78.png",
+  "ligue 1": "https://media.api-sports.io/football/leagues/61.png",
+  "uefa europa league": "https://media.api-sports.io/football/leagues/3.png",
+  "europa league": "https://media.api-sports.io/football/leagues/3.png",
+  "fifa world cup": "https://media.api-sports.io/football/leagues/1.png",
+  "world cup": "https://media.api-sports.io/football/leagues/1.png",
+};
+
 function TeamMark({ name, uri, size = 24 }) {
   const [failed, setFailed] = useState(false);
-  if (uri && !failed) {
+  const cleanName = String(name || "").trim().toLowerCase();
+  const effectiveUri = (!failed && uri) ? uri : (KNOWN_TEAM_LOGOS[cleanName] || KNOWN_COMP_LOGOS[cleanName] || null);
+
+  if (effectiveUri) {
     return (
       <Image
-        source={{ uri }}
+        source={{ uri: effectiveUri }}
         style={{ width: size, height: size }}
         resizeMode="contain"
         onError={() => setFailed(true)}
@@ -2809,12 +2857,12 @@ const s = StyleSheet.create({
   inlineWarningText: { flex: 1, color: T.color.muted, fontSize: 12, lineHeight: 16 },
   requestId: { color: T.color.muted, fontSize: 10, marginTop: 6 },
   bottomNav: {
-    height: Platform.OS === "ios" ? 78 : 62,
+    height: Platform.OS === "ios" ? 78 : 72,
     borderTopWidth: 1,
     borderTopColor: "#18181C",
     backgroundColor: "#000000",
     flexDirection: "row",
-    paddingBottom: Platform.OS === "ios" ? 14 : 6,
+    paddingBottom: Platform.OS === "ios" ? 14 : 16,
   },
   navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 2 },
   navLabel: { color: "#71717A", fontSize: 11, fontWeight: "700", textAlign: "center" },
