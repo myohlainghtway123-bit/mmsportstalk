@@ -13,7 +13,6 @@ import {
   StyleSheet,
   Text,
   ToastAndroid,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -928,8 +927,6 @@ function useScoresOverview() {
 
 export default function Phase4BScoresInternalAlpha() {
   const overview = useScoresOverview();
-  const { width: screenWidth } = useWindowDimensions();
-  const pagerRef = useRef(null);
   const lastBackPressRef = useRef(0);
 
   const [active, setActive] = useState("matches"); // "matches" | "news" | "favorites" | "tips" | "settings"
@@ -939,11 +936,6 @@ export default function Phase4BScoresInternalAlpha() {
   const [userAvatar, setUserAvatar] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [language, setLanguage] = useState("my");
-  const [visitedPrimary, setVisitedPrimary] = useState({
-    matches: true,
-    news: false,
-    favorites: false,
-  });
 
   const loadUserData = useCallback(() => {
     getAuthStatus()
@@ -999,22 +991,8 @@ export default function Phase4BScoresInternalAlpha() {
     setPreviewMatch(null);
     setSelectedMatch(null);
     setSubScreen(null);
-    if (next === "matches" || next === "news" || next === "favorites") {
-      setVisitedPrimary((current) => (
-        current[next] ? current : { ...current, [next]: true }
-      ));
-    }
     setActive(next);
-
-    // Scroll horizontal pager if navigating to core content screens
-    if (next === "matches") {
-      pagerRef.current?.scrollTo({ x: 0 * screenWidth, animated: true });
-    } else if (next === "news") {
-      pagerRef.current?.scrollTo({ x: 1 * screenWidth, animated: true });
-    } else if (next === "favorites") {
-      pagerRef.current?.scrollTo({ x: 2 * screenWidth, animated: true });
-    }
-  }, [screenWidth]);
+  }, []);
 
   // Global Android hardware Back navigation hierarchy & double-press root exit
   useEffect(() => {
@@ -1114,70 +1092,35 @@ export default function Phase4BScoresInternalAlpha() {
         userAvatar={userAvatar}
       />
     );
-  } else {
-    // Primary swipe-enabled content sequence: Matches ↔ News ↔ Favorites
+  } else if (active === "news") {
     content = (
-      <ScrollView
-        ref={pagerRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        bounces={false}
-        scrollEventThrottle={16}
-        nestedScrollEnabled
-        onScrollBeginDrag={() => {
-          setVisitedPrimary((current) => (
-            current.news && current.favorites
-              ? current
-              : { ...current, news: true, favorites: true }
-          ));
-        }}
-        onMomentumScrollEnd={(event) => {
-          const offsetX = event.nativeEvent.contentOffset.x;
-          const pageIndex = Math.round(offsetX / screenWidth);
-          if (pageIndex === 0 && active !== "matches") setActive("matches");
-          else if (pageIndex === 1 && active !== "news") setActive("news");
-          else if (pageIndex === 2 && active !== "favorites") setActive("favorites");
-        }}
-        style={s.flex}
-        contentContainerStyle={{ width: screenWidth * 3 }}
-      >
-        <View style={{ width: screenWidth, flex: 1 }}>
-          <MatchesScreen
-            overview={overview}
-            onOpenMatch={openMatch}
-            onOpenPreview={openPreview}
-            onRetry={overview.retry}
-            onOpenSearch={openSearch}
-            onOpenProfile={openProfile}
-            userAvatar={userAvatar}
-          />
-        </View>
-        <View style={{ width: screenWidth, flex: 1 }}>
-          {visitedPrimary.news ? (
-            <NewsScreen
-              onOpenSearch={openSearch}
-              onOpenProfile={openProfile}
-              userAvatar={userAvatar}
-            />
-          ) : (
-            <View style={s.flex} />
-          )}
-        </View>
-        <View style={{ width: screenWidth, flex: 1 }}>
-          {visitedPrimary.favorites ? (
-            <FavoritesScreen
-              matches={overview.matches}
-              onOpenMatch={openMatch}
-              onOpenSearch={openSearch}
-              onOpenProfile={openProfile}
-              userAvatar={userAvatar}
-            />
-          ) : (
-            <View style={s.flex} />
-          )}
-        </View>
-      </ScrollView>
+      <NewsScreen
+        onOpenSearch={openSearch}
+        onOpenProfile={openProfile}
+        userAvatar={userAvatar}
+      />
+    );
+  } else if (active === "favorites") {
+    content = (
+      <FavoritesScreen
+        matches={overview.matches}
+        onOpenMatch={openMatch}
+        onOpenSearch={openSearch}
+        onOpenProfile={openProfile}
+        userAvatar={userAvatar}
+      />
+    );
+  } else {
+    content = (
+      <MatchesScreen
+        overview={overview}
+        onOpenMatch={openMatch}
+        onOpenPreview={openPreview}
+        onRetry={overview.retry}
+        onOpenSearch={openSearch}
+        onOpenProfile={openProfile}
+        userAvatar={userAvatar}
+      />
     );
   }
 
