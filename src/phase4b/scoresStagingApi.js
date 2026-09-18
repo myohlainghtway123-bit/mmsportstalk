@@ -11,6 +11,41 @@ const FEED_ROUTES = Object.freeze({
   results: "/v1/results",
 });
 
+const root = globalThis;
+if (!root.__MST_SCORES_GET_CACHE__) root.__MST_SCORES_GET_CACHE__ = new Map();
+if (!root.__MST_SCORES_GET_INFLIGHT__) root.__MST_SCORES_GET_INFLIGHT__ = new Map();
+const getCache = root.__MST_SCORES_GET_CACHE__;
+const getInflight = root.__MST_SCORES_GET_INFLIGHT__;
+
+function cacheableScoresPath(path) {
+  if (/^\/v1\/(fixtures|live|results)(?:\?|$)/.test(path)) return true;
+  if (/^\/v1\/standings(?:\?|$)/.test(path)) return true;
+  if (/^\/v1\/matches\/[^/?]+(?:\?.*)?$/.test(path)) return true;
+  return false;
+}
+
+function cacheTtlForPath(path) {
+  if (/^\/v1\/live(?:\?|$)/.test(path)) return 5_000;
+  if (/^\/v1\/(fixtures|results)(?:\?|$)/.test(path)) return 20_000;
+  if (/^\/v1\/matches\/[^/?]+(?:\?.*)?$/.test(path)) return 15_000;
+  if (/^\/v1\/standings(?:\?|$)/.test(path)) return 2 * 60_000;
+  return 0;
+}
+
+function startCachedGet(path, options) {
+  if (getInflight.has(path)) return getInflight.get(path);
+  const promise = scoresProductRequest(path, { ...options, method: "GET" })
+    .then((result) => {
+      getCache.set(path, { result, fetchedAt: Date.now() });
+      return result;
+    })
+    .finally(() => {
+      if (getInflight.get(path) === promise) getInflight.delete(path);
+    });
+  getInflight.set(path, promise);
+  return promise;
+}
+
 export class ScoresStagingError extends Error {
   constructor(message, { code = "STAGING_DEPENDENCY_ERROR", status = null, requestId = null } = {}) {
     super(message);
@@ -143,7 +178,28 @@ export async function scoresProductRequest(path, {
 }
 
 export async function scoresStagingGet(path, options = {}) {
-  return scoresProductRequest(path, { ...options, method: "GET" });
+  const {
+    force = false,
+    staleWhileRevalidate = true,
+    ...requestOptions
+  } = options;
+
+  if (!cacheableScoresPath(path)) {
+    return scoresProductRequest(path, { ...requestOptions, method: "GET" });
+  }
+
+  const saved = getCache.get(path);
+  const age = saved ? Date.now() - saved.fetchedAt : Number.POSITIVE_INFINITY;
+  const ttl = cacheTtlForPath(path);
+
+  if (!force && saved && age < ttl) return saved.result;
+
+  if (!force && saved && staleWhileRevalidate) {
+    startCachedGet(path, requestOptions).catch(() => {});
+    return saved.result;
+  }
+
+  return startCachedGet(path, requestOptions);
 }
 
 export async function loginScoresAccount(identifier, password, options = {}) {
@@ -276,27 +332,40 @@ export async function loadScoresForDate(date, options = {}) {
   if (!cleanDate) return loadScoresOverview(options);
 
   const encoded = encodeURIComponent(cleanDate);
-  try {
-    const result = await scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options);
-    if (Array.isArray(result.data) && result.data.length > 0) {
-      return {
-        matches: result.data.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
-        requestId: result.requestId,
-        warnings: [],
-      };
-    }
-  } catch (_) {}
+  const [fixturesResult, resultsResult] = await Promise.allSettled([
+    scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options),
+    scoresStagingGet(`/v1/results?date=${encoded}&limit=50`, options),
+  ]);
 
-  try {
-    const resResult = await scoresStagingGet(`/v1/results?date=${encoded}&limit=50`, options);
-    if (Array.isArray(resResult.data) && resResult.data.length > 0) {
-      return {
-        matches: resResult.data.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
-        requestId: resResult.requestId,
-        warnings: [],
-      };
+  const matches = new Map();
+  const warnings = [];
+  let requestId = null;
+
+  for (const [feed, result] of [["fixtures", fixturesResult], ["results", resultsResult]]) {
+    if (result.status === "fulfilled") {
+      requestId ||= result.value.requestId || null;
+      if (Array.isArray(result.value.data)) {
+        for (const match of result.value.data) {
+          const id = canonicalMatchId(match);
+          if (id) matches.set(id, { ...(matches.get(id) || {}), ...match });
+        }
+      }
+    } else {
+      warnings.push({
+        feed,
+        message: result.reason?.message || "Feed unavailable.",
+        requestId: result.reason?.requestId || null,
+      });
     }
-  } catch (_) {}
+  }
+
+  if (matches.size > 0 || fixturesResult.status === "fulfilled" || resultsResult.status === "fulfilled") {
+    return {
+      matches: [...matches.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+      requestId,
+      warnings,
+    };
+  }
 
   const overview = await loadScoresOverview(options);
   const filtered = overview.matches.filter((m) => {
@@ -306,7 +375,7 @@ export async function loadScoresForDate(date, options = {}) {
   return {
     matches: filtered,
     requestId: overview.requestIds?.fixtures || null,
-    warnings: overview.warnings || [],
+    warnings: [...warnings, ...(overview.warnings || [])],
   };
 }
 
@@ -348,7 +417,16 @@ export async function loadMatchCenter(matchId, options) {
     throw new ScoresStagingError("Canonical match ID is required.", { code: "MATCH_ID_REQUIRED" });
   }
 
-  const detail = await scoresStagingGet(`/v1/matches/${encodeURIComponent(canonicalId)}`, options);
+  const encodedId = encodeURIComponent(canonicalId);
+  const [detailResult, tipsResult, previewResult] = await Promise.allSettled([
+    scoresStagingGet(`/v1/matches/${encodedId}`, options),
+    scoresStagingGet(`/v1/tips?matchId=${encodedId}&limit=10`, options),
+    scoresStagingGet(`/v1/matches/${encodedId}/preview`, options),
+  ]);
+
+  if (detailResult.status === "rejected") throw detailResult.reason;
+
+  const detail = detailResult.value;
   const resolvedId = canonicalMatchId(detail.data);
   if (resolvedId !== canonicalId) {
     throw new ScoresStagingError("Canonical match identity changed during navigation.", {
@@ -356,11 +434,6 @@ export async function loadMatchCenter(matchId, options) {
       requestId: detail.requestId,
     });
   }
-
-  const [tipsResult, previewResult] = await Promise.allSettled([
-    scoresStagingGet(`/v1/tips?matchId=${encodeURIComponent(canonicalId)}&limit=10`, options),
-    scoresStagingGet(`/v1/matches/${encodeURIComponent(canonicalId)}/preview`, options),
-  ]);
 
   return {
     match: detail.data,
