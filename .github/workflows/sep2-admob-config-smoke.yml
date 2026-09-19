@@ -94,4 +94,5 @@ jobs:
         with:
           name: production-admob-env
           path: secure-env/.env.production.local
+          include-hidden-files: true
           retention-days: 1
