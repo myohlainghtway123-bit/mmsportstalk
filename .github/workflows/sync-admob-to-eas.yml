@@ -1,0 +1,57 @@
+name: Sync AdMob To EAS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Sync AdMob release credentials to EAS and artifact
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          MST_ADMOB_ANDROID_APP_ID: ${{ secrets.MST_ADMOB_ANDROID_APP_ID }}
+          MST_ADMOB_IOS_APP_ID: ${{ secrets.MST_ADMOB_IOS_APP_ID }}
+          EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID }}
+        run: |
+          set -euo pipefail
+          
+          # Verify credentials exist
+          for v in MST_ADMOB_ANDROID_APP_ID MST_ADMOB_IOS_APP_ID EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID; do
+            test -n "${!v:-}" || { echo "::error::$v is missing in GitHub secrets."; exit 2; }
+          done
+
+          # Set EAS production environment variables
+          npx --yes eas-cli@24.7.0 env:set production --name MST_ADMOB_ANDROID_APP_ID --value "$MST_ADMOB_ANDROID_APP_ID" --visibility secret --non-interactive
+          npx --yes eas-cli@24.7.0 env:set production --name MST_ADMOB_IOS_APP_ID --value "$MST_ADMOB_IOS_APP_ID" --visibility secret --non-interactive
+          npx --yes eas-cli@24.7.0 env:set production --name EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID --value "$EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID" --visibility plaintext --non-interactive
+          npx --yes eas-cli@24.7.0 env:set production --name EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID --value "$EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID" --visibility plaintext --non-interactive
+          
+          # Prepare secure env artifact for local production build
+          mkdir -p secure-env
+          cat <<EOF > secure-env/.env.production.local
+          MST_ADMOB_ANDROID_APP_ID=$MST_ADMOB_ANDROID_APP_ID
+          MST_ADMOB_IOS_APP_ID=$MST_ADMOB_IOS_APP_ID
+          EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID=$EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID
+          EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID=$EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID
+          EXPO_PUBLIC_MST_ENVIRONMENT=production
+          EXPO_PUBLIC_MST_SCORES_API_ORIGIN=https://scores-api.myanmarsportstalk.com
+          EXPO_PUBLIC_MST_APP_API_ORIGIN=https://app-api.myanmarsportstalk.com
+          EOF
+          # Remove indentation whitespace from the generated file
+          sed -i 's/^[ \t]*//' secure-env/.env.production.local
+
+          echo "EAS environment variables updated successfully."
+
+      - name: Upload production env artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-admob-env
+          path: secure-env/.env.production.local
+          retention-days: 1
