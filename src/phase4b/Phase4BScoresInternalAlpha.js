@@ -1286,13 +1286,16 @@ function MatchesScreen({
   const handleRefresh = useCallback(async () => {
     setDateLoading(true);
     try {
-      const result = await loadScoresForDate(selectedDate);
+      const result = await loadScoresForDate(selectedDate, { force: true });
       const fresh = result?.matches || [];
       setDateMatches((prev) => ({ ...prev, [selectedDate]: fresh }));
       if (fresh.length > 0) {
         AsyncStorage.setItem(`mst:cache:matches:${selectedDate}`, JSON.stringify(fresh)).catch(() => {});
       }
-      if (onRetry) await Promise.resolve(onRetry()).catch(() => {});
+      // Trigger background overview re-sync without blocking user interaction
+      if (onRetry) {
+        Promise.resolve(onRetry()).catch(() => {});
+      }
     } finally {
       setDateLoading(false);
     }

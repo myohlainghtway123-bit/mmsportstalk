@@ -385,9 +385,9 @@ async function executeScoresForDate(cleanDate, options = {}) {
     const kickoff = String(m?.kickoff_at || m?.kickoff || "");
     return kickoff.startsWith(cleanDate);
   });
-  const hasLogos = dateMatchingMatches.some((m) => Boolean(m?.home_team_logo_url || m?.away_team_logo_url));
 
-  if (dateMatchingMatches.length > 0 && hasLogos) {
+  // Basic match rows must NEVER wait for logos: return matches immediately as soon as fetched
+  if (dateMatchingMatches.length > 0) {
     return {
       matches: dateMatchingMatches.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
       requestId: reqId,
@@ -395,15 +395,26 @@ async function executeScoresForDate(cleanDate, options = {}) {
     };
   }
 
-  // Fallback to live API-Football provider for real matches with team/competition logos
+  // If no exact-date match was matched by prefix, but map has rows returned by the date query, return immediately
+  if (map.size > 0) {
+    return {
+      matches: [...map.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+      requestId: reqId,
+      warnings: [],
+    };
+  }
+
+  // Only fallback to live API-Football provider if zero matches exist, protected with strict 3.5s timeout
   try {
+    const fallbackController = new AbortController();
+    const fallbackTimer = setTimeout(() => fallbackController.abort(), 3500);
     const fallbackHost = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_MST_APP_API_ORIGIN)
       ? process.env.EXPO_PUBLIC_MST_APP_API_ORIGIN
       : "https://" + ["app", "api"].join("-") + ".myanmar" + "sportstalk.com";
     const res = await fetch(`${fallbackHost}/api/football/matches?date=${encoded}`, {
       headers: { Accept: "application/json" },
-      signal: options?.signal,
-    });
+      signal: options?.signal || fallbackController.signal,
+    }).finally(() => clearTimeout(fallbackTimer));
     if (res.ok) {
       const json = await res.json();
       const rows = Array.isArray(json?.data) ? json.data : [];
@@ -434,14 +445,6 @@ async function executeScoresForDate(cleanDate, options = {}) {
       }
     }
   } catch (_) {}
-
-  if (map.size > 0) {
-    return {
-      matches: [...map.values()].sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
-      requestId: reqId,
-      warnings: [],
-    };
-  }
 
   try {
     const overview = await executeScoresOverview(options);

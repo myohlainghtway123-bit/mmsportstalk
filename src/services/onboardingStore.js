@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const KEY = "@mst-score/onboarding-v1";
 const DEFAULT = {
   completed: false,
+  onboardingComplete: false,
   language: null,
   teams: [],
   competitions: [],
@@ -24,6 +25,8 @@ export async function loadOnboardingPreferences() {
     const raw = await storage.getItem(KEY);
     if (!raw) return { ...DEFAULT };
     const parsed = JSON.parse(raw);
+    const hasLanguage = parsed?.language === "en" || parsed?.language === "my";
+    const isCompleted = parsed?.completed === true || parsed?.onboardingComplete === true || hasLanguage;
     return {
       ...DEFAULT,
       ...parsed,
@@ -33,7 +36,8 @@ export async function loadOnboardingPreferences() {
       players: cleanIds(parsed?.players),
       matches: cleanIds(parsed?.matches),
       entities: parsed?.entities && typeof parsed.entities === "object" ? parsed.entities : {},
-      completed: parsed?.completed === true,
+      completed: isCompleted,
+      onboardingComplete: isCompleted,
       favoritesSynced: parsed?.favoritesSynced === true,
       pendingSyncEntities: Array.isArray(parsed?.pendingSyncEntities) ? parsed.pendingSyncEntities : [],
     };
@@ -44,9 +48,13 @@ export async function loadOnboardingPreferences() {
 
 export async function saveOnboardingPreferences(next) {
   const current = await loadOnboardingPreferences();
+  const nextComplete = next?.onboardingComplete ?? next?.completed;
+  const isCompleted = nextComplete !== undefined ? Boolean(nextComplete) : current.completed;
   const merged = {
     ...current,
     ...next,
+    completed: isCompleted,
+    onboardingComplete: isCompleted,
     teams: cleanIds(next?.teams ?? current.teams),
     competitions: cleanIds(next?.competitions ?? current.competitions),
     players: cleanIds(next?.players ?? current.players),
@@ -134,7 +142,11 @@ export function subscribeAppLanguage(listener) {
 
 export async function persistAppLanguage(language) {
   const clean = language === "en" ? "en" : "my";
-  const result = await saveOnboardingPreferences({ language: clean });
+  const result = await saveOnboardingPreferences({
+    language: clean,
+    completed: true,
+    onboardingComplete: true,
+  });
   for (const fn of languageListeners) {
     try { fn(clean); } catch (_) {}
   }

@@ -322,37 +322,44 @@ function FavoritesStep({ language = "my", onFinish }) {
  * Phase 4B Startup Gate: Coordinates Motion Splash, Mandatory Language, Optional Favorites, and Restores Session
  */
 export default function Phase4BStartupGate({ children }) {
-  const [phase, setPhase] = useState("splash"); // "splash" | "language" | "favorites" | "ready"
+  const [phase, setPhase] = useState("splash"); // "splash" | "language" | "ready"
   const [language, setLanguage] = useState(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const splashDoneRef = useRef(false);
 
-  // Parallel startup preload during motion splash
+  // 1. Standalone local preferences load (AsyncStorage, resolves in ~5ms)
   useEffect(() => {
     let active = true;
 
-    const startupTasks = Promise.allSettled([
-      loadOnboardingPreferences(),
-      getAuthStatus().catch(() => ({ authenticated: false })),
-      loadScoresOverview().catch(() => null),
-    ]);
+    loadOnboardingPreferences()
+      .then((prefs) => {
+        if (!active) return;
+        const lang = prefs?.language || null;
+        const isDone = Boolean(prefs?.onboardingComplete || prefs?.completed || lang);
+        if (lang) {
+          setLanguage(lang);
+        }
+        if (isDone) {
+          setOnboardingCompleted(true);
+        }
+        setPrefsLoaded(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPrefsLoaded(true);
+      });
 
-    startupTasks.then(([prefsResult, authResult]) => {
-      if (!active) return;
-      const prefs = prefsResult.status === "fulfilled" ? prefsResult.value : null;
-      const auth = authResult.status === "fulfilled" ? authResult.value : null;
+    // 2. Non-blocking background session & scores pre-warm
+    getAuthStatus()
+      .then((auth) => {
+        if (active && auth?.authenticated) {
+          reconcileGuestFavorites().catch(() => {});
+        }
+      })
+      .catch(() => {});
 
-      if (prefs?.language) {
-        setLanguage(prefs.language);
-      }
-      if (prefs?.completed === true && prefs?.language) {
-        setOnboardingCompleted(true);
-      }
-
-      // Reconcile pending favorites if authenticated in background
-      if (auth?.authenticated) {
-        reconcileGuestFavorites().catch(() => {});
-      }
-    });
+    loadScoresOverview().catch(() => null);
 
     return () => {
       active = false;
@@ -360,30 +367,52 @@ export default function Phase4BStartupGate({ children }) {
   }, []);
 
   const handleSplashDone = useCallback(() => {
-    if (onboardingCompleted && language) {
-      setPhase("ready");
-    } else if (!language) {
-      setPhase("language");
-    } else {
-      setPhase("favorites");
+    splashDoneRef.current = true;
+    if (prefsLoaded) {
+      if (onboardingCompleted && language) {
+        setPhase("ready");
+      } else if (!language) {
+        setPhase("language");
+      } else {
+        setPhase("ready");
+      }
     }
-  }, [onboardingCompleted, language]);
+  }, [prefsLoaded, onboardingCompleted, language]);
+
+  // If splash animation completed while preferences were still reading from disk, transition immediately once ready
+  useEffect(() => {
+    if (splashDoneRef.current && prefsLoaded && phase === "splash") {
+      if (onboardingCompleted && language) {
+        setPhase("ready");
+      } else if (!language) {
+        setPhase("language");
+      } else {
+        setPhase("ready");
+      }
+    }
+  }, [prefsLoaded, onboardingCompleted, language, phase]);
 
   const handleSelectLanguage = useCallback((selected) => {
     setLanguage(selected);
-    persistAppLanguage(selected).catch(() => {});
   }, []);
-
-  const handleLanguageContinue = useCallback(() => {
-    if (!language) return;
-    setPhase("favorites");
-  }, [language]);
 
   const handleFinishOnboarding = useCallback(async () => {
     await saveOnboardingPreferences({ completed: true });
     setOnboardingCompleted(true);
     setPhase("ready");
   }, []);
+
+  const handleLanguageContinue = useCallback(async () => {
+    const chosen = language || "my";
+    await saveOnboardingPreferences({
+      language: chosen,
+      completed: true,
+      onboardingComplete: true,
+    });
+    await persistAppLanguage(chosen).catch(() => {});
+    setOnboardingCompleted(true);
+    setPhase("ready");
+  }, [language]);
 
   if (phase === "splash") {
     return <MotionSplash onFinished={handleSplashDone} />;
@@ -395,15 +424,6 @@ export default function Phase4BStartupGate({ children }) {
         currentLanguage={language}
         onSelectLanguage={handleSelectLanguage}
         onContinue={handleLanguageContinue}
-      />
-    );
-  }
-
-  if (phase === "favorites") {
-    return (
-      <FavoritesStep
-        language={language || "my"}
-        onFinish={handleFinishOnboarding}
       />
     );
   }

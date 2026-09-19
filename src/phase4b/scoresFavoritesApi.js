@@ -27,7 +27,9 @@ function errorMessage(payload, fallback) {
   return payload?.error?.message || (typeof payload?.error === "string" ? payload.error : null) || payload?.message || fallback;
 }
 
-async function request(path, { method = "GET", body, signal } = {}) {
+async function request(path, { method = "GET", body, signal, timeoutMs = 5000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const token = await getSessionToken();
   const headers = {
     Accept: "application/json",
@@ -39,19 +41,28 @@ async function request(path, { method = "GET", body, signal } = {}) {
       Cookie: `mst_user_session=${token}`,
     } : {}),
   };
-  const response = await fetch(`${MST_API_BASE}${path}`, {
-    method,
-    credentials: "include",
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
-  });
-  const payload = await decode(response);
-  if (!response.ok) {
-    if (response.status === 401) await setSessionToken(null).catch(() => {});
-    throw new ScoresAccountError(errorMessage(payload, `MST account request failed (${response.status})`), response.status, payload);
+  try {
+    const response = await fetch(`${MST_API_BASE}${path}`, {
+      method,
+      credentials: "include",
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: signal || controller.signal,
+    });
+    const payload = await decode(response);
+    if (!response.ok) {
+      if (response.status === 401) await setSessionToken(null).catch(() => {});
+      throw new ScoresAccountError(errorMessage(payload, `MST account request failed (${response.status})`), response.status, payload);
+    }
+    return payload;
+  } catch (err) {
+    if (controller.signal.aborted || err?.name === "AbortError") {
+      throw new ScoresAccountError("Account service request timed out.", 408);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return payload;
 }
 
 function extractUser(payload) {
