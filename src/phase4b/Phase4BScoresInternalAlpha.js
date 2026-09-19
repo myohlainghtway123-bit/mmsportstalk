@@ -364,6 +364,9 @@ function sectionSummary(value) {
 }
 
 function EnvironmentBanner() {
+  if (process.env.EXPO_PUBLIC_MST_ENVIRONMENT === "production" || (!__DEV__ && process.env.EXPO_PUBLIC_MST_INTERNAL !== "true")) {
+    return null;
+  }
   let colors = {};
   let isDark = true;
   try {

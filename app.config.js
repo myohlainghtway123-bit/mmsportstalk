@@ -9,12 +9,12 @@ const plugins = [...(base.expo.plugins || [])];
 // Keep AdMob identifiers out of source control. EAS/GitHub release environments
 // provide the platform app IDs; native AdMob configuration is added only when
 // both values are present, so local/staging exports remain deterministic.
-if (androidAppId && iosAppId) {
+if (androidAppId || iosAppId) {
   plugins.push([
     "react-native-google-mobile-ads",
     {
-      androidAppId,
-      iosAppId,
+      ...(androidAppId ? { androidAppId } : {}),
+      ...(iosAppId ? { iosAppId } : {}),
       // UMP consent is checked before Mobile Ads initialization/ad requests.
       // Delay native app measurement so EEA users are not measured before that flow.
       delayAppMeasurementInit: true,

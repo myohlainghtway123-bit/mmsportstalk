@@ -80,10 +80,17 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
       return;
     }
 
-    const { RewardedAd, RewardedAdEventType, TestIds } = ads;
-    const adUnitId = (Platform.OS === "android"
-      ? process.env.EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID
-      : process.env.EXPO_PUBLIC_MST_ADMOB_IOS_REWARDED_UNIT_ID) || TestIds.REWARDED;
+    const isProduction = process.env.EXPO_PUBLIC_MST_ENVIRONMENT === "production";
+    const configuredRewardedId = Platform.OS === "android"
+      ? String(process.env.EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID || "").trim()
+      : String(process.env.EXPO_PUBLIC_MST_ADMOB_IOS_REWARDED_UNIT_ID || "").trim();
+    const adUnitId = isProduction ? configuredRewardedId : (configuredRewardedId || TestIds.REWARDED);
+
+    if (!adUnitId) {
+      // In production without configured rewarded ID, gracefully grant access without showing test ads
+      handleEarnedReward();
+      return;
+    }
 
     try {
       const rewarded = RewardedAd.createForAdRequest(adUnitId, {

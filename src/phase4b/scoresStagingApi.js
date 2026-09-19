@@ -1,9 +1,10 @@
+export const MST_SCORES_PRODUCTION_ORIGIN = "https://scores-api.myanmarsportstalk.com";
 export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
 export const MST_SCORES_ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const CONFIGURED_SCORES_ORIGIN = String(process.env.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim().replace(/\/+$/, "");
-export const MST_SCORES_API_ORIGIN = CONFIGURED_SCORES_ORIGIN || (MST_SCORES_ENVIRONMENT === "production" ? "" : MST_SCORES_STAGING_ORIGIN);
+export const MST_SCORES_API_ORIGIN = CONFIGURED_SCORES_ORIGIN || (MST_SCORES_ENVIRONMENT === "production" ? MST_SCORES_PRODUCTION_ORIGIN : MST_SCORES_STAGING_ORIGIN);
 
 const FEED_ROUTES = Object.freeze({
   fixtures: "/v1/fixtures",
