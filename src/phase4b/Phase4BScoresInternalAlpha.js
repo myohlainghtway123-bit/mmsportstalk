@@ -1013,9 +1013,6 @@ const DateNavigation = memo(function DateNavigation({ selected, onSelect, langua
 
   const [containerWidth, setContainerWidth] = useState(windowWidth);
 
-  // When contentContainer has paddingHorizontal: (containerWidth - CELL_WIDTH) / 2,
-  // the first item (idx = 0) is centered at x = 0.
-  // Therefore, item idx is centered at EXACTLY x = idx * totalCellWidth!
   const getCenterOffset = useCallback((key) => {
     const idx = dates.findIndex((d) => dateKey(d) === key);
     const useIdx = idx >= 0 ? idx : todayIndex;
@@ -1028,8 +1025,7 @@ const DateNavigation = memo(function DateNavigation({ selected, onSelect, langua
 
   const centerDate = useCallback((key, animated = true) => {
     if (scrollRef.current) {
-      const targetOffset = getCenterOffset(key);
-      scrollRef.current.scrollTo({ x: targetOffset, animated });
+      scrollRef.current.scrollTo({ x: getCenterOffset(key), animated });
     }
   }, [getCenterOffset]);
 
@@ -1058,10 +1054,28 @@ const DateNavigation = memo(function DateNavigation({ selected, onSelect, langua
     }
   };
 
+  // Step one day prev / next from the currently selected date
+  const stepDay = useCallback((delta) => {
+    const idx = dates.findIndex((d) => dateKey(d) === selected);
+    const base = idx >= 0 ? idx : todayIndex;
+    const next = Math.max(0, Math.min(dates.length - 1, base + delta));
+    onSelect(dateKey(dates[next]));
+  }, [dates, selected, todayIndex, onSelect]);
+
   const hPad = Math.max(8, (containerWidth - CELL_WIDTH) / 2);
 
   return (
     <View style={[s.dateNavWrapper, { backgroundColor: colors.bg, borderBottomColor: colors.border || (isDark ? "#18181C" : "#E2E8F0") }]}>
+      {/* Prev-day chevron */}
+      <Pressable
+        onPress={() => stepDay(-1)}
+        hitSlop={10}
+        accessibilityLabel="Previous day"
+        style={s.dateChevronBtn}
+      >
+        <Ionicons name="chevron-back" size={18} color={colors.muted} />
+      </Pressable>
+
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -1072,6 +1086,7 @@ const DateNavigation = memo(function DateNavigation({ selected, onSelect, langua
         onContentSizeChange={handleContentSizeChange}
         decelerationRate="fast"
         scrollEventThrottle={16}
+        style={s.dateScrollFlex}
       >
         {dates.map((date) => {
           const key = dateKey(date);
@@ -1119,6 +1134,16 @@ const DateNavigation = memo(function DateNavigation({ selected, onSelect, langua
           );
         })}
       </ScrollView>
+
+      {/* Next-day chevron */}
+      <Pressable
+        onPress={() => stepDay(1)}
+        hitSlop={10}
+        accessibilityLabel="Next day"
+        style={s.dateChevronBtn}
+      >
+        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+      </Pressable>
     </View>
   );
 });
@@ -1848,31 +1873,39 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview, onOpenEntity, langu
       </View>
 
       <ScrollView contentContainerStyle={s.matchCenterContent}>
-        <TerminalState loading={state.loading} error={state.error} onRetry={retry} language={language} />
-        {!state.loading && !state.error ? (
-          <>
-            {/* HERO CARD - ALWAYS VISIBLE ACROSS ALL TABS */}
-            <View style={[s.matchHero, { backgroundColor: colors.surface || T.color.surface, borderColor: colors.border }]}>
-              <Pressable onPress={openCompetition} style={{ alignItems: "center" }}>
-                <Text style={[s.heroCompetition, { color: colors.secondary || colors.text }]}>{match?.competition_name || "Football"}</Text>
-              </Pressable>
-              <Text style={[s.heroKickoff, { color: colors.muted }]}>{fullKickoff(match?.kickoff_at)}</Text>
-              <View style={s.heroTeams}>
-                <Pressable onPress={openHomeTeam} style={s.heroTeam}>
-                  <TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={48} />
-                  <Text numberOfLines={2} style={[s.heroTeamName, { color: colors.text }]}>{match?.home_team_name || "Home"}</Text>
-                </Pressable>
-                <View style={s.heroScoreWrap}>
-                  <Text style={[s.heroScore, { color: colors.text }]}>{scoreText(match)}</Text>
-                  <Text style={[s.heroStatus, isLive(match) && s.liveText]}>{statusText(match, language)}</Text>
-                </View>
-                <Pressable onPress={openAwayTeam} style={s.heroTeam}>
-                  <TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={48} />
-                  <Text numberOfLines={2} style={[s.heroTeamName, { color: colors.text }]}>{match?.away_team_name || "Away"}</Text>
-                </Pressable>
-              </View>
+        {/* HERO CARD - ALWAYS VISIBLE ACROSS ALL TABS (Frame 1 instant paint) */}
+        <View style={[s.matchHero, { backgroundColor: colors.surface || T.color.surface, borderColor: colors.border }]}>
+          <Pressable onPress={openCompetition} style={{ alignItems: "center" }}>
+            <Text style={[s.heroCompetition, { color: colors.secondary || colors.text }]}>{match?.competition_name || "Football"}</Text>
+          </Pressable>
+          <Text style={[s.heroKickoff, { color: colors.muted }]}>{fullKickoff(match?.kickoff_at)}</Text>
+          <View style={s.heroTeams}>
+            <Pressable onPress={openHomeTeam} style={s.heroTeam}>
+              <TeamMark name={match?.home_team_name} uri={match?.home_team_logo_url} size={48} />
+              <Text numberOfLines={2} style={[s.heroTeamName, { color: colors.text }]}>{match?.home_team_name || "Home"}</Text>
+            </Pressable>
+            <View style={s.heroScoreWrap}>
+              <Text style={[s.heroScore, { color: colors.text }]}>{scoreText(match)}</Text>
+              <Text style={[s.heroStatus, isLive(match) && s.liveText]}>{statusText(match, language)}</Text>
             </View>
+            <Pressable onPress={openAwayTeam} style={s.heroTeam}>
+              <TeamMark name={match?.away_team_name} uri={match?.away_team_logo_url} size={48} />
+              <Text numberOfLines={2} style={[s.heroTeamName, { color: colors.text }]}>{match?.away_team_name || "Away"}</Text>
+            </Pressable>
+          </View>
+        </View>
 
+        {state.loading && !state.data ? (
+          <View style={{ paddingVertical: 32, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator size="small" color={colors.red || T.color.red} />
+            <Text style={{ marginTop: 10, fontSize: 12, color: colors.muted }}>
+              {language === "my" ? t("loadingMatchData", "my") : "Loading match details…"}
+            </Text>
+          </View>
+        ) : state.error && !state.data ? (
+          <TerminalState error={state.error} onRetry={retry} language={language} />
+        ) : (
+          <>
             {/* TAB 1: OVERVIEW */}
             {tab === "overview" ? (
               <>
@@ -2258,7 +2291,7 @@ function MatchCenter({ selectedMatch, onBack, onOpenPreview, onOpenEntity, langu
               <MatchOddsCard match={match} compact={false} />
             ) : null}
           </>
-        ) : null}
+        )}
       </ScrollView>
     </View>
   );
@@ -2757,7 +2790,17 @@ const s = StyleSheet.create({
     backgroundColor: "#000000",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#18181C",
+    flexDirection: "row",
+    alignItems: "center",
   },
+  dateScrollFlex: { flex: 1 },
+  dateChevronBtn: {
+    width: 32,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   dateStrip: {
     flexDirection: "row",
     alignItems: "center",
