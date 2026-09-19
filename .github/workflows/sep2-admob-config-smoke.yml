@@ -3,6 +3,7 @@ name: Sep 2 AdMob Config Smoke
 on:
   push:
     branches:
+      - main
       - chatgpt/sep2-expo-auth-smoke-2026-09-02
     paths:
       - .github/workflows/sep2-admob-config-smoke.yml
@@ -52,3 +53,37 @@ jobs:
           [[ "$EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID" =~ ^ca-app-pub-[0-9]+/[0-9]+$ ]] || { echo "::error::Android banner unit ID has an invalid shape."; exit 2; }
           [[ "$EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID" =~ ^ca-app-pub-[0-9]+/[0-9]+$ ]] || { echo "::error::iOS banner unit ID has an invalid shape."; exit 2; }
           echo "AdMob release configuration smoke passed; no ad request or build was started."
+
+      - name: Sync credentials to EAS and generate secure artifact
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          MST_ADMOB_ANDROID_APP_ID: ${{ secrets.MST_ADMOB_ANDROID_APP_ID }}
+          MST_ADMOB_IOS_APP_ID: ${{ secrets.MST_ADMOB_IOS_APP_ID }}
+          EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@24.7.0 env:set production --name MST_ADMOB_ANDROID_APP_ID --value "$MST_ADMOB_ANDROID_APP_ID" --visibility secret --non-interactive
+          npx --yes eas-cli@24.7.0 env:set production --name MST_ADMOB_IOS_APP_ID --value "$MST_ADMOB_IOS_APP_ID" --visibility secret --non-interactive
+          npx --yes eas-cli@24.7.0 env:set production --name EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID --value "$EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID" --visibility plaintext --non-interactive
+          npx --yes eas-cli@24.7.0 env:set production --name EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID --value "$EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID" --visibility plaintext --non-interactive
+          
+          mkdir -p secure-env
+          cat <<EOF > secure-env/.env.production.local
+MST_ADMOB_ANDROID_APP_ID=$MST_ADMOB_ANDROID_APP_ID
+MST_ADMOB_IOS_APP_ID=$MST_ADMOB_IOS_APP_ID
+EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID=$EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID
+EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID=$EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID
+EXPO_PUBLIC_MST_ENVIRONMENT=production
+EXPO_PUBLIC_MST_SCORES_API_ORIGIN=https://scores-api.myanmarsportstalk.com
+EXPO_PUBLIC_MST_APP_API_ORIGIN=https://app-api.myanmarsportstalk.com
+EOF
+          echo "AdMob release credentials synced to EAS successfully."
+
+      - name: Upload production env artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-admob-env
+          path: secure-env/.env.production.local
+          retention-days: 1
