@@ -27,7 +27,8 @@
         "EXPO_PUBLIC_MST_ENVIRONMENT": "production",
         "EXPO_PUBLIC_MST_SCORES_API_ORIGIN": "https://scores-api.myanmarsportstalk.com",
         "EXPO_PUBLIC_MST_APP_API_ORIGIN": "https://app-api.myanmarsportstalk.com",
-        "EXPO_PUBLIC_MST_INTERNAL": "false"
+        "EXPO_PUBLIC_MST_INTERNAL": "false",
+        "MST_ADMOB_ANDROID_APP_ID": "ca-app-pub-4446937986150717~8877382465"
       },
       "environment": "production"
     }
