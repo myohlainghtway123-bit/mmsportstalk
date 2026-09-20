@@ -18,7 +18,13 @@ assert.doesNotMatch(app, /AppFinalShell/);
 assert.match(api, /https:\/\/scores-api-staging\.myanmarsportstalk\.com/);
 assert.match(api, /SCORES_API_ORIGIN_REQUIRED/);
 assert.match(api, /PRODUCTION_STAGING_ORIGIN_BLOCKED/);
-assert.doesNotMatch(phase4b, /app-api\.myanmarsportstalk\.com/);
+// Production Scores may read the shared, read-only API-Football-backed match feed
+// from the MST App API. Keep the separation boundary on prediction writes and
+// unrelated backend/database access rather than banning the App API hostname.
+assert.match(api, /app-api\.myanmarsportstalk\.com/);
+assert.match(api, /\/api\/football\/matches\?date=/);
+assert.doesNotMatch(api, /\/api\/predictions(?:\/|\?|["'`])/);
+assert.doesNotMatch(api, /method:\s*["'](?:PATCH|DELETE)["']/);
 assert.doesNotMatch(phase4b, /\/v1\/predictions|savePrediction|createPrediction|submitPrediction|editPrediction/);
 assert.doesNotMatch(phase4b, /D1Database|wrangler\s+d1|mst-prediction-core|mst-football-staging/);
 
