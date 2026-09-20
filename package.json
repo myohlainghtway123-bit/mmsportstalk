@@ -13,6 +13,7 @@
     "test:phase4b-api": "node --experimental-default-type=module scripts/test_phase4b_scores_api.mjs",
     "test:phase4b-preview": "node --experimental-default-type=module scripts/test_phase4b_match_preview.mjs",
     "test:phase4b": "npm run test:phase4b-api && npm run test:phase4b-preview && node scripts/validate_phase4b_internal_alpha.js",
+    "test:play-reviewer": "node scripts/test_google_play_reviewer_auth.mjs",
     "validate:android": "node scripts/generate_assets.js && expo export --clear --platform android --output-dir dist-ci && node scripts/validate_phase4b_bundle.js dist-ci default",
     "build:android:phase4b": "npx eas-cli@latest build --platform android --profile phase4b-internal",
     "build:android:apk": "npx eas-cli@latest build --platform android --profile preview",
