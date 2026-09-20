@@ -94,6 +94,17 @@ assert.match(appConfig, /PRODUCTION_ANDROID_ADMOB_APP_ID/);
 assert.match(appConfig, /react-native-google-mobile-ads/);
 assert.match(screen, /EXPO_PUBLIC_MST_ENVIRONMENT !== "staging"/);
 assert.match(screen, /EXPO_PUBLIC_MST_INTERNAL !== "true"/);
+assert.match(api, /APP_FOOTBALL_TIME_ZONE = "Asia\/Bangkok"/);
+assert.match(api, /\/api\/football\/matches\?date=/);
+assert.match(api, /timezone=/);
+assert.match(api, /providerMediaUrl\("teams"/);
+assert.match(api, /providerMediaUrl\("leagues"/);
+for (const competitionId of ["39", "140", "135", "78", "61", "2", "3", "848", "1", "4"]) {
+  assert.ok(screen.includes(`"${competitionId}"`), `missing pinned competition priority id: ${competitionId}`);
+}
+assert.match(screen, /PINNED_COMPETITION_RANK/);
+assert.match(screen, /entityId=\{homeTeamId\}/);
+assert.match(screen, /entityId=\{awayTeamId\}/);
 assert.match(workflow, /API_ORIGIN='https:\/\/app-api\.myanmarsportstalk\.com'/);
 assert.match(workflow, /scores-api-staging\.myanmarsportstalk\.com/);
 assert.match(workflow, /dist-ci-default default/);
