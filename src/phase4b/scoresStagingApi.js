@@ -2,7 +2,11 @@ export const MST_SCORES_PRODUCTION_ORIGIN = "https://scores-api.myanmarsportstal
 export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
-export const MST_SCORES_ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
+const RAW_MST_SCORES_ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "").trim().toLowerCase();
+const IS_DEVELOPMENT_RUNTIME = typeof __DEV__ !== "undefined" && __DEV__ === true;
+// Fail safe for release builds: production is the default when no environment is injected.
+// Internal builds must explicitly set EXPO_PUBLIC_MST_ENVIRONMENT=staging.
+export const MST_SCORES_ENVIRONMENT = RAW_MST_SCORES_ENVIRONMENT || (IS_DEVELOPMENT_RUNTIME ? "staging" : "production");
 const CONFIGURED_SCORES_ORIGIN = String(process.env.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim().replace(/\/+$/, "");
 export const MST_SCORES_API_ORIGIN = CONFIGURED_SCORES_ORIGIN || (MST_SCORES_ENVIRONMENT === "production" ? MST_SCORES_PRODUCTION_ORIGIN : MST_SCORES_STAGING_ORIGIN);
 
