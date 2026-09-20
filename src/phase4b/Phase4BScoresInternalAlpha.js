@@ -443,12 +443,12 @@ const HomeBrandHeader = memo(function HomeBrandHeader({ onOpenSearch, onOpenProf
         <Text style={s.brandWordMST}>MST</Text>
         <Text style={[s.brandWordScores, { color: colors.text }]}>SCORES</Text>
       </View>
-      <View style={s.brandRight}>
+      <View style={s.headerActions}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search teams, players or matches"
           onPress={onOpenSearch}
-          style={s.headerIconButton}
+          style={s.headerIconBtn}
         >
           <Ionicons name="search" size={20} color={colors.secondary || "#C4C4CC"} />
         </Pressable>
@@ -456,7 +456,7 @@ const HomeBrandHeader = memo(function HomeBrandHeader({ onOpenSearch, onOpenProf
           accessibilityRole="button"
           accessibilityLabel="Account and Profile"
           onPress={onOpenProfile}
-          style={s.headerIconButton}
+          style={s.headerIconBtn}
         >
           {userAvatar ? (
             <Image source={{ uri: userAvatar }} style={s.headerAvatarSmall} />
