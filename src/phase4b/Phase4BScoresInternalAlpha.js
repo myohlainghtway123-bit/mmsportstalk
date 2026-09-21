@@ -43,7 +43,7 @@ import Phase4BAuthModal from "./Phase4BAuthModal.js";
 import Phase4BStartupGate from "./Phase4BStartupGate.js";
 import Phase4BRewardedPrediction from "./Phase4BRewardedPrediction";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { loadOnboardingPreferences, persistAppLanguage, subscribeAppLanguage } from "../services/onboardingStore.js";
+import { loadAppLanguage, persistAppLanguage, subscribeAppLanguage } from "../services/onboardingStore.js";
 import { t } from "../i18n/translations";
 import { ThemeProvider, useTheme } from "../theme/ThemeContext";
 import { trackEvent } from "../services/analytics.js";
@@ -2415,7 +2415,8 @@ function Phase4BScoresInternalAlphaContent() {
   const [subScreen, setSubScreen] = useState(null); // null | "search" | "profile" | "settings"
   const [userAvatar, setUserAvatar] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
-  const [language, setLanguage] = useState("my");
+  const [language, setLanguage] = useState(null);
+  const [languageReady, setLanguageReady] = useState(false);
 
   const loadUserData = useCallback(() => {
     getAuthStatus()
@@ -2438,24 +2439,38 @@ function Phase4BScoresInternalAlphaContent() {
   }, [active, subScreen, selectedMatch, selectedEntity]);
 
   useEffect(() => {
-    loadOnboardingPreferences()
-      .then((prefs) => {
-        if (prefs?.language === "en" || prefs?.language === "my") {
-          setLanguage(prefs.language);
-        }
+    let active = true;
+    loadAppLanguage()
+      .then((storedLanguage) => {
+        if (!active) return;
+        setLanguage(storedLanguage === "en" ? "en" : "my");
+        setLanguageReady(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!active) return;
+        setLanguage("my");
+        setLanguageReady(true);
+      });
+
     const unsub = subscribeAppLanguage((lang) => {
+      if (!active) return;
       if (lang === "en" || lang === "my") {
         setLanguage(lang);
+        setLanguageReady(true);
       }
     });
-    return () => unsub();
+
+    return () => {
+      active = false;
+      unsub();
+    };
   }, []);
 
   const handleSetLanguage = useCallback((nextLang) => {
     const clean = nextLang === "en" ? "en" : "my";
+    // Update immediately, then persist to the dedicated language key.
     setLanguage(clean);
+    setLanguageReady(true);
     persistAppLanguage(clean).catch(() => {});
   }, []);
 
@@ -2560,6 +2575,14 @@ function Phase4BScoresInternalAlphaContent() {
     const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
     return () => subscription.remove();
   }, [authModalVisible, selectedEntity, previewMatch, subScreen, selectedMatch, active, selectNav]);
+
+  if (!languageReady || (language !== "en" && language !== "my")) {
+    return (
+      <View style={[s.root, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator color={colors.red || T.color.red} />
+      </View>
+    );
+  }
 
   // Render secondary screens if active
   let content;
