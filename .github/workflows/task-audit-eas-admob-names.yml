@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${EXPO_TOKEN:-}" || { echo "::error::EXPO_TOKEN is unavailable"; exit 2; }
-          npx --yes eas-cli@24.7.0 env:list production --format short --non-interactive > /tmp/eas-prod.txt
+          npx --yes eas-cli@24.7.0 env:list production --format short > /tmp/eas-prod.txt
           if grep -q 'EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID' /tmp/eas-prod.txt; then
             echo "scores_rewarded_name=present"
           else
