@@ -111,7 +111,7 @@ export async function verifyPlayPurchaseOnServer({
  * Until both the Play product catalog and server-side Android Publisher
  * verification are enabled, this function must never charge or grant credits.
  */
-export async function purchaseCredits(packageId) {
+export async function assertCreditPackagePurchasable(packageId) {
   const storefront = await getCreditStorefront();
   const pkg = storefront.packages.find((item) => item.id === packageId);
   if (!pkg) {
@@ -132,11 +132,11 @@ export async function purchaseCredits(packageId) {
   // client is added, it must return a purchaseToken that is verified by the
   // server before any wallet mutation is reflected in the app.
   const error = new Error(
-    "Google Play Billing checkout is not connected in this build. No payment was submitted and no credits were changed.",
+    "Google Play Billing is available for this package.",
   );
-  error.code = "GOOGLE_PLAY_BILLING_CLIENT_NOT_CONNECTED";
+  error.code = "GOOGLE_PLAY_BILLING_READY";
   error.productId = pkg.playProductId;
-  throw error;
+  return { package: pkg, storefront };
 }
 
 export async function restorePurchases() {
