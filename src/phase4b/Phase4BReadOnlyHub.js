@@ -11,11 +11,11 @@ import {
   loadTipsters,
   loadUserLeaderboard,
 } from "./scoresStagingApi";
-import { MST_SITE_ORIGIN } from "../services/mstApiConfig";
 import { useTheme } from "../theme/ThemeContext";
+import { getCreditStorefront, purchaseCredits } from "../services/billingService";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
-const PURCHASE_ACTION_ENABLED = true;
+const TIP_UNLOCK_ACTION_ENABLED = true;
 
 const C = {
   surface: "#101417",
@@ -60,16 +60,21 @@ function label(row, fallback) {
   );
 }
 
+function tipPriceCredits(row) {
+  const raw = row?.priceCredits ?? row?.price_credits ?? row?.credits;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+}
+
 function meta(row) {
+  const creditPrice = tipPriceCredits(row);
   const parts = [
     row?.rank != null ? `#${row.rank}` : null,
     row?.points != null ? `${row.points} pts` : row?.score != null ? `${row.score} pts` : null,
     row?.accuracy != null ? `${row.accuracy}% accuracy` : null,
     row?.followers_count != null ? `${row.followers_count} followers` : null,
-    row?.correct_predictions != null ? `${row.correct_predictions} correct` : null,
-    PURCHASE_ACTION_ENABLED && row?.amountMinor != null ? `${row.amountMinor} ${row.currency || ""}`.trim() : null,
+    TIP_UNLOCK_ACTION_ENABLED && creditPrice != null ? `${creditPrice} CR` : null,
     row?.status ? String(row.status).toUpperCase() : null,
-    PURCHASE_ACTION_ENABLED && row?.price_minor != null ? `${row.price_minor} ${row.currency || ""}`.trim() : null,
   ].filter(Boolean);
   return parts.join(" · ") || "MST data";
 }
@@ -113,20 +118,9 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled, colors = C,
   const list = rows(data).slice(0, 15);
   return (
     <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <View>
-          <Text style={[s.eyebrow, { color: colors.red }]}>MST VERIFIED TIPS</Text>
-          <Text style={[s.title, { color: colors.text }]}>Featured Tipster Cards</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open MST website for premium tips"
-          onPress={() => Linking.openURL(`${MST_SITE_ORIGIN}/tips`).catch(() => {})}
-          style={s.webTipButton}
-        >
-          <Ionicons name="open-outline" size={11} color={C.amber} />
-          <Text style={s.webTipText}>PREMIUM WEB</Text>
-        </Pressable>
+      <View>
+        <Text style={[s.eyebrow, { color: colors.red }]}>MST VERIFIED TIPS</Text>
+        <Text style={[s.title, { color: colors.text }]}>Featured Tipster Cards</Text>
       </View>
 
       {/* Quick Credit Value & Buy Banner */}
@@ -137,11 +131,11 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled, colors = C,
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
           <Ionicons name="sparkles" size={15} color={colors.gold || C.amber} />
           <Text style={{ fontSize: 12, fontWeight: "800", color: colors.gold || C.amber }}>
-            100 Credits = 10,000 MMK (1 Tip ≈ 5-10 CR)
+            MST Credits · Android purchases use Google Play Billing
           </Text>
         </View>
         <View style={[s.creditQuickBtn, { backgroundColor: colors.gold || C.amber }]}>
-          <Text style={{ fontSize: 10.5, fontWeight: "900", color: "#000000" }}>BUY CREDITS</Text>
+          <Text style={{ fontSize: 10.5, fontWeight: "900", color: "#000000" }}>CREDITS</Text>
         </View>
       </Pressable>
 
@@ -217,7 +211,7 @@ function TipList({ data, onPurchase, purchaseState, purchaseEnabled, colors = C,
                 <View>
                   <Text style={{ fontSize: 10, color: colors.muted, fontWeight: "700" }}>PRICE</Text>
                   <Text style={{ fontSize: 13, fontWeight: "900", color: colors.text }}>
-                    {paid ? (row?.amountMinor != null ? `${row.amountMinor} MMK` : "500 MMK") : "FREE"}
+                    {paid ? (tipPriceCredits(row) != null ? `${tipPriceCredits(row)} CR` : "CREDITS") : "FREE"}
                   </Text>
                 </View>
                 {paid && !isPurchased ? (
@@ -280,334 +274,212 @@ async function entitledPurchaseRows(purchases, tips) {
 }
 
 function CreditPanel({ my = true, colors = C }) {
-  const [country, setCountry] = useState("TH"); // "TH" | "MM" | "INT"
-  const [selectedPack, setSelectedPack] = useState(null);
-  const [paymentModal, setPaymentModal] = useState(null); // package object when open
-  const [selectedMethod, setSelectedMethod] = useState(null);
-  const [processing, setProcessing] = useState(false);
+  const [storefront, setStorefront] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [processingId, setProcessingId] = useState(null);
   const [purchaseMsg, setPurchaseMsg] = useState(null);
-  const [balance, setBalance] = useState(100);
-  const [viewHistory, setViewHistory] = useState(false);
-  const [transactions, setTransactions] = useState([
-    { id: "tx-1", type: "PURCHASE", item: "100 Credits Pack (Welcome)", amount: "+100 CR", status: "COMPLETED", date: "2026-09-18 20:00" },
-    { id: "tx-2", type: "SPENT", item: "Man City vs Arsenal Pro Tip", amount: "-10 CR", status: "COMPLETED", date: "2026-09-18 19:30" },
-  ]);
 
-  const COUNTRY_CONFIGS = {
-    TH: {
-      currency: "THB",
-      rateText: "100 THB = 100 Credits",
-      subText: "1 Credit = 1 THB",
-      packages: [
-        { id: "th_50", credits: 50, price: "฿50", label: "STARTER" },
-        { id: "th_100", credits: 100, price: "฿100", popular: true, label: "POPULAR" },
-        { id: "th_250", credits: 250, price: "฿250", label: "PRO" },
-        { id: "th_500", credits: 500, price: "฿500", label: "BEST VALUE" },
-      ],
-      methods: [
-        { id: "promptpay", name: "Thai QR PromptPay", icon: "qr-code" },
-        { id: "card", name: "Credit / Debit Card (Visa/MC)", icon: "card" },
-        { id: "truemoney", name: "TrueMoney Wallet", icon: "wallet" },
-      ],
-    },
-    MM: {
-      currency: "MMK",
-      rateText: "10,000 MMK = 100 Credits",
-      subText: "1 Credit ≈ 100 MMK",
-      packages: [
-        { id: "mm_50", credits: 50, price: "5,000 MMK", label: "STARTER" },
-        { id: "mm_100", credits: 100, price: "10,000 MMK", popular: true, label: "POPULAR" },
-        { id: "mm_250", credits: 250, price: "25,000 MMK", label: "PRO" },
-        { id: "mm_500", credits: 500, price: "50,000 MMK", label: "BEST VALUE" },
-      ],
-      methods: [
-        { id: "kpay", name: "KBZPay (KPay)", icon: "phone-portrait" },
-        { id: "wave", name: "Wave Money", icon: "paper-plane" },
-        { id: "card_mm", name: "Mpu / International Card", icon: "card" },
-      ],
-    },
-    INT: {
-      currency: "USD",
-      rateText: "$3.00 USD = 100 Credits",
-      subText: "1 Credit ≈ $0.03",
-      packages: [
-        { id: "int_50", credits: 50, price: "$1.50", label: "STARTER" },
-        { id: "int_100", credits: 100, price: "$3.00", popular: true, label: "POPULAR" },
-        { id: "int_250", credits: 250, price: "$7.50", label: "PRO" },
-        { id: "int_500", credits: 500, price: "$15.00", label: "BEST VALUE" },
-      ],
-      methods: [
-        { id: "card_int", name: "Visa / Mastercard / Amex", icon: "card" },
-        { id: "gpay", name: "Google Pay / Apple Pay", icon: "logo-google" },
-      ],
-    },
-  };
+  const loadStorefront = useCallback(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError("");
+    getCreditStorefront()
+      .then((value) => {
+        if (!active) return;
+        setStorefront(value);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setLoadError(error?.message || (my ? "Credit package များ မရရှိနိုင်သေးပါ။" : "Credit packages are unavailable."));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [my]);
 
-  const activeConfig = COUNTRY_CONFIGS[country];
+  useEffect(() => loadStorefront(), [loadStorefront]);
 
-  const handleOpenPayment = (pkg) => {
-    setSelectedPack(pkg);
-    setPaymentModal(pkg);
-    setSelectedMethod(activeConfig.methods[0]?.id || null);
+  const packages = Array.isArray(storefront?.packages) ? storefront.packages : [];
+  const checkoutReady = storefront?.purchasingEnabled === true;
+
+  const handlePlayPurchase = async (pkg) => {
+    if (!pkg?.id || processingId) return;
+    setProcessingId(pkg.id);
     setPurchaseMsg(null);
-  };
-
-  const handleConfirmPurchase = () => {
-    if (!paymentModal || !selectedMethod) return;
-    setProcessing(true);
-
-    setTimeout(() => {
-      setProcessing(false);
-      const pkg = paymentModal;
-      setBalance((prev) => prev + pkg.credits);
-      const newTx = {
-        id: `tx-${Date.now()}`,
-        type: "PURCHASE",
-        item: `${pkg.credits} Credits Pack (${pkg.price})`,
-        amount: `+${pkg.credits} CR`,
-        status: "COMPLETED",
-        date: new Date().toISOString().replace("T", " ").slice(0, 16),
-      };
-      setTransactions((prev) => [newTx, ...prev]);
-      setPaymentModal(null);
-      setPurchaseMsg(
-        my
-          ? `ဂုဏ်ယူပါသည်! ${pkg.credits} Credits အောင်မြင်စွာ ဖြည့်သွင်းပြီးပါပြီ။ (လက်ကျန်: ${balance + pkg.credits} CR)`
-          : `Success! Purchased ${pkg.credits} Credits. (New Balance: ${balance + pkg.credits} CR)`,
-      );
-    }, 1000);
+    try {
+      await purchaseCredits(pkg.id);
+      setPurchaseMsg({
+        error: false,
+        text: my
+          ? "Google Play purchase ကို စစ်ဆေးပြီးပါက Credits ကို server wallet တွင်သာ ထည့်သွင်းပါမည်။"
+          : "Credits are added only after Google Play purchase verification succeeds on the server.",
+      });
+    } catch (error) {
+      const code = error?.code || "";
+      const setupPending = code === "GOOGLE_PLAY_BILLING_NOT_CONFIGURED"
+        || code === "GOOGLE_PLAY_BILLING_CLIENT_NOT_CONNECTED";
+      setPurchaseMsg({
+        error: true,
+        text: setupPending
+          ? (my
+            ? "Google Play Billing setup မပြီးသေးသဖြင့် ယခု build မှ ငွေပေးချေမှု မပြုလုပ်နိုင်သေးပါ။ Credits မပြောင်းလဲပါ။"
+            : "Google Play Billing is not fully connected in this build. No payment was submitted and no credits were changed.")
+          : (error?.message || (my ? "ဝယ်ယူမှု မအောင်မြင်ပါ။" : "Purchase unavailable.")),
+      });
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   return (
     <View>
-      {/* Wallet Balance Hero Card */}
       <View style={[s.walletHeroCard, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.gold || C.amber }]}>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Ionicons name="wallet" size={15} color={colors.red || C.red} />
-            <Text style={[s.eyebrow, { color: colors.red || C.red }]}>MST CREDITS WALLET</Text>
+            <Ionicons name="wallet-outline" size={15} color={colors.red || C.red} />
+            <Text style={[s.eyebrow, { color: colors.red || C.red }]}>MST CREDITS</Text>
           </View>
-          <Text style={[s.walletBalanceNum, { color: colors.text }]}>
-            {balance} <Text style={{ fontSize: 16, color: colors.gold || C.amber, fontWeight: "900" }}>CR</Text>
+          <Text style={[s.title, { color: colors.text, marginTop: 4 }]}>
+            {my ? "Android ဝယ်ယူမှုများ = Google Play Billing" : "Android purchases use Google Play Billing"}
           </Text>
-          <Text style={[s.walletSub, { color: colors.muted }]}>
-            {my ? "လက်ကျန် Credits (Server Synced)" : "Available Credits Balance (Server Synced)"}
+          <Text style={[s.walletSub, { color: colors.muted, marginTop: 6 }]}>
+            {my
+              ? "PromptPay၊ KBZPay၊ Wave Money၊ Card သို့မဟုတ် direct transfer များကို Google Play build အတွင်း မသုံးပါ။"
+              : "The Google Play build does not offer PromptPay, KBZPay, Wave Money, cards, or direct-transfer checkout for digital credits."}
           </Text>
         </View>
-        <Pressable
-          onPress={() => setViewHistory((prev) => !prev)}
-          style={[s.historyToggleBtn, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}
-        >
-          <Ionicons name={viewHistory ? "close-circle" : "receipt-outline"} size={14} color={colors.text} />
-          <Text style={[s.historyToggleText, { color: colors.text }]}>
-            {viewHistory ? (my ? "ပိတ်မည်" : "CLOSE") : (my ? "မှတ်တမ်း" : "HISTORY")}
-          </Text>
-        </Pressable>
       </View>
 
-      {/* TRANSACTION HISTORY VIEW */}
-      {viewHistory ? (
+      {loading ? (
+        <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border, alignItems: "center" }]}>
+          <ActivityIndicator color={colors.red || C.red} />
+          <Text style={[s.empty, { color: colors.muted, marginTop: 8 }]}>
+            {my ? "Credit package များ စစ်ဆေးနေပါသည်…" : "Checking credit packages…"}
+          </Text>
+        </View>
+      ) : loadError ? (
         <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <Text style={[s.eyebrow, { color: colors.gold || C.amber }]}>
-              {my ? "CREDIT အရောင်းအဝယ် မှတ်တမ်း" : "CREDIT TRANSACTION LEDGER"}
+          <Text style={[s.purchaseError, { marginTop: 0 }]}>{loadError}</Text>
+          <Pressable onPress={loadStorefront} style={[s.packBuyBtn, { backgroundColor: colors.red || C.red, marginTop: 10 }]}>
+            <Text style={s.packBuyBtnText}>{my ? "ပြန်စမ်းမည်" : "RETRY"}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          <View style={{ marginTop: 4, marginBottom: 10 }}>
+            <Text style={[s.title, { color: colors.text }]}>
+              {my ? "Credit Packages" : "Credit Packages"}
             </Text>
-            <Text style={{ fontSize: 11, color: colors.muted }}>{transactions.length} records</Text>
+            <Text style={{ fontSize: 12, color: colors.muted, marginTop: 3 }}>
+              {my
+                ? "နောက်ဆုံးစျေးနှုန်းကို Google Play checkout တွင် Google မှ ပြသပါမည်။"
+                : "Google Play will show the localized final price at checkout."}
+            </Text>
           </View>
-          {transactions.map((tx) => (
-            <View key={tx.id} style={[s.txRow, { borderBottomColor: colors.border }]}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Text style={[s.txTypeBadge, { color: tx.type === "PURCHASE" ? (colors.green || C.green) : colors.red }]}>
-                    [{tx.type}]
-                  </Text>
-                  <Text numberOfLines={1} style={[s.txItemName, { color: colors.text }]}>{tx.item}</Text>
+
+          <View style={s.packGrid}>
+            {packages.map((pkg) => {
+              const busy = processingId === pkg.id;
+              return (
+                <View
+                  key={pkg.id}
+                  style={[
+                    s.packCard,
+                    {
+                      backgroundColor: colors.surface || colors.card || C.surface,
+                      borderColor: pkg.popular ? (colors.gold || C.amber) : colors.border,
+                    },
+                    pkg.popular && { borderWidth: 1.5 },
+                  ]}
+                >
+                  {pkg.popular ? (
+                    <View style={[s.popularBadge, { backgroundColor: colors.gold || C.amber }]}>
+                      <Text style={s.popularBadgeText}>POPULAR</Text>
+                    </View>
+                  ) : null}
+                  <Text style={[s.packCreditsText, { color: colors.text }]}>{pkg.credits}</Text>
+                  <Text style={[s.packCreditsLabel, { color: colors.gold || C.amber }]}>CREDITS</Text>
+                  <Text style={[s.packPriceText, { color: colors.muted }]}>Google Play</Text>
+
+                  <Pressable
+                    disabled={!checkoutReady || busy}
+                    onPress={() => handlePlayPurchase(pkg)}
+                    style={[
+                      s.packBuyBtn,
+                      { backgroundColor: colors.red || C.red },
+                      (!checkoutReady || busy) && { opacity: 0.45 },
+                    ]}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={s.packBuyBtnText}>
+                        {checkoutReady
+                          ? (my ? "GOOGLE PLAY ဖြင့် ဝယ်မည်" : "BUY WITH GOOGLE PLAY")
+                          : (my ? "SETUP PENDING" : "SETUP PENDING")}
+                      </Text>
+                    )}
+                  </Pressable>
                 </View>
-                <Text style={s.txDate}>{tx.date}</Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={[s.txAmount, { color: tx.type === "PURCHASE" ? (colors.green || C.green) : colors.red }]}>
-                  {tx.amount}
-                </Text>
-                <Text style={[s.txStatus, { color: colors.green || C.green }]}>{tx.status}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {/* Credit = Money System Clear Explanation Card */}
-      <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          <Ionicons name="cash-outline" size={18} color={colors.gold || C.amber} />
-          <Text style={[s.eyebrow, { color: colors.gold || C.amber }]}>
-            {my ? "CREDIT = MONEY SYSTEM (ရည်ညွှန်းတန်ဖိုး)" : "CREDIT = MONEY SYSTEM (EXPLAINED)"}
-          </Text>
-        </View>
-
-        {/* Reference Value Formula Box */}
-        <View style={[s.rateBox, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
-          <View style={s.rateColumn}>
-            <Text style={[s.rateNum, { color: colors.gold || C.amber }]}>100 Credits</Text>
-            <Text style={[s.rateSub, { color: colors.muted }]}>MST Credits</Text>
+              );
+            })}
           </View>
-          <Text style={[s.rateEqual, { color: colors.text }]}>=</Text>
-          <View style={s.rateColumn}>
-            <Text style={[s.rateNum, { color: colors.green || C.green }]}>{activeConfig.rateText.split("=")[0].trim()}</Text>
-            <Text style={[s.rateSub, { color: colors.muted }]}>{activeConfig.subText}</Text>
-          </View>
-        </View>
 
-        <Text style={[s.creditExplainText, { color: colors.secondary || colors.text }]}>
-          {my
-            ? "• ထိုင်းနိုင်ငံသုံးစွဲသူများအတွက် ၁၀၀ THB = ၁၀၀ Credits ဖြင့် တိုက်ရိုက် သတ်မှတ်ထားပါသည်။\n• မြန်မာနိုင်ငံသုံးစွဲသူများအတွက် ၁၀,၀၀၀ MMK = ၁၀၀ Credits ဖြစ်ပါသည်။\n• Pro Tip တစ်ခုလျှင် ၅ မှ ၁၀ Credits ကျသင့်ပါသည်။\n• ဝယ်ယူထားသော Credits များသည် သင့် MST Server Account နှင့် အမြဲတမ်း ချိတ်ဆက်ထားပါသည်။"
-            : "• Thailand pricing: 100 THB = 100 Credits directly.\n• Myanmar pricing: 10,000 MMK = 100 Credits.\n• 1 Pro Tip costs 5 to 10 Credits.\n• Credits are managed on server-side ledger and synced to your account."}
-        </Text>
-      </View>
-
-      {/* Country / Currency Selector Tabs */}
-      <View style={s.countryTabsRow}>
-        <Text style={[s.countryLabel, { color: colors.muted }]}>{my ? "ဒေသ/ငွေကြေး:" : "Pricing Region:"}</Text>
-        {[
-          { id: "TH", label: "🇹🇭 Thailand (฿ THB)" },
-          { id: "MM", label: "🇲🇲 Myanmar (MMK)" },
-          { id: "INT", label: "🌐 Global ($ USD)" },
-        ].map((c) => (
-          <Pressable
-            key={c.id}
-            onPress={() => {
-              setCountry(c.id);
-              setPaymentModal(null);
-            }}
-            style={[
-              s.countryTabBtn,
-              { backgroundColor: country === c.id ? (colors.red || C.red) : (colors.raised || C.raised), borderColor: colors.border },
-            ]}
-          >
-            <Text style={[s.countryTabText, { color: country === c.id ? "#FFFFFF" : colors.muted }]}>
-              {c.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* Package Header */}
-      <View style={{ marginTop: 4, marginBottom: 10 }}>
-        <Text style={[s.title, { color: colors.text }]}>
-          {my ? "Credit Package ရွေးချယ်ပါ" : "Choose a Credit Package"}
-        </Text>
-        <Text style={{ fontSize: 12, color: colors.muted }}>
-          {my ? `${activeConfig.rateText} ဖြင့် သင့်တော်ရာ ရွေးချယ်ပါ` : `Select package (${activeConfig.rateText})`}
-        </Text>
-      </View>
-
-      {/* Grid of Credit Packages */}
-      <View style={s.packGrid}>
-        {activeConfig.packages.map((pkg) => (
-          <View
-            key={pkg.id}
-            style={[
-              s.packCard,
-              {
-                backgroundColor: colors.surface || colors.card || C.surface,
-                borderColor: pkg.popular ? (colors.gold || C.amber) : colors.border,
-              },
-              pkg.popular && { borderWidth: 1.5 },
-            ]}
-          >
-            {pkg.popular && (
-              <View style={[s.popularBadge, { backgroundColor: colors.gold || C.amber }]}>
-                <Text style={s.popularBadgeText}>🔥 POPULAR</Text>
-              </View>
-            )}
-            <Text style={[s.packCreditsText, { color: colors.text }]}>{pkg.credits}</Text>
-            <Text style={[s.packCreditsLabel, { color: colors.gold || C.amber }]}>CREDITS</Text>
-            <Text style={[s.packPriceText, { color: colors.text }]}>{pkg.price}</Text>
-
-            <Pressable
-              onPress={() => handleOpenPayment(pkg)}
-              style={[s.packBuyBtn, { backgroundColor: colors.red || C.red }]}
-            >
-              <Text style={s.packBuyBtnText}>{my ? "ဝယ်မည်" : "BUY"}</Text>
-            </Pressable>
-          </View>
-        ))}
-      </View>
-
-      {/* PAYMENT METHOD MODAL / CARD */}
-      {paymentModal ? (
-        <View style={[s.paymentCard, { backgroundColor: colors.raised || C.raised, borderColor: colors.gold || C.amber }]}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <Text style={[s.paymentCardTitle, { color: colors.text }]}>
-              {my ? "ငွေပေးချေမှု နည်းလမ်း ရွေးချယ်ပါ" : "Select Payment Method"}
-            </Text>
-            <Pressable hitSlop={8} onPress={() => setPaymentModal(null)}>
-              <Ionicons name="close-circle" size={20} color={colors.muted} />
-            </Pressable>
-          </View>
-          <Text style={{ fontSize: 12, color: colors.gold || C.amber, marginBottom: 10, fontWeight: "700" }}>
-            {my ? `ရွေးချယ်ထားသော Package: ${paymentModal.credits} Credits (${paymentModal.price})` : `Selected: ${paymentModal.credits} Credits (${paymentModal.price})`}
-          </Text>
-
-          {activeConfig.methods.map((method) => (
-            <Pressable
-              key={method.id}
-              onPress={() => setSelectedMethod(method.id)}
-              style={[
-                s.methodRow,
-                {
-                  backgroundColor: colors.surface || C.surface,
-                  borderColor: selectedMethod === method.id ? (colors.red || C.red) : colors.border,
-                },
-                selectedMethod === method.id && { borderWidth: 1.5 },
-              ]}
-            >
-              <Ionicons
-                name={method.icon}
-                size={18}
-                color={selectedMethod === method.id ? (colors.red || C.red) : colors.muted}
-              />
-              <Text style={[s.methodName, { color: colors.text }]}>{method.name}</Text>
-              {selectedMethod === method.id && (
-                <Ionicons name="checkmark-circle" size={18} color={colors.red || C.red} />
-              )}
-            </Pressable>
-          ))}
-
-          <Pressable
-            disabled={processing || !selectedMethod}
-            onPress={handleConfirmPurchase}
-            style={[s.confirmPayBtn, { backgroundColor: colors.red || C.red }]}
-          >
-            {processing ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={s.confirmPayBtnText}>
-                {my ? `ငွေပေးချေမှုကို အတည်ပြုမည် (${paymentModal.price})` : `Confirm Payment (${paymentModal.price})`}
+          {!packages.length ? (
+            <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+              <Text style={[s.empty, { color: colors.muted }]}>
+                {my ? "Credit package များ မသတ်မှတ်ရသေးပါ။" : "No credit packages are configured yet."}
               </Text>
-            )}
-          </Pressable>
-        </View>
-      ) : null}
-
-      {purchaseMsg && (
-        <View style={[s.purchaseToast, { backgroundColor: "rgba(16,185,129,0.15)", borderColor: colors.green || C.green, borderWidth: 1 }]}>
-          <Ionicons name="checkmark-circle" size={18} color={colors.green || C.green} />
-          <Text style={[s.purchaseToastText, { color: colors.green || C.green, flex: 1 }]}>{purchaseMsg}</Text>
-        </View>
+            </View>
+          ) : null}
+        </>
       )}
 
-      {/* Permanent Account Sync Guarantee */}
+      {purchaseMsg ? (
+        <View
+          style={[
+            s.purchaseToast,
+            {
+              backgroundColor: purchaseMsg.error ? "rgba(243,38,45,0.10)" : "rgba(16,185,129,0.15)",
+              borderColor: purchaseMsg.error ? (colors.red || C.red) : (colors.green || C.green),
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Ionicons
+            name={purchaseMsg.error ? "information-circle" : "checkmark-circle"}
+            size={18}
+            color={purchaseMsg.error ? (colors.red || C.red) : (colors.green || C.green)}
+          />
+          <Text
+            style={[
+              s.purchaseToastText,
+              { color: purchaseMsg.error ? (colors.red || C.red) : (colors.green || C.green), flex: 1 },
+            ]}
+          >
+            {purchaseMsg.text}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={[s.pendingCard, { backgroundColor: colors.raised || C.raised, borderColor: colors.border }]}>
         <Ionicons name="shield-checkmark" size={22} color={colors.green || C.green} style={{ marginTop: 2 }} />
         <View style={{ flex: 1 }}>
           <Text style={[s.pendingTitle, { color: colors.text }]}>
-            {my ? "ဆာဗာပေါ်တွင် အမြဲတမ်းသိမ်းဆည်းမှု အာမခံချက်" : "Permanent Account Sync & Protection"}
+            {checkoutReady
+              ? (my ? "Google Play Billing server capability ဖွင့်ထားသည်" : "Google Play Billing server capability enabled")
+              : (my ? "Google Play Billing setup မပြီးသေးပါ" : "Google Play Billing setup pending")}
           </Text>
           <Text style={[s.pendingText, { color: colors.muted }]}>
-            {my
-              ? "ဝယ်ယူထားသော Credits များနှင့် Unlock လုပ်ထားသော Tips များအားလုံးကို MST cloud server တွင် အကောင့်နှင့်တကွ အမြဲတမ်း သိမ်းဆည်းပေးထားပါသည်။ မည်သည့် ဖုန်း/device တွင်မဆို login ဝင်ရုံဖြင့် အလိုအလျောက် ပြန်လည်ရရှိပါမည်။"
-              : "Purchased credits and unlocked tips are permanently synced to your MST server account. Logging in on any phone or device immediately restores all credits and tip entitlements."}
+            {checkoutReady
+              ? (my
+                ? "Purchase token ကို MST server က Google Play နှင့် စစ်ဆေးပြီးမှသာ Credits ထည့်ရမည်။ Client က Credits ကို ကိုယ်တိုင်မထည့်နိုင်ပါ။"
+                : "A Play purchase token must be verified by the MST server before credits can be granted. The client cannot grant credits locally.")
+              : (my
+                ? "ယခု build သည် fail-closed ဖြစ်သည်။ Simulated purchase၊ local balance တိုးခြင်း၊ direct payment checkout မရှိပါ။"
+                : "This build fails closed: there are no simulated purchases, local balance increases, or direct-payment checkout paths.")}
           </Text>
         </View>
       </View>
@@ -638,14 +510,14 @@ export default function Phase4BReadOnlyHub({ language = "my" }) {
 
   const buyTip = useCallback(async (tip) => {
     const tipId = String(tip?.id || "").trim();
-    if (!tipId || !PURCHASE_ACTION_ENABLED) return;
+    if (!tipId || !TIP_UNLOCK_ACTION_ENABLED) return;
     setPurchaseState({ tipId, loading: true, message: null, error: false });
     try {
       const result = await createTipPurchase(tipId);
       const message = result?.entitled
         ? "Tip access is unlocked."
         : result?.purchaseRequired
-          ? "Purchase created. Complete payment to unlock this tip."
+          ? "More MST Credits are required to unlock this tip."
           : "No purchase is required for this tip.";
       setPurchaseState({ tipId, loading: false, message, error: false });
       setAttempt((v) => v + 1);
@@ -859,7 +731,7 @@ export default function Phase4BReadOnlyHub({ language = "my" }) {
             data={state.tips}
             onPurchase={buyTip}
             purchaseState={purchaseState}
-            purchaseEnabled={PURCHASE_ACTION_ENABLED}
+            purchaseEnabled={TIP_UNLOCK_ACTION_ENABLED}
             colors={colors}
             onOpenCredits={() => setSubTab("credits")}
           />
