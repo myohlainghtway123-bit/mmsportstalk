@@ -1,0 +1,54 @@
+name: Task Install Play Billing
+
+on:
+  push:
+    branches:
+      - fix/final-play-billing-rewarded
+    paths:
+      - '.github/workflows/task-install-play-billing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/final-play-billing-rewarded
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.18.0'
+          cache: npm
+      - name: Install pinned Play Billing bridge
+        run: |
+          npm install --save-exact react-native-iap@14.1.0 react-native-nitro-modules@0.29.2 expo-build-properties@1.0.10
+      - name: Verify dependency lock
+        run: |
+          node - <<'NODE'
+          const p=require('./package.json');
+          const want={
+            'react-native-iap':'14.1.0',
+            'react-native-nitro-modules':'0.29.2',
+            'expo-build-properties':'1.0.10',
+          };
+          for (const [k,v] of Object.entries(want)) {
+            if (p.dependencies?.[k] !== v) throw new Error(`${k} not pinned to ${v}`);
+          }
+          NODE
+          npm ci
+      - name: Commit lockfile update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "4189826+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Play Billing dependencies already pinned."
+            exit 0
+          fi
+          git commit -m "build(android): install Google Play Billing bridge"
+          git push origin HEAD:fix/final-play-billing-rewarded
