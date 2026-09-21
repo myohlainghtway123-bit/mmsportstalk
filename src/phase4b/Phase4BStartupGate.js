@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  loadAppLanguage,
   loadOnboardingPreferences,
   persistAppLanguage,
   saveGuestFavorite,
@@ -332,12 +333,12 @@ export default function Phase4BStartupGate({ children }) {
   useEffect(() => {
     let active = true;
 
-    loadOnboardingPreferences()
-      .then((prefs) => {
+    Promise.all([loadOnboardingPreferences(), loadAppLanguage()])
+      .then(([prefs, storedLanguage]) => {
         if (!active) return;
-        const lang = prefs?.language || null;
+        const lang = storedLanguage || prefs?.language || null;
         const isDone = Boolean(prefs?.onboardingComplete || prefs?.completed || lang);
-        if (lang) {
+        if (lang === "en" || lang === "my") {
           setLanguage(lang);
         }
         if (isDone) {

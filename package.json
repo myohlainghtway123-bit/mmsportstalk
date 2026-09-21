@@ -20,7 +20,8 @@
     "build:ios:internal": "npx eas-cli@latest build --platform ios --profile preview",
     "build:android:store": "npx eas-cli@latest build --platform android --profile production",
     "build:ios:store": "npx eas-cli@latest build --platform ios --profile production",
-    "build:android:store:local": "EXPO_PUBLIC_MST_ENVIRONMENT=production EXPO_PUBLIC_MST_INTERNAL=false EXPO_PUBLIC_MST_SCORES_API_ORIGIN=https://scores-api.myanmarsportstalk.com EXPO_PUBLIC_MST_APP_API_ORIGIN=https://app-api.myanmarsportstalk.com npx eas-cli@latest build --platform android --profile production --local"
+    "build:android:store:local": "EXPO_PUBLIC_MST_ENVIRONMENT=production EXPO_PUBLIC_MST_INTERNAL=false EXPO_PUBLIC_MST_SCORES_API_ORIGIN=https://scores-api.myanmarsportstalk.com EXPO_PUBLIC_MST_APP_API_ORIGIN=https://app-api.myanmarsportstalk.com npx eas-cli@latest build --platform android --profile production --local",
+    "test:release-language-billing": "node scripts/test_release_language_billing_safety.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "15.0.3",

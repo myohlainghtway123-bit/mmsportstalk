@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "@mst-score/onboarding-v1";
+const LANGUAGE_KEY = "@mst-score/app-language-v1";
 const DEFAULT = {
   completed: false,
   onboardingComplete: false,
@@ -20,17 +21,34 @@ function cleanIds(values) {
 
 const storage = AsyncStorage?.setItem ? AsyncStorage : (AsyncStorage?.default || AsyncStorage);
 
+function normalizeLanguage(value) {
+  return value === "en" ? "en" : value === "my" ? "my" : null;
+}
+
 export async function loadOnboardingPreferences() {
   try {
-    const raw = await storage.getItem(KEY);
-    if (!raw) return { ...DEFAULT };
+    const [raw, rawLanguage] = await Promise.all([
+      storage.getItem(KEY),
+      storage.getItem(LANGUAGE_KEY),
+    ]);
+    const storedLanguage = normalizeLanguage(rawLanguage);
+    if (!raw) {
+      const hasStoredLanguage = Boolean(storedLanguage);
+      return {
+        ...DEFAULT,
+        language: storedLanguage,
+        completed: hasStoredLanguage,
+        onboardingComplete: hasStoredLanguage,
+      };
+    }
     const parsed = JSON.parse(raw);
-    const hasLanguage = parsed?.language === "en" || parsed?.language === "my";
+    const language = storedLanguage || normalizeLanguage(parsed?.language);
+    const hasLanguage = Boolean(language);
     const isCompleted = parsed?.completed === true || parsed?.onboardingComplete === true || hasLanguage;
     return {
       ...DEFAULT,
       ...parsed,
-      language: parsed?.language === "en" ? "en" : parsed?.language === "my" ? "my" : null,
+      language,
       teams: cleanIds(parsed?.teams),
       competitions: cleanIds(parsed?.competitions),
       players: cleanIds(parsed?.players),
@@ -48,11 +66,13 @@ export async function loadOnboardingPreferences() {
 
 export async function saveOnboardingPreferences(next) {
   const current = await loadOnboardingPreferences();
+  const requestedLanguage = normalizeLanguage(next?.language);
   const nextComplete = next?.onboardingComplete ?? next?.completed;
   const isCompleted = nextComplete !== undefined ? Boolean(nextComplete) : current.completed;
   const merged = {
     ...current,
     ...next,
+    language: requestedLanguage || current.language || null,
     completed: isCompleted,
     onboardingComplete: isCompleted,
     teams: cleanIds(next?.teams ?? current.teams),
@@ -63,7 +83,21 @@ export async function saveOnboardingPreferences(next) {
     pendingSyncEntities: Array.isArray(next?.pendingSyncEntities) ? next.pendingSyncEntities : current.pendingSyncEntities,
   };
   await storage.setItem(KEY, JSON.stringify(merged));
+  if (requestedLanguage) {
+    await storage.setItem(LANGUAGE_KEY, requestedLanguage);
+  }
   return merged;
+}
+
+export async function loadAppLanguage() {
+  try {
+    const storedLanguage = normalizeLanguage(await storage.getItem(LANGUAGE_KEY));
+    if (storedLanguage) return storedLanguage;
+    const prefs = await loadOnboardingPreferences();
+    return normalizeLanguage(prefs?.language);
+  } catch (_) {
+    return null;
+  }
 }
 
 export async function saveGuestFavorite({ kind, id, name, logo, photo, country, active }) {
@@ -142,6 +176,9 @@ export function subscribeAppLanguage(listener) {
 
 export async function persistAppLanguage(language) {
   const clean = language === "en" ? "en" : "my";
+  // Language has its own durable key so unrelated onboarding/favorite writes can
+  // never roll the user's explicit choice back to another locale.
+  await storage.setItem(LANGUAGE_KEY, clean);
   const result = await saveOnboardingPreferences({
     language: clean,
     completed: true,
