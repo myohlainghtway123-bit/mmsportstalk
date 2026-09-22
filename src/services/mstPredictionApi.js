@@ -1,16 +1,20 @@
 import { MST_API_BASE } from "./mstApiConfig";
 
-export async function loadMstMatchPrediction(matchId, { signal } = {}) {
+export async function loadMstMatchPrediction(matchId, { signal, language = "en" } = {}) {
   const id = String(matchId || "").trim();
   if (!/^\d{1,12}$/.test(id)) return null;
 
-  const response = await fetch(`${MST_API_BASE}/football/mst-prediction?matchId=${encodeURIComponent(id)}`, {
-    headers: {
-      Accept: "application/json",
-      "x-mst-client": "mobile-app",
+  const locale = language === "my" ? "my" : "en";
+  const response = await fetch(
+    `${MST_API_BASE}/football/mst-prediction?matchId=${encodeURIComponent(id)}&locale=${locale}`,
+    {
+      headers: {
+        Accept: "application/json",
+        "x-mst-client": "mobile-app",
+      },
+      signal,
     },
-    signal,
-  });
+  );
 
   const text = await response.text();
   let payload = null;
