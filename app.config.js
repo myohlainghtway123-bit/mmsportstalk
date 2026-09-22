@@ -9,6 +9,11 @@ const iosAppId = readEnv("MST_ADMOB_IOS_APP_ID");
 
 const plugins = [...(base.expo.plugins || [])];
 
+// Native Google Play Billing for consumable MST Credits.
+if (!plugins.some((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === "expo-iap")) {
+  plugins.push("expo-iap");
+}
+
 // AdMob App IDs are public native manifest identifiers, not secrets.
 // Production Android must always include the canonical App ID so the native
 // Google Mobile Ads SDK cannot crash at startup when EAS environment variables
