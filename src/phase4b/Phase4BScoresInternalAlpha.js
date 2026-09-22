@@ -43,7 +43,7 @@ import Phase4BAuthModal from "./Phase4BAuthModal.js";
 import Phase4BStartupGate from "./Phase4BStartupGate.js";
 import Phase4BRewardedPrediction from "./Phase4BRewardedPrediction";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { loadOnboardingPreferences, persistAppLanguage, subscribeAppLanguage } from "../services/onboardingStore.js";
+import { loadAppLanguage, persistAppLanguage, subscribeAppLanguage } from "../services/onboardingStore.js";
 import { t } from "../i18n/translations";
 import { ThemeProvider, useTheme } from "../theme/ThemeContext";
 import { trackEvent } from "../services/analytics.js";
@@ -204,6 +204,23 @@ function matchStateText(match, language = "en") {
   return isLive(match) || isFinished(match) ? statusText(match, language) : kickoffText(match?.kickoff_at);
 }
 
+const PINNED_COMPETITION_PRIORITY = [
+  "39",  // Premier League
+  "140", // La Liga
+  "135", // Serie A
+  "78",  // Bundesliga
+  "61",  // Ligue 1
+  "2",   // UEFA Champions League
+  "3",   // UEFA Europa League
+  "848", // UEFA Conference League
+  "1",   // FIFA World Cup
+  "4",   // UEFA European Championship
+];
+
+const PINNED_COMPETITION_RANK = new Map(
+  PINNED_COMPETITION_PRIORITY.map((id, index) => [id, index]),
+);
+
 const MAJOR_LEAGUE_PATTERNS = [
   // Tier 1: Continental & World Elite
   { regex: /champions league|uefa cl/i, score: 2000 },
@@ -276,7 +293,15 @@ function matchHasBigTeam(match) {
   return isBigTeam(home) || isBigTeam(away);
 }
 
-function getCompetitionScore(compName, matches = []) {
+function getCompetitionScore(compName, matches = [], competitionId = "") {
+  const cleanCompetitionId = String(competitionId || "").trim();
+  const pinnedRank = PINNED_COMPETITION_RANK.get(cleanCompetitionId);
+  if (pinnedRank !== undefined) {
+    // Exact provider IDs always outrank lower-tier competitions. Live/big-team
+    // bonuses only reorder matches inside a pinned competition, never the league order.
+    return 100_000 - pinnedRank * 1_000;
+  }
+
   let score = 100;
   const name = String(compName || "").trim();
   for (const item of MAJOR_LEAGUE_PATTERNS) {
@@ -333,7 +358,7 @@ function groupByCompetition(matches) {
       return String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""));
     });
 
-    group.score = getCompetitionScore(group.name, group.matches);
+    group.score = getCompetitionScore(group.name, group.matches, group.id);
   }
 
   // Sort competitions by priority score descending: Big Leagues & Big Teams & Live Competitions first!
@@ -364,7 +389,7 @@ function sectionSummary(value) {
 }
 
 function EnvironmentBanner() {
-  if (process.env.EXPO_PUBLIC_MST_ENVIRONMENT === "production" || (!__DEV__ && process.env.EXPO_PUBLIC_MST_INTERNAL !== "true")) {
+  if (process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "staging" || process.env.EXPO_PUBLIC_MST_INTERNAL !== "true") {
     return null;
   }
   let colors = {};
@@ -418,12 +443,12 @@ const HomeBrandHeader = memo(function HomeBrandHeader({ onOpenSearch, onOpenProf
         <Text style={s.brandWordMST}>MST</Text>
         <Text style={[s.brandWordScores, { color: colors.text }]}>SCORES</Text>
       </View>
-      <View style={s.brandRight}>
+      <View style={s.headerActions}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search teams, players or matches"
           onPress={onOpenSearch}
-          style={s.headerIconButton}
+          style={s.headerIconBtn}
         >
           <Ionicons name="search" size={20} color={colors.secondary || "#C4C4CC"} />
         </Pressable>
@@ -431,7 +456,7 @@ const HomeBrandHeader = memo(function HomeBrandHeader({ onOpenSearch, onOpenProf
           accessibilityRole="button"
           accessibilityLabel="Account and Profile"
           onPress={onOpenProfile}
-          style={s.headerIconButton}
+          style={s.headerIconBtn}
         >
           {userAvatar ? (
             <Image source={{ uri: userAvatar }} style={s.headerAvatarSmall} />
@@ -677,10 +702,19 @@ const KNOWN_COMP_LOGOS = {
   "world cup": "https://media.api-sports.io/football/leagues/1.png",
 };
 
-const TeamMark = memo(function TeamMark({ name, uri, size = 24 }) {
+function providerMediaUrl(kind, entityId) {
+  const cleanId = String(entityId ?? "").trim();
+  if (!/^\d+$/.test(cleanId)) return null;
+  const folder = kind === "competition" ? "leagues" : "teams";
+  return `https://media.api-sports.io/football/${folder}/${cleanId}.png`;
+}
+
+const TeamMark = memo(function TeamMark({ name, uri, entityId = null, kind = "team", size = 24 }) {
   const [failed, setFailed] = useState(false);
   const cleanName = String(name || "").trim().toLowerCase();
-  const effectiveUri = (!failed && uri) ? uri : (KNOWN_TEAM_LOGOS[cleanName] || KNOWN_COMP_LOGOS[cleanName] || null);
+  const idFallback = providerMediaUrl(kind, entityId);
+  const namedFallback = KNOWN_TEAM_LOGOS[cleanName] || KNOWN_COMP_LOGOS[cleanName] || null;
+  const effectiveUri = failed ? namedFallback : (uri || idFallback || namedFallback);
 
   if (effectiveUri) {
     return (
@@ -757,6 +791,8 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
   const awayName = match?.away_team_name || match?.awayTeam?.name || match?.away?.name || "Away";
   const homeLogo = match?.home_team_logo_url || match?.homeTeam?.logo || match?.home?.logo;
   const awayLogo = match?.away_team_logo_url || match?.awayTeam?.logo || match?.away?.logo;
+  const homeTeamId = match?.home_team_id || match?.homeTeam?.id || match?.home?.id || null;
+  const awayTeamId = match?.away_team_id || match?.awayTeam?.id || match?.away?.id || null;
 
   return (
     <Pressable
@@ -800,7 +836,7 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
       <View style={s.fotmobTeamsCol}>
         {/* Home Team */}
         <View style={s.fotmobTeamRow}>
-          <TeamMark name={homeName} uri={homeLogo} size={20} />
+          <TeamMark name={homeName} uri={homeLogo} entityId={homeTeamId} kind="team" size={20} />
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -823,7 +859,7 @@ const MatchRow = memo(function MatchRow({ match, onOpen, language = "en" }) {
 
         {/* Away Team */}
         <View style={s.fotmobTeamRow}>
-          <TeamMark name={awayName} uri={awayLogo} size={20} />
+          <TeamMark name={awayName} uri={awayLogo} entityId={awayTeamId} kind="team" size={20} />
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -881,7 +917,7 @@ const LeagueGroup = memo(function LeagueGroup({ group, isCollapsed = false, onTo
           },
         ]}
       >
-        <TeamMark name={group.name} uri={group.logo} size={20} />
+        <TeamMark name={group.name} uri={group.logo} entityId={group.id} kind="competition" size={20} />
         <Text numberOfLines={1} style={[s.leagueName, { color: isDark ? "#FFFFFF" : "#111827" }]}>
           {group.name}
         </Text>
@@ -2379,7 +2415,8 @@ function Phase4BScoresInternalAlphaContent() {
   const [subScreen, setSubScreen] = useState(null); // null | "search" | "profile" | "settings"
   const [userAvatar, setUserAvatar] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
-  const [language, setLanguage] = useState("my");
+  const [language, setLanguage] = useState(null);
+  const [languageReady, setLanguageReady] = useState(false);
 
   const loadUserData = useCallback(() => {
     getAuthStatus()
@@ -2402,24 +2439,38 @@ function Phase4BScoresInternalAlphaContent() {
   }, [active, subScreen, selectedMatch, selectedEntity]);
 
   useEffect(() => {
-    loadOnboardingPreferences()
-      .then((prefs) => {
-        if (prefs?.language === "en" || prefs?.language === "my") {
-          setLanguage(prefs.language);
-        }
+    let active = true;
+    loadAppLanguage()
+      .then((storedLanguage) => {
+        if (!active) return;
+        setLanguage(storedLanguage === "en" ? "en" : "my");
+        setLanguageReady(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!active) return;
+        setLanguage("my");
+        setLanguageReady(true);
+      });
+
     const unsub = subscribeAppLanguage((lang) => {
+      if (!active) return;
       if (lang === "en" || lang === "my") {
         setLanguage(lang);
+        setLanguageReady(true);
       }
     });
-    return () => unsub();
+
+    return () => {
+      active = false;
+      unsub();
+    };
   }, []);
 
   const handleSetLanguage = useCallback((nextLang) => {
     const clean = nextLang === "en" ? "en" : "my";
+    // Update immediately, then persist to the dedicated language key.
     setLanguage(clean);
+    setLanguageReady(true);
     persistAppLanguage(clean).catch(() => {});
   }, []);
 
@@ -2524,6 +2575,14 @@ function Phase4BScoresInternalAlphaContent() {
     const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
     return () => subscription.remove();
   }, [authModalVisible, selectedEntity, previewMatch, subScreen, selectedMatch, active, selectNav]);
+
+  if (!languageReady || (language !== "en" && language !== "my")) {
+    return (
+      <View style={[s.root, { backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator color={colors.red || T.color.red} />
+      </View>
+    );
+  }
 
   // Render secondary screens if active
   let content;

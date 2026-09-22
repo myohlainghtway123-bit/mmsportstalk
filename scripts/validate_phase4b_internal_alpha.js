@@ -18,7 +18,13 @@ assert.doesNotMatch(app, /AppFinalShell/);
 assert.match(api, /https:\/\/scores-api-staging\.myanmarsportstalk\.com/);
 assert.match(api, /SCORES_API_ORIGIN_REQUIRED/);
 assert.match(api, /PRODUCTION_STAGING_ORIGIN_BLOCKED/);
-assert.doesNotMatch(phase4b, /app-api\.myanmarsportstalk\.com/);
+// Production Scores may read the shared, read-only API-Football-backed match feed
+// from the MST App API. Keep the separation boundary on prediction writes and
+// unrelated backend/database access rather than banning the App API hostname.
+assert.match(api, /app-api\.myanmarsportstalk\.com/);
+assert.match(api, /\/api\/football\/matches\?date=/);
+assert.doesNotMatch(api, /\/api\/predictions(?:\/|\?|["'`])/);
+assert.doesNotMatch(api, /method:\s*["'](?:PATCH|DELETE)["']/);
 assert.doesNotMatch(phase4b, /\/v1\/predictions|savePrediction|createPrediction|submitPrediction|editPrediction/);
 assert.doesNotMatch(phase4b, /D1Database|wrangler\s+d1|mst-prediction-core|mst-football-staging/);
 
@@ -82,6 +88,29 @@ assert.equal(profile?.android?.buildType, "apk");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_ENVIRONMENT, "staging");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_INTERNAL, "true");
 assert.equal(profile?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN, "https://scores-api-staging.myanmarsportstalk.com");
+const productionProfile = eas.build?.production;
+assert.equal(productionProfile?.environment, "production");
+assert.equal(productionProfile?.env?.EXPO_PUBLIC_MST_ENVIRONMENT, "production");
+assert.equal(productionProfile?.env?.EXPO_PUBLIC_MST_INTERNAL, "false");
+assert.equal(productionProfile?.env?.EXPO_PUBLIC_MST_SCORES_API_ORIGIN, "https://scores-api.myanmarsportstalk.com");
+assert.equal(productionProfile?.env?.EXPO_PUBLIC_MST_APP_API_ORIGIN, "https://app-api.myanmarsportstalk.com");
+assert.equal(productionProfile?.env?.MST_ADMOB_ANDROID_APP_ID, "ca-app-pub-4446937986150717~8877382465");
+const appConfig = read("app.config.js");
+assert.match(appConfig, /PRODUCTION_ANDROID_ADMOB_APP_ID/);
+assert.match(appConfig, /react-native-google-mobile-ads/);
+assert.match(screen, /EXPO_PUBLIC_MST_ENVIRONMENT !== "staging"/);
+assert.match(screen, /EXPO_PUBLIC_MST_INTERNAL !== "true"/);
+assert.match(api, /APP_FOOTBALL_TIME_ZONE = "Asia\/Bangkok"/);
+assert.match(api, /\/api\/football\/matches\?date=/);
+assert.match(api, /timezone=/);
+assert.match(api, /providerMediaUrl\("teams"/);
+assert.match(api, /providerMediaUrl\("leagues"/);
+for (const competitionId of ["39", "140", "135", "78", "61", "2", "3", "848", "1", "4"]) {
+  assert.ok(screen.includes(`"${competitionId}"`), `missing pinned competition priority id: ${competitionId}`);
+}
+assert.match(screen, /PINNED_COMPETITION_RANK/);
+assert.match(screen, /entityId=\{homeTeamId\}/);
+assert.match(screen, /entityId=\{awayTeamId\}/);
 assert.match(workflow, /API_ORIGIN='https:\/\/app-api\.myanmarsportstalk\.com'/);
 assert.match(workflow, /scores-api-staging\.myanmarsportstalk\.com/);
 assert.match(workflow, /dist-ci-default default/);

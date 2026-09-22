@@ -2,7 +2,11 @@ export const MST_SCORES_PRODUCTION_ORIGIN = "https://scores-api.myanmarsportstal
 export const MST_SCORES_STAGING_ORIGIN = "https://scores-api-staging.myanmarsportstalk.com";
 export const SCORES_REQUEST_TIMEOUT_MS = 8_000;
 
-export const MST_SCORES_ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
+const RAW_MST_SCORES_ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "").trim().toLowerCase();
+const IS_DEVELOPMENT_RUNTIME = typeof __DEV__ !== "undefined" && __DEV__ === true;
+// Fail safe for release builds: production is the default when no environment is injected.
+// Internal builds must explicitly set EXPO_PUBLIC_MST_ENVIRONMENT=staging.
+export const MST_SCORES_ENVIRONMENT = RAW_MST_SCORES_ENVIRONMENT || (IS_DEVELOPMENT_RUNTIME ? "staging" : "production");
 const CONFIGURED_SCORES_ORIGIN = String(process.env.EXPO_PUBLIC_MST_SCORES_API_ORIGIN || "").trim().replace(/\/+$/, "");
 export const MST_SCORES_API_ORIGIN = CONFIGURED_SCORES_ORIGIN || (MST_SCORES_ENVIRONMENT === "production" ? MST_SCORES_PRODUCTION_ORIGIN : MST_SCORES_STAGING_ORIGIN);
 
@@ -347,11 +351,102 @@ export async function loadScoresOverview(options) {
 const INFLIGHT_DATES = new Map();
 const DATE_CACHE = new Map();
 
+const APP_FOOTBALL_TIME_ZONE = "Asia/Bangkok";
+const APP_API_PRODUCTION_ORIGIN = "https://app-api.myanmarsportstalk.com";
+
+function providerMediaUrl(kind, id) {
+  const cleanId = String(id ?? "").trim();
+  return /^\d+$/.test(cleanId)
+    ? `https://media.api-sports.io/football/${kind}/${cleanId}.png`
+    : null;
+}
+
+function normalizeMatchAssets(match) {
+  const competitionId = String(match?.competition_id ?? match?.competition?.id ?? "").trim();
+  const homeTeamId = String(match?.home_team_id ?? match?.homeTeam?.id ?? match?.home?.id ?? "").trim();
+  const awayTeamId = String(match?.away_team_id ?? match?.awayTeam?.id ?? match?.away?.id ?? "").trim();
+  return {
+    ...match,
+    competition_logo_url:
+      match?.competition_logo_url
+      || match?.competition?.logo
+      || providerMediaUrl("leagues", competitionId),
+    home_team_logo_url:
+      match?.home_team_logo_url
+      || match?.homeTeam?.logo
+      || match?.home?.logo
+      || providerMediaUrl("teams", homeTeamId),
+    away_team_logo_url:
+      match?.away_team_logo_url
+      || match?.awayTeam?.logo
+      || match?.away?.logo
+      || providerMediaUrl("teams", awayTeamId),
+  };
+}
+
+function normalizeProviderMatch(item, idx) {
+  const competitionId = String(item?.competition?.id || "football");
+  const homeTeamId = String(item?.homeTeam?.id || item?.home?.id || "home");
+  const awayTeamId = String(item?.awayTeam?.id || item?.away?.id || "away");
+  return normalizeMatchAssets({
+    id: String(item?.id || `mst-${idx}`),
+    competition_id: competitionId,
+    competition_name: item?.competition?.name || "Football",
+    competition_logo_url: item?.competition?.logo || providerMediaUrl("leagues", competitionId),
+    competition_country: item?.competition?.country || null,
+    competition_round: item?.competition?.round || null,
+    home_team_id: homeTeamId,
+    home_team_name: item?.homeTeam?.name || item?.home?.name || "Home",
+    home_team_logo_url: item?.homeTeam?.logo || item?.home?.logo || providerMediaUrl("teams", homeTeamId),
+    away_team_id: awayTeamId,
+    away_team_name: item?.awayTeam?.name || item?.away?.name || "Away",
+    away_team_logo_url: item?.awayTeam?.logo || item?.away?.logo || providerMediaUrl("teams", awayTeamId),
+    kickoff_at: item?.kickoff,
+    status: item?.status || "scheduled",
+    status_detail: item?.statusLabel || item?.status || "Scheduled",
+    minute: item?.minute ?? null,
+    home_score: item?.homeScore ?? null,
+    away_score: item?.awayScore ?? null,
+    venue: item?.venue ?? null,
+    city: item?.city ?? null,
+    referee: item?.referee ?? null,
+  });
+}
+
+async function loadProductionFootballMatches(cleanDate, options = {}) {
+  // Unit tests and internal/staging builds keep using the Scores Product API contract.
+  if (options?.fetchImpl || MST_SCORES_ENVIRONMENT !== "production") return [];
+
+  const configuredHost = String(process.env.EXPO_PUBLIC_MST_APP_API_ORIGIN || "").trim().replace(/\/+$/, "");
+  const appOrigin = configuredHost || APP_API_PRODUCTION_ORIGIN;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7_000);
+
+  try {
+    const response = await fetch(
+      `${appOrigin}/api/football/matches?date=${encodeURIComponent(cleanDate)}&timezone=${encodeURIComponent(APP_FOOTBALL_TIME_ZONE)}`,
+      {
+        headers: { Accept: "application/json", "x-mst-client": "mst-scores" },
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) return [];
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    return rows.map(normalizeProviderMatch);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function executeScoresForDate(cleanDate, options = {}) {
   const encoded = encodeURIComponent(cleanDate);
-  const [fixturesRes, resultsRes] = await Promise.allSettled([
+  const [fixturesRes, resultsRes, providerRes] = await Promise.allSettled([
     scoresStagingGet(`/v1/fixtures?date=${encoded}&limit=50`, options),
     scoresStagingGet(`/v1/results?date=${encoded}&limit=50`, options),
+    loadProductionFootballMatches(cleanDate, options),
   ]);
 
   const map = new Map();
@@ -361,7 +456,7 @@ async function executeScoresForDate(cleanDate, options = {}) {
     reqId = fixturesRes.value.requestId || reqId;
     for (const m of fixturesRes.value.data) {
       const id = canonicalMatchId(m);
-      if (id) map.set(id, { ...(map.get(id) || {}), ...m });
+      if (id) map.set(id, normalizeMatchAssets({ ...(map.get(id) || {}), ...m }));
     }
   }
 
@@ -369,8 +464,29 @@ async function executeScoresForDate(cleanDate, options = {}) {
     reqId = resultsRes.value.requestId || reqId;
     for (const m of resultsRes.value.data) {
       const id = canonicalMatchId(m);
-      if (id) map.set(id, { ...(map.get(id) || {}), ...m });
+      if (id) map.set(id, normalizeMatchAssets({ ...(map.get(id) || {}), ...m }));
     }
+  }
+
+  const providerMatches = providerRes.status === "fulfilled" && Array.isArray(providerRes.value)
+    ? providerRes.value
+    : [];
+
+  // Production match rows come from the same real API-Football-backed app feed
+  // used by the website. Scores Product API fields are merged on top only when
+  // they add app-specific data; provider-owned teams, logos, scores and kickoff
+  // remain authoritative for the visible match list.
+  if (providerMatches.length > 0) {
+    const merged = providerMatches.map((providerMatch) => {
+      const id = canonicalMatchId(providerMatch);
+      const productMatch = id ? map.get(id) : null;
+      return normalizeMatchAssets({ ...(productMatch || {}), ...providerMatch });
+    });
+    return {
+      matches: merged.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
+      requestId: reqId || "app-api-football",
+      warnings: [],
+    };
   }
 
   // If a custom fetchImpl is supplied (in test suites), return staging map directly
@@ -405,47 +521,8 @@ async function executeScoresForDate(cleanDate, options = {}) {
     };
   }
 
-  // Only fallback to live API-Football provider if zero matches exist, protected with strict 3.5s timeout
-  try {
-    const fallbackController = new AbortController();
-    const fallbackTimer = setTimeout(() => fallbackController.abort(), 3500);
-    const fallbackHost = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_MST_APP_API_ORIGIN)
-      ? process.env.EXPO_PUBLIC_MST_APP_API_ORIGIN
-      : "https://" + ["app", "api"].join("-") + ".myanmar" + "sportstalk.com";
-    const res = await fetch(`${fallbackHost}/api/football/matches?date=${encoded}`, {
-      headers: { Accept: "application/json" },
-      signal: options?.signal || fallbackController.signal,
-    }).finally(() => clearTimeout(fallbackTimer));
-    if (res.ok) {
-      const json = await res.json();
-      const rows = Array.isArray(json?.data) ? json.data : [];
-      if (rows.length > 0) {
-        const liveMatches = rows.map((item, idx) => ({
-          id: String(item.id || `mst-${idx}`),
-          competition_id: String(item.competition?.id || "football"),
-          competition_name: item.competition?.name || "Football",
-          competition_logo_url: item.competition?.logo || null,
-          home_team_id: String(item.homeTeam?.id || item.home?.id || "home"),
-          home_team_name: item.homeTeam?.name || item.home?.name || "Home",
-          home_team_logo_url: item.homeTeam?.logo || item.home?.logo || null,
-          away_team_id: String(item.awayTeam?.id || item.away?.id || "away"),
-          away_team_name: item.awayTeam?.name || item.away?.name || "Away",
-          away_team_logo_url: item.awayTeam?.logo || item.away?.logo || null,
-          kickoff_at: item.kickoff,
-          status: item.status || "scheduled",
-          status_detail: item.statusLabel || item.status || "Scheduled",
-          minute: item.minute,
-          home_score: item.homeScore,
-          away_score: item.awayScore,
-        }));
-        return {
-          matches: liveMatches.sort((a, b) => String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""))),
-          requestId: reqId || "live-api-football",
-          warnings: [],
-        };
-      }
-    }
-  } catch (_) {}
+  // If the production app feed is temporarily unavailable, fall back to the
+  // Scores Product API/overview rather than showing a blank screen.
 
   try {
     const overview = await executeScoresOverview(options);

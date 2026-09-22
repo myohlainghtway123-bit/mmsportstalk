@@ -60,10 +60,11 @@ assert.match(footballClassification, /country === "england" && \/\\b\(premier\\s
 
 assert.doesNotMatch(shell, /\[\?&\]token=/);
 assert.doesNotMatch(billing, /Math\.random|token_\$\{|GPA\.\$\{/);
-assert.match(billing, /GOOGLE_PLAY_BILLING_NOT_CONFIGURED/);
+assert.match(billing, /verifyPlayPurchaseOnServer/);
+assert.match(billing, /purchaseToken/);
 assert.match(billing, /\/account\/wallet\/packages/);
 assert.match(billing, /purchasingEnabled\s*===\s*true/);
-assert.match(billing, /provider\?\.enabled\s*===\s*true/);
+assert.match(billing, /googlePlay\?\.enabled\s*===\s*true/);
 
 for (const workflow of [validationWorkflow, easWorkflow]) {
   assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v[1-6]\b/);
