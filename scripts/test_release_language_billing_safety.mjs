@@ -35,6 +35,11 @@ assert.match(appConfig, /kotlinVersion: "2\.1\.20"/);
 
 assert.match(tipsHub, /useIAP/);
 assert.match(tipsHub, /requestPurchase/);
+assert.match(tipsHub, /google:\s*\{[\s\S]*skus:\s*\[productId\][\s\S]*obfuscatedAccountId:\s*billingAccountId/);
+assert.match(tipsHub, /apple:\s*\{\s*sku:\s*productId\s*\}/);
+assert.doesNotMatch(tipsHub, /android:\s*\{\s*skus:/);
+assert.doesNotMatch(tipsHub, /ios:\s*\{\s*sku:/);
+assert.match(tipsHub, /auth\?\.user\?\.id/);
 assert.match(tipsHub, /verifyPlayPurchaseOnServer/);
 assert.match(tipsHub, /finishTransaction\(\{ purchase, isConsumable: true \}\)/);
 assert.match(tipsHub, /BUY WITH GOOGLE PLAY/);
