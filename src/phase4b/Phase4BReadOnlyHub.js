@@ -413,7 +413,8 @@ function CreditPanel({ my = true, colors = C }) {
     setPurchaseMsg(null);
 
     const auth = await getAuthStatus().catch(() => null);
-    if (!auth?.authenticated) {
+    const billingAccountId = String(auth?.user?.id || "").trim();
+    if (!auth?.authenticated || !billingAccountId || billingAccountId.length > 64) {
       setPurchaseMsg({
         error: true,
         text: my
@@ -439,8 +440,14 @@ function CreditPanel({ my = true, colors = C }) {
     try {
       await requestPurchase({
         request: {
-          android: { skus: [productId] },
-          ios: { sku: productId },
+          google: {
+            skus: [productId],
+            obfuscatedAccountId: billingAccountId,
+          },
+          apple: {
+            sku: productId,
+            appAccountToken: billingAccountId,
+          },
         },
         type: "in-app",
       });
