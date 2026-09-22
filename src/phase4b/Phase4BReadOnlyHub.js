@@ -444,10 +444,7 @@ function CreditPanel({ my = true, colors = C }) {
             skus: [productId],
             obfuscatedAccountId: billingAccountId,
           },
-          apple: {
-            sku: productId,
-            appAccountToken: billingAccountId,
-          },
+          apple: { sku: productId },
         },
         type: "in-app",
       });
