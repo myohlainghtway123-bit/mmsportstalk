@@ -59,7 +59,7 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
       return () => controller.abort();
     }
 
-    loadMstMatchPrediction(matchId, { signal: controller.signal })
+    loadMstMatchPrediction(matchId, { signal: controller.signal, language })
       .then((value) => {
         if (!active) return;
         setPrediction(value || null);
@@ -76,7 +76,7 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
       active = false;
       controller.abort();
     };
-  }, [matchId]);
+  }, [matchId, language]);
 
   useEffect(() => {
     let alive = true;
