@@ -100,45 +100,21 @@ export async function verifyPlayPurchaseOnServer({
   });
 }
 
-/**
- * Fail-closed purchase entry point.
- *
- * The old UI simulated successful purchases and locally increased a balance.
- * That is forbidden for release. A later native Google Play Billing integration
- * must obtain a real purchase token, send it to verifyPlayPurchaseOnServer(),
- * and only show granted credits after the server verifies the Play purchase.
- *
- * Until both the Play product catalog and server-side Android Publisher
- * verification are enabled, this function must never charge or grant credits.
- */
-export async function purchaseCredits(packageId) {
-  const storefront = await getCreditStorefront();
-  const pkg = storefront.packages.find((item) => item.id === packageId);
-  if (!pkg) {
-    const error = new Error("Invalid credit package selected.");
-    error.code = "INVALID_CREDIT_PACKAGE";
-    throw error;
-  }
-
-  if (!storefront.purchasingEnabled) {
-    const error = new Error(
-      "Google Play Billing is not enabled yet. No payment was submitted and no credits were changed.",
-    );
-    error.code = "GOOGLE_PLAY_BILLING_NOT_CONFIGURED";
-    throw error;
-  }
-
-  // Native checkout is deliberately not faked. When the real Play Billing
-  // client is added, it must return a purchaseToken that is verified by the
-  // server before any wallet mutation is reflected in the app.
-  const error = new Error(
-    "Google Play Billing checkout is not connected in this build. No payment was submitted and no credits were changed.",
-  );
-  error.code = "GOOGLE_PLAY_BILLING_CLIENT_NOT_CONNECTED";
-  error.productId = pkg.playProductId;
-  throw error;
+export function creditPackageForProduct(storefront, productId) {
+  const clean = String(productId || "").trim();
+  if (!clean) return null;
+  return (Array.isArray(storefront?.packages) ? storefront.packages : [])
+    .find((item) => item.playProductId === clean || item.id === clean) || null;
 }
 
+export function playProductIdForPackage(pkg) {
+  return String(pkg?.playProductId || pkg?.googlePlayProductId || pkg?.id || "").trim();
+}
+
+/**
+ * Native checkout lives in the Expo IAP hook inside the Credits UI.
+ * This service owns only the server-authoritative catalog and verification call.
+ */
 export async function restorePurchases() {
   // Server is the source of truth for wallet/entitlement state.
   return api("/tips/me");
