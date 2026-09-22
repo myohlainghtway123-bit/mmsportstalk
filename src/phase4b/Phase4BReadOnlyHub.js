@@ -435,12 +435,26 @@ function CreditPanel({ my = true, colors = C }) {
       return;
     }
 
+    const accountId = String(auth?.user?.id || "").trim();
+    if (!accountId) {
+      setPurchaseMsg({
+        error: true,
+        text: my
+          ? "MST account ID မရရှိသေးပါ။ အကောင့်ကို ပြန်ဝင်ပြီး ထပ်စမ်းပါ။"
+          : "Your MST account ID is unavailable. Sign in again and retry.",
+      });
+      return;
+    }
+
     setProcessingId(pkg.id);
     try {
       await requestPurchase({
         request: {
-          android: { skus: [productId] },
-          ios: { sku: productId },
+          google: {
+            skus: [productId],
+            obfuscatedAccountId: accountId,
+          },
+          apple: { sku: productId },
         },
         type: "in-app",
       });
