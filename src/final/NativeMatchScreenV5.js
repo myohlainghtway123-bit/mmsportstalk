@@ -54,6 +54,7 @@ import {
 import { getMatchChat, postMatchChat, reportMatchChat } from "../services/communityApi";
 import { shareMatch } from "../utils/shareUtils";
 import MatchOddsCard from "./MatchOddsCard";
+import Phase4BRewardedPrediction from "../phase4b/Phase4BRewardedPrediction";
 
 const TABS = ["FACTS", "CHAT", "LINEUP", "STATS", "H2H", "TABLE", "ODDS"];
 const tx = (my, en, myText) => (my ? myText : en);
@@ -1699,6 +1700,7 @@ export default function NativeMatchScreenV5({ match, goBack, language = "my" }) 
         {tab === "FACTS" ? (
           <>
             <Predictor match={current} my={my} colors={colors} />
+            <Phase4BRewardedPrediction match={current} language={language} colors={colors} />
             <Events payload={state.data?.events} my={my} colors={colors} />
             <TeamPreviousMatchesCard
               title={current?.home?.name ? `${current.home.name} (Home Form)` : tx(my, "Home team form", "အိမ်ရှင် နောက်ဆုံးပွဲများ")}
