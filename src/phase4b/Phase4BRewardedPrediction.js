@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -23,20 +23,71 @@ const C = {
   gold: "#F59E0B",
 };
 
-const UNLOCK_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const UNLOCK_DURATION_MS = 24 * 60 * 60 * 1000;
+const AD_LOAD_TIMEOUT_MS = 12_000;
+
+function asPredictionText(value) {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value).trim();
+  if (Array.isArray(value)) return value.map(asPredictionText).filter(Boolean).join(" · ");
+  if (typeof value === "object") {
+    const direct =
+      value.text ||
+      value.summary ||
+      value.analysis ||
+      value.reasoning ||
+      value.prediction ||
+      value.pick ||
+      value.selection ||
+      value.value;
+    if (direct) return asPredictionText(direct);
+
+    const homeScore = Number(value.homeScore ?? value.home_score);
+    const awayScore = Number(value.awayScore ?? value.away_score);
+    if (Number.isFinite(homeScore) && Number.isFinite(awayScore)) {
+      const homeTeam = String(value.homeTeam || value.home_team || "Home").trim();
+      const awayTeam = String(value.awayTeam || value.away_team || "Away").trim();
+      const confidence = Number(value.confidence);
+      return `${homeTeam} ${homeScore}–${awayScore} ${awayTeam}${Number.isFinite(confidence) ? ` · Confidence ${confidence}%` : ""}`;
+    }
+  }
+  return "";
+}
+
+function mstPredictionForMatch(match) {
+  const candidates = [
+    match?.mst_admin_prediction,
+    match?.mstAdminPrediction,
+    match?.mst_ai_prediction,
+    match?.mstAiPrediction,
+    match?.premium_prediction,
+    match?.premiumPrediction,
+    match?.editorial_prediction,
+    match?.editorialPrediction,
+  ];
+
+  for (const candidate of candidates) {
+    const text = asPredictionText(candidate);
+    if (text) return text;
+  }
+  return "";
+}
 
 export default function Phase4BRewardedPrediction({ match, language = "my", colors = C }) {
   const my = language === "my";
   const matchId = String(match?.id || match?.match_id || "").trim();
+  const predictionText = useMemo(() => mstPredictionForMatch(match), [match]);
+  const hasPublishedPrediction = Boolean(predictionText);
 
   const [unlocked, setUnlocked] = useState(false);
   const [loadingAd, setLoadingAd] = useState(false);
   const [adError, setAdError] = useState(null);
+  const cleanupRef = useRef(() => {});
+  const attemptRef = useRef(0);
 
-  // Check persistent unlock state from AsyncStorage
   useEffect(() => {
     let alive = true;
-    if (!matchId) return;
+    if (!matchId) return () => {};
 
     AsyncStorage.getItem(`mst:prediction:unlocked:${matchId}`)
       .then((val) => {
@@ -48,47 +99,83 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
       })
       .catch(() => {});
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [matchId]);
 
+  useEffect(() => () => {
+    cleanupRef.current?.();
+  }, []);
+
+  const cleanupAdListeners = useCallback(() => {
+    cleanupRef.current?.();
+    cleanupRef.current = () => {};
+  }, []);
+
   const handleEarnedReward = useCallback(async () => {
+    cleanupAdListeners();
     setUnlocked(true);
     setLoadingAd(false);
     setAdError(null);
     if (matchId) {
-      await AsyncStorage.setItem(`mst:prediction:unlocked:${matchId}`, String(Date.now())).catch(() => {});
+      await AsyncStorage.setItem(
+        `mst:prediction:unlocked:${matchId}`,
+        String(Date.now()),
+      ).catch(() => {});
     }
-  }, [matchId]);
+  }, [cleanupAdListeners, matchId]);
 
   const triggerWatchAd = useCallback(async () => {
+    if (!hasPublishedPrediction || loadingAd) return;
+
+    cleanupAdListeners();
+    const attempt = attemptRef.current + 1;
+    attemptRef.current = attempt;
     setLoadingAd(true);
     setAdError(null);
 
-    let ads = null;
+    let ads;
     try {
       ads = require("react-native-google-mobile-ads");
     } catch (_) {
       ads = null;
     }
 
-    if (!ads || !ads.RewardedAd) {
-      // Graceful fallback when native AdMob module is not available in environment
-      setAdError(my ? "ကြော်ငြာကို ယာယီမရရှိနိုင်ပါ။ တိုက်ရိုက် Unlock ပြုလုပ်ပါမည်။" : "Ad currently unavailable. Unlocking prediction directly.");
-      setTimeout(() => {
-        handleEarnedReward();
-      }, 700);
+    const RewardedAd = ads?.RewardedAd;
+    const RewardedAdEventType = ads?.RewardedAdEventType;
+    const AdEventType = ads?.AdEventType;
+    const TestIds = ads?.TestIds;
+
+    if (!RewardedAd || !RewardedAdEventType) {
+      setLoadingAd(false);
+      setAdError(
+        my
+          ? "Rewarded ad service ကို ယာယီမရရှိနိုင်ပါ။ ခန့်မှန်းချက်ကို မဖွင့်ရသေးပါ။"
+          : "Rewarded ad service is currently unavailable. The prediction remains locked.",
+      );
       return;
     }
 
-    const isProduction = process.env.EXPO_PUBLIC_MST_ENVIRONMENT === "production";
+    const isProduction = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "")
+      .trim()
+      .toLowerCase() === "production";
+
     const configuredRewardedId = Platform.OS === "android"
       ? String(process.env.EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID || "").trim()
       : String(process.env.EXPO_PUBLIC_MST_ADMOB_IOS_REWARDED_UNIT_ID || "").trim();
-    const adUnitId = isProduction ? configuredRewardedId : (configuredRewardedId || TestIds.REWARDED);
+
+    const adUnitId = isProduction
+      ? configuredRewardedId
+      : (configuredRewardedId || TestIds?.REWARDED || "");
 
     if (!adUnitId) {
-      // In production without configured rewarded ID, gracefully grant access without showing test ads
-      handleEarnedReward();
+      setLoadingAd(false);
+      setAdError(
+        my
+          ? "Rewarded Ad Unit ID မရရှိသေးပါ။ ခန့်မှန်းချက်ကို မဖွင့်ရသေးပါ။"
+          : "Rewarded Ad Unit ID is unavailable. The prediction remains locked.",
+      );
       return;
     }
 
@@ -97,74 +184,173 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
         requestNonPersonalizedAdsOnly: true,
       });
 
-      let loaded = false;
-      let dismissed = false;
+      let rewardEarned = false;
+      let loadTimer = null;
 
-      const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
-        loaded = true;
-        setLoadingAd(false);
-        rewarded.show().catch(() => {
-          setAdError(my ? "ကြော်ငြာပြသရန် မအောင်မြင်ပါ။ တိုက်ရိုက် ကြည့်ရှုနိုင်ပါသည်။" : "Failed to present ad. Direct unlock granted.");
-          handleEarnedReward();
+      const unsubscribers = [];
+      const finishWithoutReward = (message) => {
+        if (attemptRef.current !== attempt || rewardEarned) return;
+        if (loadTimer) clearTimeout(loadTimer);
+        unsubscribers.forEach((fn) => {
+          try { fn?.(); } catch (_) {}
         });
-      });
+        cleanupRef.current = () => {};
+        setLoadingAd(false);
+        setAdError(message);
+      };
 
-      const unsubscribeEarned = rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-        dismissed = true;
-        handleEarnedReward();
-      });
+      unsubscribers.push(
+        rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
+          if (attemptRef.current !== attempt) return;
+          if (loadTimer) clearTimeout(loadTimer);
+          setLoadingAd(false);
+          rewarded.show().catch(() => {
+            finishWithoutReward(
+              my
+                ? "ကြော်ငြာကို ပြသ၍မရပါ။ Video ကို ပြီးဆုံးအောင်ကြည့်မှသာ ခန့်မှန်းချက်ဖွင့်ပါမည်။"
+                : "The ad could not be shown. The prediction unlocks only after the rewarded video is completed.",
+            );
+          });
+        }),
+      );
+
+      unsubscribers.push(
+        rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+          if (attemptRef.current !== attempt) return;
+          rewardEarned = true;
+          handleEarnedReward();
+        }),
+      );
+
+      if (AdEventType?.ERROR) {
+        unsubscribers.push(
+          rewarded.addAdEventListener(AdEventType.ERROR, () => {
+            finishWithoutReward(
+              my
+                ? "ကြော်ငြာ ယာယီမရရှိနိုင်ပါ။ ခန့်မှန်းချက်ကို မဖွင့်ရသေးပါ။"
+                : "The rewarded ad is temporarily unavailable. The prediction remains locked.",
+            );
+          }),
+        );
+      }
+
+      if (AdEventType?.CLOSED) {
+        unsubscribers.push(
+          rewarded.addAdEventListener(AdEventType.CLOSED, () => {
+            if (!rewardEarned) {
+              finishWithoutReward(
+                my
+                  ? "Video ကို ပြီးဆုံးအောင်မကြည့်ရသေးပါ။ ခန့်မှန်းချက်ကို မဖွင့်ရသေးပါ။"
+                  : "The video was closed before the reward was earned. The prediction remains locked.",
+              );
+            }
+          }),
+        );
+      }
+
+      cleanupRef.current = () => {
+        if (loadTimer) clearTimeout(loadTimer);
+        unsubscribers.forEach((fn) => {
+          try { fn?.(); } catch (_) {}
+        });
+      };
+
+      loadTimer = setTimeout(() => {
+        finishWithoutReward(
+          my
+            ? "ကြော်ငြာ load အချိန်ကျော်သွားပါသည်။ ပြန်စမ်းနိုင်ပါသည်။"
+            : "The rewarded ad timed out. Please try again.",
+        );
+      }, AD_LOAD_TIMEOUT_MS);
 
       rewarded.load();
-
-      // Timeout safety: if ad doesn't load within 7 seconds, don't leave user stranded
-      setTimeout(() => {
-        if (!loaded && !dismissed) {
-          unsubscribeLoaded?.();
-          unsubscribeEarned?.();
-          setLoadingAd(false);
-          setAdError(my ? "ကြော်ငြာ ယာယီမရရှိနိုင်သေးပါ။ တိုက်ရိုက် ခန့်မှန်းချက်ကို ဖွင့်ပေးထားပါသည်။" : "Ad currently unavailable. Unlocked directly.");
-          handleEarnedReward();
-        }
-      }, 7000);
-    } catch (e) {
+    } catch (_) {
+      cleanupAdListeners();
       setLoadingAd(false);
-      setAdError(my ? "ကြော်ငြာစနစ် ချိတ်ဆက်မှု မရရှိပါ။ ခန့်မှန်းချက်ကို တိုက်ရိုက် ဖွင့်ပေးထားပါသည်။" : "Ad service error. Unlocked directly.");
-      handleEarnedReward();
+      setAdError(
+        my
+          ? "Rewarded ad စနစ်ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ခန့်မှန်းချက်ကို မဖွင့်ရသေးပါ။"
+          : "Rewarded ad initialization failed. The prediction remains locked.",
+      );
     }
-  }, [my, handleEarnedReward]);
+  }, [
+    cleanupAdListeners,
+    handleEarnedReward,
+    hasPublishedPrediction,
+    loadingAd,
+    my,
+  ]);
 
-  // Generate verified match prediction insights
-  const homeName = match?.home_team_name || match?.homeTeam?.name || "Home Team";
-  const awayName = match?.away_team_name || match?.awayTeam?.name || "Away Team";
+  if (!matchId) return null;
+
+  const homeName =
+    match?.home?.name ||
+    match?.home_team_name ||
+    match?.homeTeam?.name ||
+    "Home Team";
+  const awayName =
+    match?.away?.name ||
+    match?.away_team_name ||
+    match?.awayTeam?.name ||
+    "Away Team";
 
   return (
-    <View style={[s.card, { backgroundColor: colors.surface || C.surface, borderColor: colors.border || C.border }]}>
+    <View
+      style={[
+        s.card,
+        {
+          backgroundColor: colors.surface || colors.card || C.surface,
+          borderColor: colors.border || C.border,
+        },
+      ]}
+    >
       <View style={s.topRow}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
           <Ionicons name="sparkles" size={15} color={colors.gold || C.gold} />
           <Text style={[s.eyebrow, { color: colors.gold || C.gold }]}>
-            {my ? "MST ပွဲစဉ် သီးသန့် ခန့်မှန်းချက်" : "MST MATCH PREDICTION"}
+            {my ? "MST ပွဲစဉ် ခန့်မှန်းချက်" : "MST MATCH FORECAST"}
           </Text>
         </View>
-        {unlocked && (
-          <View style={[s.unlockedBadge, { backgroundColor: "rgba(16,185,129,0.15)", borderColor: colors.green || C.green }]}>
+        {unlocked && hasPublishedPrediction ? (
+          <View
+            style={[
+              s.unlockedBadge,
+              {
+                backgroundColor: "rgba(16,185,129,0.15)",
+                borderColor: colors.green || C.green,
+              },
+            ]}
+          >
             <Ionicons name="checkmark-circle" size={12} color={colors.green || C.green} />
             <Text style={[s.unlockedText, { color: colors.green || C.green }]}>
-              {my ? "UNLOCKED (၂၄ နာရီ)" : "UNLOCKED (24H)"}
+              {my ? "ဖွင့်ပြီး" : "UNLOCKED"}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
-      {!unlocked ? (
+      {!hasPublishedPrediction ? (
         <View style={s.lockedContent}>
           <Text style={[s.lockedTitle, { color: colors.text || C.text }]}>
-            {my ? `${homeName} vs ${awayName} အနိုင်ရနိုင်ခြေ ခန့်မှန်းချက်` : `${homeName} vs ${awayName} Match Forecast`}
+            {homeName} vs {awayName}
+          </Text>
+          <Text style={[s.lockedDesc, { color: colors.muted || C.muted, marginBottom: 0 }]}>
+            {my
+              ? "ဤပွဲအတွက် MST ခန့်မှန်းချက် မထုတ်ပြန်ရသေးပါ။ ခန့်မှန်းချက်ရှိမှသာ Rewarded Video ခလုတ်ကို ပြပါမည်။"
+              : "No MST forecast has been published for this match yet. A rewarded video is offered only when real MST forecast content exists."}
+          </Text>
+        </View>
+      ) : !unlocked ? (
+        <View style={s.lockedContent}>
+          <Text style={[s.lockedTitle, { color: colors.text || C.text }]}>
+            {my
+              ? `${homeName} vs ${awayName} MST ခန့်မှန်းချက်`
+              : `${homeName} vs ${awayName} MST Forecast`}
           </Text>
           <Text style={[s.lockedDesc, { color: colors.muted || C.muted }]}>
             {my
-              ? "ဤပွဲစဉ်အတွက် MST နည်းစနစ်ကျ ခန့်မှန်းချက်နှင့် ဖြစ်နိုင်ခြေ ရာခိုင်နှုန်းများကို ကြည့်ရှုရန် ဗီဒီယိုကြော်ငြာတိုတစ်ခု ကြည့်ရှုပေးပါ။"
-              : "Watch a short rewarded video ad to unlock the verified MST match forecast and win probability breakdown."}
+              ? "MST ထုတ်ပြန်ထားသော ပွဲစဉ်ခန့်မှန်းချက်ကို ဖွင့်ရန် Rewarded Video ကို ပြီးဆုံးအောင်ကြည့်ပါ။"
+              : "Watch the rewarded video to completion to unlock the published MST match forecast."}
           </Text>
 
           {adError ? (
@@ -187,7 +373,7 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
               <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
                 <Ionicons name="play-circle" size={18} color="#FFFFFF" />
                 <Text style={s.watchBtnText}>
-                  {my ? "ဗီဒီယိုကြည့်ပြီး ခန့်မှန်းချက် ဖွင့်မည်" : "WATCH VIDEO TO UNLOCK"}
+                  {my ? "VIDEO ကြည့်ပြီး ဖွင့်မည်" : "WATCH VIDEO TO UNLOCK"}
                 </Text>
               </View>
             )}
@@ -195,46 +381,27 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
         </View>
       ) : (
         <View style={s.forecastBody}>
-          {/* Win Probability Bar */}
           <Text style={[s.sectionSubtitle, { color: colors.muted || C.muted }]}>
-            {my ? "အနိုင်ရနိုင်ခြေ ရာခိုင်နှုန်း (Win Probability)" : "Win Probability Breakdown"}
+            {my ? "MST ထုတ်ပြန်ထားသော ခန့်မှန်းချက်" : "Published MST Forecast"}
           </Text>
-          <View style={s.probRow}>
-            <View style={s.probCol}>
-              <Text style={[s.probVal, { color: colors.text || C.text }]}>48%</Text>
-              <Text numberOfLines={1} style={[s.probLabel, { color: colors.muted || C.muted }]}>{homeName}</Text>
-            </View>
-            <View style={s.probCol}>
-              <Text style={[s.probVal, { color: colors.gold || C.gold }]}>28%</Text>
-              <Text style={[s.probLabel, { color: colors.muted || C.muted }]}>{my ? "သရေ" : "Draw"}</Text>
-            </View>
-            <View style={s.probCol}>
-              <Text style={[s.probVal, { color: colors.text || C.text }]}>24%</Text>
-              <Text numberOfLines={1} style={[s.probLabel, { color: colors.muted || C.muted }]}>{awayName}</Text>
-            </View>
-          </View>
-
-          {/* Probability visual bar */}
-          <View style={s.barWrap}>
-            <View style={[s.barSegment, { flex: 48, backgroundColor: colors.red || C.red }]} />
-            <View style={[s.barSegment, { flex: 28, backgroundColor: colors.gold || C.gold }]} />
-            <View style={[s.barSegment, { flex: 24, backgroundColor: colors.muted || C.muted }]} />
-          </View>
-
-          {/* Tactical Advice Box */}
-          <View style={[s.adviceBox, { backgroundColor: colors.raised || C.raised, borderColor: colors.border || C.border }]}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 }}>
-              <Ionicons name="bulb-outline" size={15} color={colors.gold || C.gold} />
-              <Text style={[s.adviceTitle, { color: colors.text || C.text }]}>
-                {my ? "MST နည်းစနစ် သုံးသပ်ချက်" : "Key Tactical Insight"}
-              </Text>
-            </View>
+          <View
+            style={[
+              s.adviceBox,
+              {
+                backgroundColor: colors.raised || C.raised,
+                borderColor: colors.border || C.border,
+              },
+            ]}
+          >
             <Text style={[s.adviceText, { color: colors.secondary || C.secondary }]}>
-              {my
-                ? `အိမ်ကွင်းအားသာချက်နှင့် လက်ရှိ form အရ ${homeName} ဘက်က အသာစီးရနိုင်ခြေ ပိုမိုမြင့်မားနေပါသည်။ ဂိုးပေါင်း ၂.၅ ကျော် ဖြစ်နိုင်ခြေ ၆၅% ရှိပါသည်။`
-                : `Based on home form and direct head-to-head metrics, ${homeName} holds the competitive edge. Expect attacking momentum with higher probability on Over 2.5 goals.`}
+              {predictionText}
             </Text>
           </View>
+          <Text style={[s.disclaimer, { color: colors.muted || C.muted }]}>
+            {my
+              ? "MST ခန့်မှန်းချက်သည် ဘောလုံးသုံးသပ်ချက်သာဖြစ်ပြီး ရလဒ်အာမခံချက်မဟုတ်ပါ။"
+              : "MST forecasts are football analysis, not guaranteed outcomes."}
+          </Text>
         </View>
       )}
     </View>
@@ -253,6 +420,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
+    gap: 8,
   },
   eyebrow: {
     fontSize: 11,
@@ -290,6 +458,7 @@ const s = StyleSheet.create({
     fontSize: 11.5,
     marginBottom: 8,
     fontWeight: "700",
+    lineHeight: 16,
   },
   watchBtn: {
     minHeight: 42,
@@ -312,47 +481,18 @@ const s = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 8,
   },
-  probRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 8,
-  },
-  probCol: {
-    alignItems: "center",
-    flex: 1,
-  },
-  probVal: {
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  probLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 2,
-    maxWidth: 95,
-  },
-  barWrap: {
-    height: 6,
-    borderRadius: 3,
-    flexDirection: "row",
-    overflow: "hidden",
-    marginBottom: 12,
-    gap: 2,
-  },
-  barSegment: {
-    height: "100%",
-  },
   adviceBox: {
     borderRadius: 8,
     borderWidth: 1,
-    padding: 10,
-  },
-  adviceTitle: {
-    fontSize: 12,
-    fontWeight: "800",
+    padding: 11,
   },
   adviceText: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  disclaimer: {
+    fontSize: 10.5,
+    lineHeight: 15,
+    marginTop: 8,
   },
 });
