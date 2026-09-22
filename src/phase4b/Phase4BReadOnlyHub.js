@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, BackHandler, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useIAP } from "react-native-iap";
 import {
   createTipPurchase,
   loadOwnPurchases,
@@ -12,7 +13,8 @@ import {
   loadUserLeaderboard,
 } from "./scoresStagingApi";
 import { useTheme } from "../theme/ThemeContext";
-import { getCreditStorefront, purchaseCredits } from "../services/billingService";
+import { getCreditStorefront, verifyPlayPurchaseOnServer } from "../services/billingService";
+import { getAuthStatus } from "../services/accountApi";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const TIP_UNLOCK_ACTION_ENABLED = true;
@@ -280,56 +282,177 @@ function CreditPanel({ my = true, colors = C }) {
   const [processingId, setProcessingId] = useState(null);
   const [purchaseMsg, setPurchaseMsg] = useState(null);
 
-  const loadStorefront = useCallback(() => {
-    let active = true;
+  const loadStorefront = useCallback(async () => {
     setLoading(true);
     setLoadError("");
-    getCreditStorefront()
-      .then((value) => {
-        if (!active) return;
-        setStorefront(value);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setLoadError(error?.message || (my ? "Credit package များ မရရှိနိုင်သေးပါ။" : "Credit packages are unavailable."));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
+    try {
+      const value = await getCreditStorefront();
+      setStorefront(value);
+      return value;
+    } catch (error) {
+      setLoadError(error?.message || (my ? "Credit package များ မရရှိနိုင်သေးပါ။" : "Credit packages are unavailable."));
+      return null;
+    } finally {
+      setLoading(false);
+    }
   }, [my]);
 
-  useEffect(() => loadStorefront(), [loadStorefront]);
+  useEffect(() => {
+    loadStorefront().catch(() => {});
+  }, [loadStorefront]);
 
-  const packages = Array.isArray(storefront?.packages) ? storefront.packages : [];
-  const checkoutReady = storefront?.purchasingEnabled === true;
+  const packages = useMemo(
+    () => (Array.isArray(storefront?.packages) ? storefront.packages : []),
+    [storefront],
+  );
+
+  const packageByProductId = useMemo(() => {
+    const map = new Map();
+    for (const pkg of packages) {
+      map.set(String(pkg.playProductId || pkg.id), pkg);
+    }
+    return map;
+  }, [packages]);
+
+  const {
+    connected,
+    products,
+    fetchProducts,
+    requestPurchase,
+    finishTransaction,
+  } = useIAP({
+    onPurchaseSuccess: async (purchase) => {
+      const productId = String(purchase?.productId || "").trim();
+      const purchaseToken = String(purchase?.purchaseToken || "").trim();
+      const pkg = packageByProductId.get(productId);
+
+      if (!pkg || !purchaseToken) {
+        setProcessingId(null);
+        setPurchaseMsg({
+          error: true,
+          text: my
+            ? "Google Play purchase အချက်အလက် မပြည့်စုံပါ။ ငွေထပ်မပေးဘဲ Support ကို ဆက်သွယ်ပါ။"
+            : "Google Play returned incomplete purchase data. Do not repurchase; contact support.",
+        });
+        return;
+      }
+
+      try {
+        const verified = await verifyPlayPurchaseOnServer({
+          packageId: pkg.id,
+          purchaseToken,
+          orderId: purchase?.id || null,
+        });
+
+        if (!verified?.ok) {
+          throw new Error("Purchase verification did not complete.");
+        }
+
+        try {
+          await finishTransaction({ purchase, isConsumable: true });
+        } catch (_) {
+          // The server is authoritative and idempotent. If Play completion fails,
+          // the unfinished purchase will be delivered again and safely retried.
+        }
+
+        setPurchaseMsg({
+          error: false,
+          text: my
+            ? `ဝယ်ယူမှု အတည်ပြုပြီးပါပြီ။ +${verified.creditsGranted || pkg.credits} Credits · လက်ကျန် ${verified.balance ?? "-"} CR`
+            : `Purchase verified. +${verified.creditsGranted || pkg.credits} Credits · Balance ${verified.balance ?? "-"} CR`,
+        });
+        await loadStorefront();
+      } catch (error) {
+        setPurchaseMsg({
+          error: true,
+          text: my
+            ? "ဝယ်ယူမှုကို server မှ အတည်မပြုနိုင်သေးပါ။ ထပ်မဝယ်ပါနှင့် — နောက်တစ်ကြိမ် app ဖွင့်ချိန်တွင် ပြန်စစ်ပါမည်။"
+            : "The server has not verified this purchase yet. Do not repurchase; it will be retried when the app receives the purchase again.",
+        });
+      } finally {
+        setProcessingId(null);
+      }
+    },
+    onPurchaseError: (error) => {
+      setProcessingId(null);
+      const cancelled = String(error?.code || "").toLowerCase().includes("cancel");
+      if (cancelled) {
+        setPurchaseMsg(null);
+        return;
+      }
+      setPurchaseMsg({
+        error: true,
+        text: error?.message || (my ? "Google Play ဝယ်ယူမှု မအောင်မြင်ပါ။" : "Google Play purchase failed."),
+      });
+    },
+  });
+
+  const productIdsKey = useMemo(
+    () => packages.map((pkg) => String(pkg.playProductId || pkg.id)).sort().join("|"),
+    [packages],
+  );
+
+  useEffect(() => {
+    if (!connected || !productIdsKey) return;
+    const skus = productIdsKey.split("|").filter(Boolean);
+    fetchProducts({ skus, type: "in-app" }).catch(() => {});
+  }, [connected, fetchProducts, productIdsKey]);
+
+  const storeProductById = useMemo(() => {
+    const map = new Map();
+    for (const product of Array.isArray(products) ? products : []) {
+      if (product?.id) map.set(String(product.id), product);
+    }
+    return map;
+  }, [products]);
+
+  const serverCheckoutReady = storefront?.purchasingEnabled === true;
 
   const handlePlayPurchase = async (pkg) => {
     if (!pkg?.id || processingId) return;
-    setProcessingId(pkg.id);
     setPurchaseMsg(null);
-    try {
-      await purchaseCredits(pkg.id);
-      setPurchaseMsg({
-        error: false,
-        text: my
-          ? "Google Play purchase ကို စစ်ဆေးပြီးပါက Credits ကို server wallet တွင်သာ ထည့်သွင်းပါမည်။"
-          : "Credits are added only after Google Play purchase verification succeeds on the server.",
-      });
-    } catch (error) {
-      const code = error?.code || "";
-      const setupPending = code === "GOOGLE_PLAY_BILLING_NOT_CONFIGURED"
-        || code === "GOOGLE_PLAY_BILLING_CLIENT_NOT_CONNECTED";
+
+    const auth = await getAuthStatus().catch(() => null);
+    if (!auth?.authenticated) {
       setPurchaseMsg({
         error: true,
-        text: setupPending
-          ? (my
-            ? "Google Play Billing setup မပြီးသေးသဖြင့် ယခု build မှ ငွေပေးချေမှု မပြုလုပ်နိုင်သေးပါ။ Credits မပြောင်းလဲပါ။"
-            : "Google Play Billing is not fully connected in this build. No payment was submitted and no credits were changed.")
-          : (error?.message || (my ? "ဝယ်ယူမှု မအောင်မြင်ပါ။" : "Purchase unavailable.")),
+        text: my
+          ? "Credits ဝယ်ယူရန် MST အကောင့်ဝင်ထားရပါမည်။"
+          : "Sign in to your MST account before buying Credits.",
       });
-    } finally {
+      return;
+    }
+
+    const productId = String(pkg.playProductId || pkg.id);
+    const storeProduct = storeProductById.get(productId);
+    if (!serverCheckoutReady || !connected || !storeProduct) {
+      setPurchaseMsg({
+        error: true,
+        text: my
+          ? "Google Play Billing မပြည့်စုံသေးပါ။ ငွေပေးချေမှု မစတင်ပါ။"
+          : "Google Play Billing is not ready for this product. No payment was started.",
+      });
+      return;
+    }
+
+    setProcessingId(pkg.id);
+    try {
+      await requestPurchase({
+        request: {
+          android: { skus: [productId] },
+          ios: { sku: productId },
+        },
+        type: "in-app",
+      });
+    } catch (error) {
       setProcessingId(null);
+      const cancelled = String(error?.code || "").toLowerCase().includes("cancel");
+      if (!cancelled) {
+        setPurchaseMsg({
+          error: true,
+          text: error?.message || (my ? "Google Play checkout မဖွင့်နိုင်ပါ။" : "Could not start Google Play checkout."),
+        });
+      }
     }
   };
 
@@ -346,8 +469,8 @@ function CreditPanel({ my = true, colors = C }) {
           </Text>
           <Text style={[s.walletSub, { color: colors.muted, marginTop: 6 }]}>
             {my
-              ? "PromptPay၊ KBZPay၊ Wave Money၊ Card သို့မဟုတ် direct transfer များကို Google Play build အတွင်း မသုံးပါ။"
-              : "The Google Play build does not offer PromptPay, KBZPay, Wave Money, cards, or direct-transfer checkout for digital credits."}
+              ? "Digital Credits ကို Google Play checkout မှတစ်ဆင့်သာ ဝယ်ယူနိုင်ပြီး server အတည်ပြုချက်ရမှ Credits ထည့်ပေးပါမည်။"
+              : "Digital Credits are purchased only through Google Play checkout and are granted only after server verification."}
           </Text>
         </View>
       </View>
@@ -362,26 +485,29 @@ function CreditPanel({ my = true, colors = C }) {
       ) : loadError ? (
         <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
           <Text style={[s.purchaseError, { marginTop: 0 }]}>{loadError}</Text>
-          <Pressable onPress={loadStorefront} style={[s.packBuyBtn, { backgroundColor: colors.red || C.red, marginTop: 10 }]}>
+          <Pressable onPress={() => loadStorefront()} style={[s.packBuyBtn, { backgroundColor: colors.red || C.red, marginTop: 10 }]}>
             <Text style={s.packBuyBtnText}>{my ? "ပြန်စမ်းမည်" : "RETRY"}</Text>
           </Pressable>
         </View>
       ) : (
         <>
           <View style={{ marginTop: 4, marginBottom: 10 }}>
-            <Text style={[s.title, { color: colors.text }]}>
-              {my ? "Credit Packages" : "Credit Packages"}
-            </Text>
+            <Text style={[s.title, { color: colors.text }]}>Credit Packages</Text>
             <Text style={{ fontSize: 12, color: colors.muted, marginTop: 3 }}>
               {my
-                ? "နောက်ဆုံးစျေးနှုန်းကို Google Play checkout တွင် Google မှ ပြသပါမည်။"
-                : "Google Play will show the localized final price at checkout."}
+                ? "100 Credits = 100 THB reference rate ဖြစ်ပြီး နောက်ဆုံး localized price ကို Google Play က ပြသပါမည်။"
+                : "Reference rate: 100 Credits = 100 THB. Google Play shows the final localized checkout price."}
             </Text>
           </View>
 
           <View style={s.packGrid}>
             {packages.map((pkg) => {
+              const productId = String(pkg.playProductId || pkg.id);
+              const storeProduct = storeProductById.get(productId);
               const busy = processingId === pkg.id;
+              const canBuy = serverCheckoutReady && connected && Boolean(storeProduct) && !busy;
+              const displayPrice = storeProduct?.displayPrice || (pkg.priceThb ? `฿${pkg.priceThb}` : "Google Play");
+
               return (
                 <View
                   key={pkg.id}
@@ -401,22 +527,22 @@ function CreditPanel({ my = true, colors = C }) {
                   ) : null}
                   <Text style={[s.packCreditsText, { color: colors.text }]}>{pkg.credits}</Text>
                   <Text style={[s.packCreditsLabel, { color: colors.gold || C.amber }]}>CREDITS</Text>
-                  <Text style={[s.packPriceText, { color: colors.muted }]}>Google Play</Text>
+                  <Text style={[s.packPriceText, { color: colors.text }]}>{displayPrice}</Text>
 
                   <Pressable
-                    disabled={!checkoutReady || busy}
+                    disabled={!canBuy}
                     onPress={() => handlePlayPurchase(pkg)}
                     style={[
                       s.packBuyBtn,
                       { backgroundColor: colors.red || C.red },
-                      (!checkoutReady || busy) && { opacity: 0.45 },
+                      !canBuy && { opacity: 0.45 },
                     ]}
                   >
                     {busy ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <Text style={s.packBuyBtnText}>
-                        {checkoutReady
+                        {canBuy
                           ? (my ? "GOOGLE PLAY ဖြင့် ဝယ်မည်" : "BUY WITH GOOGLE PLAY")
                           : (my ? "SETUP PENDING" : "SETUP PENDING")}
                       </Text>
@@ -468,18 +594,16 @@ function CreditPanel({ my = true, colors = C }) {
         <Ionicons name="shield-checkmark" size={22} color={colors.green || C.green} style={{ marginTop: 2 }} />
         <View style={{ flex: 1 }}>
           <Text style={[s.pendingTitle, { color: colors.text }]}>
-            {checkoutReady
-              ? (my ? "Google Play Billing server capability ဖွင့်ထားသည်" : "Google Play Billing server capability enabled")
+            {serverCheckoutReady
+              ? (connected
+                ? (my ? "Google Play Billing ချိတ်ဆက်ပြီး" : "Google Play Billing connected")
+                : (my ? "Google Play ကို ချိတ်ဆက်နေသည်" : "Connecting to Google Play"))
               : (my ? "Google Play Billing setup မပြီးသေးပါ" : "Google Play Billing setup pending")}
           </Text>
           <Text style={[s.pendingText, { color: colors.muted }]}>
-            {checkoutReady
-              ? (my
-                ? "Purchase token ကို MST server က Google Play နှင့် စစ်ဆေးပြီးမှသာ Credits ထည့်ရမည်။ Client က Credits ကို ကိုယ်တိုင်မထည့်နိုင်ပါ။"
-                : "A Play purchase token must be verified by the MST server before credits can be granted. The client cannot grant credits locally.")
-              : (my
-                ? "ယခု build သည် fail-closed ဖြစ်သည်။ Simulated purchase၊ local balance တိုးခြင်း၊ direct payment checkout မရှိပါ။"
-                : "This build fails closed: there are no simulated purchases, local balance increases, or direct-payment checkout paths.")}
+            {my
+              ? "Purchase token ကို MST server က Google Play နှင့် စစ်ဆေးပြီးမှသာ Credits ထည့်ပေးပါမည်။ တစ်ခုတည်းသော purchase token ကို နှစ်ကြိမ် Credits မပေးနိုင်ပါ။"
+              : "The MST server verifies the Play purchase token before granting Credits, and the same token cannot grant Credits twice."}
           </Text>
         </View>
       </View>

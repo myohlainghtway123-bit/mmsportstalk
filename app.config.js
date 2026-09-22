@@ -9,6 +9,21 @@ const iosAppId = readEnv("MST_ADMOB_IOS_APP_ID");
 
 const plugins = [...(base.expo.plugins || [])];
 
+if (!plugins.some((plugin) => plugin === "react-native-iap" || (Array.isArray(plugin) && plugin[0] === "react-native-iap"))) {
+  plugins.push("react-native-iap");
+}
+
+if (!plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties")) {
+  plugins.push([
+    "expo-build-properties",
+    {
+      android: {
+        kotlinVersion: "2.1.20",
+      },
+    },
+  ]);
+}
+
 // AdMob App IDs are public native manifest identifiers, not secrets.
 // Production Android must always include the canonical App ID so the native
 // Google Mobile Ads SDK cannot crash at startup when EAS environment variables

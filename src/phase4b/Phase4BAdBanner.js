@@ -42,17 +42,25 @@ export default function Phase4BAdBanner() {
     let active = true;
     if (!hasNative) return;
 
-    try {
-      const ads = require("react-native-google-mobile-ads");
-      if (typeof ads?.default === "function") {
-        ads.default().initialize().catch(() => {});
-      }
-      if (active) setReady(true);
-    } catch {
-      if (active) setReady(false);
-    }
+    const prepareAds = async () => {
+      try {
+        const consent = await gatherConsentIfRequired();
+        if (!active || !consent?.canRequestAds) {
+          if (active) setReady(false);
+          return;
+        }
 
-    gatherConsentIfRequired().catch(() => {});
+        const ads = require("react-native-google-mobile-ads");
+        if (typeof ads?.default === "function") {
+          await ads.default().initialize();
+        }
+        if (active) setReady(true);
+      } catch {
+        if (active) setReady(false);
+      }
+    };
+
+    prepareAds();
 
     return () => { active = false; };
   }, [hasNative]);
