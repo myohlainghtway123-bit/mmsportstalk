@@ -1,0 +1,54 @@
+name: Validate IAP v14 Account Binding
+
+on:
+  push:
+    branches:
+      - fix/iap-v14-account-binding
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'app.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/task-iap-v14-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EXPO_PUBLIC_MST_ENVIRONMENT: production
+      EXPO_PUBLIC_MST_INTERNAL: "false"
+      EXPO_PUBLIC_MST_SCORES_API_ORIGIN: https://scores-api.myanmarsportstalk.com
+      EXPO_PUBLIC_MST_APP_API_ORIGIN: https://app-api.myanmarsportstalk.com
+      MST_ADMOB_ANDROID_APP_ID: ca-app-pub-4446937986150717~8877382465
+      EXPO_PUBLIC_MST_ADMOB_ANDROID_BANNER_UNIT_ID: ca-app-pub-3940256099942544/9214589741
+      EXPO_PUBLIC_MST_ADMOB_ANDROID_REWARDED_UNIT_ID: ca-app-pub-3940256099942544/5224354917
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.18.0'
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Release safety contracts
+        run: npm run test:release-language-billing
+      - name: Phase 4B regression
+        run: npm run test:phase4b
+      - name: Shared backend boundary
+        run: npm run validate:shared-backend
+      - name: Production Android JS export
+        run: node scripts/generate_assets.js && npx expo export --clear --platform android --output-dir dist-iap-v14 && node scripts/validate_phase4b_bundle.js dist-iap-v14 default
+      - name: Clean Android prebuild
+        run: npx expo prebuild --platform android --clean --non-interactive
+      - name: Compile Android release
+        working-directory: android
+        run: ./gradlew :app:compileReleaseKotlin --stacktrace
