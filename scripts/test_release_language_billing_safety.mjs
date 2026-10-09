@@ -19,6 +19,9 @@ assert.match(onboarding, /storage\.setItem\(LANGUAGE_KEY, clean\)/);
 assert.match(scores, /const \[language, setLanguage\] = useState\(null\)/);
 assert.match(scores, /const \[languageReady, setLanguageReady\] = useState\(false\)/);
 assert.match(scores, /loadAppLanguage\(\)/);
+assert.match(scores, /SafeAreaView/);
+assert.match(scores, /<SafeAreaView style=\{\[s\.root/);
+assert.match(scores, /<\/SafeAreaView>/);
 assert.doesNotMatch(scores, /const \[language, setLanguage\] = useState\("my"\)/);
 assert.match(startup, /Promise\.all\(\[loadOnboardingPreferences\(\), loadAppLanguage\(\)\]\)/);
 
