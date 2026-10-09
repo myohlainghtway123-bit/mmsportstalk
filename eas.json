@@ -31,6 +31,21 @@
         "MST_ADMOB_ANDROID_APP_ID": "ca-app-pub-4446937986150717~8877382465"
       },
       "environment": "production"
+    },
+    "ios-simulator": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MST_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_MST_SCORES_API_ORIGIN": "https://scores-api.myanmarsportstalk.com",
+        "EXPO_PUBLIC_MST_APP_API_ORIGIN": "https://app-api.myanmarsportstalk.com",
+        "EXPO_PUBLIC_MST_INTERNAL": "false",
+        "MST_ADMOB_IOS_APP_ID": "ca-app-pub-3940256099942544~1458002511",
+        "EXPO_PUBLIC_MST_ADMOB_IOS_BANNER_UNIT_ID": "ca-app-pub-3940256099942544/2435281174",
+        "EXPO_PUBLIC_MST_ADMOB_IOS_REWARDED_UNIT_ID": "ca-app-pub-3940256099942544/1712485313"
+      },
+      "ios": {
+        "simulator": true
+      }
     }
   }
 }
