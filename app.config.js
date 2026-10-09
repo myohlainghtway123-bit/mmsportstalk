@@ -19,6 +19,8 @@ if (!plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-build
     {
       android: {
         kotlinVersion: "2.1.20",
+        enableMinifyInReleaseBuilds: true,
+        enableShrinkResourcesInReleaseBuilds: true,
       },
     },
   ]);
