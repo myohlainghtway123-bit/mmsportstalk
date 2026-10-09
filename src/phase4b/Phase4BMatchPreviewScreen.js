@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ScreenHeader from "../components/ScreenHeader";
+import { fetchMatchPreviewArticle } from "../services/contentApi";
 import { loadPreview } from "./scoresStagingApi";
 import {
   matchCenterPreviewQuality,
@@ -93,9 +94,10 @@ function SectionCard({ section }) {
   );
 }
 
-export default function Phase4BMatchPreviewScreen({ match, onBack, onOpenMatchCenter }) {
+export default function Phase4BMatchPreviewScreen({ match, onBack, onOpenMatchCenter, language = "my" }) {
   const matchId = String(match?.id || "").trim();
-  const [state, setState] = useState({ loading: Boolean(matchId), preview: null, error: "" });
+  const seededArticle = match?._mstPreviewArticle || null;
+  const [state, setState] = useState({ loading: Boolean(matchId), preview: null, article: seededArticle, error: "" });
 
   useEffect(() => {
     const handleHardwareBack = () => {
@@ -112,29 +114,34 @@ export default function Phase4BMatchPreviewScreen({ match, onBack, onOpenMatchCe
   useEffect(() => {
     let active = true;
     if (!matchId) {
-      setState({ loading: false, preview: null, error: "" });
+      setState({ loading: false, preview: null, article: seededArticle, error: "" });
       return;
     }
-    setState({ loading: true, preview: null, error: "" });
-    loadPreview(matchId)
-      .then((preview) => active && setState({ loading: false, preview, error: "" }))
-      .catch((err) =>
-        active &&
-        setState({
-          loading: false,
-          preview: null,
-          error: err?.message || "Professional Match Preview is unavailable.",
-        })
-      );
+    setState({ loading: true, preview: null, article: seededArticle, error: "" });
+    Promise.allSettled([
+      seededArticle ? Promise.resolve(seededArticle) : fetchMatchPreviewArticle(matchId, { locale: language === "en" ? "en" : "my" }),
+      loadPreview(matchId),
+    ]).then(([articleResult, previewResult]) => {
+      if (!active) return;
+      const article = articleResult.status === "fulfilled" ? articleResult.value : seededArticle;
+      const preview = previewResult.status === "fulfilled" ? previewResult.value : null;
+      setState({
+        loading: false,
+        article: article || null,
+        preview,
+        error: article || preview ? "" : "No published MST match preview is available for this fixture yet.",
+      });
+    });
     return () => {
       active = false;
     };
-  }, [matchId]);
+  }, [matchId, seededArticle, language]);
 
   const quality = useMemo(() => matchCenterPreviewQuality(state.preview), [state.preview]);
   const sections = useMemo(() => matchCenterPreviewSections(state.preview, { maxFacts: 20 }), [state.preview]);
 
   const websiteUrl =
+    state.article?.url ||
     match?.full_analysis_url ||
     match?.fullAnalysisUrl ||
     match?.analysis_url ||
@@ -186,13 +193,13 @@ export default function Phase4BMatchPreviewScreen({ match, onBack, onOpenMatchCe
         </View>
 
         {/* Loading / Error States */}
-        {state.loading ? (
+        {state.loading && !state.article ? (
           <View style={s.stateCard}>
             <ActivityIndicator color={C.red} />
             <Text style={s.stateText}>Loading Professional Match Preview…</Text>
             <Text style={s.stateSubtext}>Verifying evidence-backed tactical and statistical data.</Text>
           </View>
-        ) : state.error ? (
+        ) : state.error && !state.article ? (
           <View style={s.stateCard}>
             <Ionicons name="shield-outline" size={28} color={C.amber} />
             <Text style={s.stateTitle}>Match Preview Unavailable</Text>
@@ -231,8 +238,18 @@ export default function Phase4BMatchPreviewScreen({ match, onBack, onOpenMatchCe
           </View>
         ) : null}
 
-        {/* Narrative / Summary Editorial */}
-        {match?.premium_preview_summary || match?.analysis_summary || state.preview?.summary ? (
+        {/* Canonical published MST match-preview article */}
+        {state.article ? (
+          <View style={s.articleCard}>
+            <View style={s.articleHeader}>
+              <Ionicons name="document-text-outline" size={16} color={C.red} />
+              <Text style={s.articleHeaderTitle}>MST PUBLISHED MATCH PREVIEW</Text>
+            </View>
+            <Text style={s.articleHeadline}>{state.article.title}</Text>
+            {state.article.excerpt ? <Text style={s.articleSummary}>{state.article.excerpt}</Text> : null}
+            {state.article.content ? <Text style={s.articleBody}>{state.article.content}</Text> : null}
+          </View>
+        ) : match?.premium_preview_summary || match?.analysis_summary || state.preview?.summary ? (
           <View style={s.articleCard}>
             <View style={s.articleHeader}>
               <Ionicons name="document-text-outline" size={16} color={C.red} />
@@ -255,7 +272,19 @@ export default function Phase4BMatchPreviewScreen({ match, onBack, onOpenMatchCe
         ) : null}
 
         {/* Predictions (Read-Only) */}
-        {match?.mst_ai_prediction || match?.mst_admin_prediction ? (
+        {state.article?.prediction ? (
+          <View style={s.predictionWrap}>
+            <Text style={s.sectionsHeader}>MST EDITORIAL PREDICTION · READ ONLY</Text>
+            <View style={s.predictionCard}>
+              <Text style={[s.predictionEyebrow, { color: C.green }]}>PUBLISHED SCORE FORECAST</Text>
+              <Text style={s.predictionScore}>
+                {state.article.prediction.homeTeam} {state.article.prediction.homeScore} - {state.article.prediction.awayScore} {state.article.prediction.awayTeam}
+              </Text>
+              {state.article.prediction.reasoning ? <Text style={s.predictionText}>{state.article.prediction.reasoning}</Text> : null}
+              {state.article.prediction.confidence != null ? <Text style={s.predictionConfidence}>Confidence {state.article.prediction.confidence}%</Text> : null}
+            </View>
+          </View>
+        ) : match?.mst_ai_prediction || match?.mst_admin_prediction ? (
           <View style={s.predictionWrap}>
             <Text style={s.sectionsHeader}>PREVIEW PREDICTIONS · READ ONLY</Text>
             {match?.mst_ai_prediction ? (
@@ -370,6 +399,8 @@ const s = StyleSheet.create({
   },
   articleHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   articleHeaderTitle: { color: C.red, fontSize: 12, fontWeight: "900", letterSpacing: 0.8 },
+  articleHeadline: { color: C.text, fontSize: 19, lineHeight: 26, fontWeight: "900", marginBottom: 7 },
+  articleSummary: { color: C.secondary, fontSize: 14, lineHeight: 21, fontWeight: "700", marginBottom: 10 },
   articleBody: { color: C.secondary, fontSize: 14.5, lineHeight: 22, letterSpacing: 0.2 },
   sectionsWrap: { marginBottom: 12 },
   sectionsHeader: { color: C.muted, fontSize: 12, fontWeight: "900", letterSpacing: 0.8, marginBottom: 8 },
@@ -406,7 +437,9 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   predictionEyebrow: { color: C.amber, fontSize: 11, fontWeight: "900", letterSpacing: 0.7 },
-  predictionText: { color: C.secondary, fontSize: 13.5, fontWeight: "700", marginTop: 4 },
+  predictionScore: { color: C.text, fontSize: 17, fontWeight: "900", marginTop: 6 },
+  predictionText: { color: C.secondary, fontSize: 13.5, lineHeight: 19, fontWeight: "700", marginTop: 6 },
+  predictionConfidence: { color: C.amber, fontSize: 11.5, fontWeight: "800", marginTop: 7 },
   actionButtonsWrap: { gap: 8, marginTop: 4 },
   matchCenterBtn: {
     minHeight: 46,
