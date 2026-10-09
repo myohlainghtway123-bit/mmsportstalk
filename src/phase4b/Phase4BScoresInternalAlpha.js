@@ -35,7 +35,11 @@ import ScreenHeader from "../components/ScreenHeader";
 import SettingsScreenV2 from "../final/SettingsScreenV2";
 import MatchOddsCard from "../final/MatchOddsCard";
 import NativeEntityScreenV2 from "../final/NativeEntityScreenV2";
+import NativeMatchScreenV5 from "../final/NativeMatchScreenV5";
 import { getAuthStatus, getFavorites } from "./scoresFavoritesApi";
+import { fetchMatchPreviewArticles } from "../services/contentApi";
+import { normalizeFootballMatch } from "../services/footballApi";
+import { regionalNationalTeamPriority } from "../services/regionalFootball";
 import Phase4BMatchPreviewScreen from "./Phase4BMatchPreviewScreen";
 import Phase4BSearchScreen from "./Phase4BSearchScreen";
 import Phase4BProfileScreen from "./Phase4BProfileScreen";
@@ -206,11 +210,11 @@ function matchStateText(match, language = "en") {
 
 const PINNED_COMPETITION_PRIORITY = [
   "39",  // Premier League
+  "2",   // UEFA Champions League
   "140", // La Liga
   "135", // Serie A
   "78",  // Bundesliga
   "61",  // Ligue 1
-  "2",   // UEFA Champions League
   "3",   // UEFA Europa League
   "848", // UEFA Conference League
   "1",   // FIFA World Cup
@@ -235,7 +239,7 @@ const MAJOR_LEAGUE_PATTERNS = [
   // "Premier League" strictly means English Premier League only, never generic leagues with "Premier League" in their name
   {
     regex: /^(english\s+)?premier\s+league$|premier\s+league\s*[-–]\s*england|\bepl\b/i,
-    exclude: /russia|egypt|kuwait|ghana|ukraine|bosnia|kazakhstan|malta|wales|singapore|nigeria|israel|ethiopia|kenya/i,
+    country: "england",
     score: 1500,
   },
   { regex: /la liga|primera divisi[oó]n/i, score: 1450 },
@@ -293,12 +297,22 @@ function matchHasBigTeam(match) {
   return isBigTeam(home) || isBigTeam(away);
 }
 
-function getCompetitionScore(compName, matches = [], competitionId = "") {
+function getCompetitionScore(compName, matches = [], competitionId = "", competitionCountry = "") {
   const cleanCompetitionId = String(competitionId || "").trim();
+  const cleanCountry = String(competitionCountry || "").trim().toLowerCase();
+
+  const regionalPriority = matches.reduce((max, match) => Math.max(
+    max,
+    regionalNationalTeamPriority(match?.home_team_name || match?.homeTeam?.name || match?.home?.name),
+    regionalNationalTeamPriority(match?.away_team_name || match?.awayTeam?.name || match?.away?.name),
+  ), 0);
+  if (regionalPriority === 2) return 220_000; // Myanmar senior national team
+  if (regionalPriority === 1) return 130_000; // ASEAN senior national teams
+
   const pinnedRank = PINNED_COMPETITION_RANK.get(cleanCompetitionId);
   if (pinnedRank !== undefined) {
-    // Exact provider IDs always outrank lower-tier competitions. Live/big-team
-    // bonuses only reorder matches inside a pinned competition, never the league order.
+    // Exact API-Football competition IDs are authoritative. This prevents an
+    // unrelated competition merely named "Premier League" from being treated as EPL.
     return 100_000 - pinnedRank * 1_000;
   }
 
@@ -306,24 +320,14 @@ function getCompetitionScore(compName, matches = [], competitionId = "") {
   const name = String(compName || "").trim();
   for (const item of MAJOR_LEAGUE_PATTERNS) {
     if (item.regex.test(name)) {
-      if (item.exclude && item.exclude.test(name)) {
-        continue;
-      }
+      if (item.country && cleanCountry !== item.country) continue;
       score = item.score;
       break;
     }
   }
 
-  // Bonus if group contains big teams (+300)
-  if (matches.some(matchHasBigTeam)) {
-    score += 300;
-  }
-
-  // Extra bonus if group has active live matches (+400)
-  if (matches.some(isLive)) {
-    score += 400;
-  }
-
+  if (matches.some(matchHasBigTeam)) score += 300;
+  if (matches.some(isLive)) score += 400;
   return score;
 }
 
@@ -335,6 +339,7 @@ function groupByCompetition(matches) {
       groups.set(id, {
         id,
         name: match?.competition_name || "Football",
+        country: match?.competition_country || match?.competition?.country || null,
         logo: match?.competition_logo_url || null,
         matches: [],
       });
@@ -358,7 +363,7 @@ function groupByCompetition(matches) {
       return String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""));
     });
 
-    group.score = getCompetitionScore(group.name, group.matches, group.id);
+    group.score = getCompetitionScore(group.name, group.matches, group.id, group.country);
   }
 
   // Sort competitions by priority score descending: Big Leagues & Big Teams & Live Competitions first!
@@ -1207,6 +1212,7 @@ function MatchesScreen({
   const [dateLoading, setDateLoading] = useState(false);
   const [filter, setFilter] = useState("all"); // "all" | "live" | "favorites"
   const [favData, setFavData] = useState({ teams: [], matches: [] });
+  const [previewArticles, setPreviewArticles] = useState([]);
 
   useEffect(() => {
     if (todayResetTrigger > 0) {
@@ -1226,6 +1232,18 @@ function MatchesScreen({
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetchMatchPreviewArticles({ locale: language === "en" ? "en" : "my", limit: 30 })
+      .then((articles) => {
+        if (alive) setPreviewArticles(Array.isArray(articles) ? articles : []);
+      })
+      .catch(() => {
+        if (alive) setPreviewArticles([]);
+      });
+    return () => { alive = false; };
+  }, [language]);
 
   useEffect(() => {
     let alive = true;
@@ -1301,8 +1319,15 @@ function MatchesScreen({
   }, []);
 
   const featuredMatch = useMemo(() => {
-    return filteredMatches.find((m) => isLive(m) || matchHasBigTeam(m)) || filteredMatches[0] || null;
-  }, [filteredMatches]);
+    if (!previewArticles.length || !filteredMatches.length) return null;
+    const matchById = new Map(filteredMatches.map((match) => [canonicalMatchId(match), match]));
+    for (const article of previewArticles) {
+      const matchId = String(article?.relatedMatchId || "").trim();
+      const match = matchId ? matchById.get(matchId) : null;
+      if (match) return { ...match, _mstPreviewArticle: article };
+    }
+    return null;
+  }, [filteredMatches, previewArticles]);
 
   const groups = useMemo(() => {
     const list = groupByCompetition(filteredMatches);
@@ -2599,6 +2624,7 @@ function Phase4BScoresInternalAlphaContent() {
     content = (
       <Phase4BMatchPreviewScreen
         match={previewMatch}
+        language={language}
         onBack={() => setPreviewMatch(null)}
         onOpenMatchCenter={(m) => {
           setPreviewMatch(null);
@@ -2629,14 +2655,12 @@ function Phase4BScoresInternalAlphaContent() {
     );
   } else if (selectedMatch) {
     content = (
-      <MatchCenter
-        selectedMatch={selectedMatch}
-        onBack={() => {
+      <NativeMatchScreenV5
+        match={normalizeFootballMatch(selectedMatch)}
+        goBack={() => {
           setSelectedMatch(null);
           resetToToday();
         }}
-        onOpenPreview={openPreview}
-        onOpenEntity={(type, entity) => setSelectedEntity({ type, entity })}
         language={language}
       />
     );

@@ -135,11 +135,13 @@ export function normalizeArticle(raw, index = 0) {
   const excerpt = first(raw?.excerpt, raw?.summary, raw?.description, raw?.dek, raw?.content, raw?.body, "");
   return {
     id: String(first(raw?.id, slug, index)), slug: String(slug), title: cleanText(title),
-    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.content, raw?.body, raw?.article, raw?.description, "")),
+    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.bodySource, raw?.body_source, raw?.content, raw?.body, raw?.article, raw?.description, "")),
     category: typeof categoryRaw === "string" ? categoryRaw : first(categoryRaw?.name, categoryRaw?.title, "News"),
     image: absoluteUrl(articleImage(raw)),
     author: first(raw?.author?.name, raw?.authorName, raw?.author_name, typeof raw?.author === "string" ? raw.author : null, "Myanmar Sports Talk"),
     publishedAt: published || null,
+    relatedMatchId: String(first(raw?.relatedMatchId, raw?.related_match_id, "") || "").trim() || null,
+    prediction: raw?.prediction || raw?.editorialPrediction || raw?.editorial_prediction || null,
     url: absoluteUrl(first(raw?.url, raw?.link, raw?.permalink, `/news/${slug}`)), raw,
   };
 }
@@ -224,6 +226,20 @@ export async function fetchArticle(slug, options) {
   const payload = await get(`/content/articles/${encodeURIComponent(slug)}`, options);
   const raw = payload?.article || payload?.data?.article || payload?.data || payload;
   return { payload, article: normalizeArticle(raw) };
+}
+
+export async function fetchMatchPreviewArticles({ locale = "my", limit = 20, force = false } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
+  const payload = await get(`/content/articles?type=match_preview&limit=${safeLimit}`, { locale, force });
+  return arrayFrom(payload, ["posts"]).map(normalizeArticle).filter((article) => article.title && article.relatedMatchId);
+}
+
+export async function fetchMatchPreviewArticle(matchId, { locale = "my", force = false } = {}) {
+  const id = String(matchId || "").trim();
+  if (!/^\\d{1,12}$/.test(id)) return null;
+  const payload = await get(`/content/articles?type=match_preview&matchId=${encodeURIComponent(id)}&limit=1`, { locale, force });
+  const articles = arrayFrom(payload, ["posts"]).map(normalizeArticle).filter((article) => article.title);
+  return articles[0] || null;
 }
 
 export async function fetchSocialVideos(options) {

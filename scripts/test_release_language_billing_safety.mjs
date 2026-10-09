@@ -32,6 +32,8 @@ assert.equal(pkg.dependencies?.["react-native-nitro-modules"], "0.29.2");
 assert.equal(pkg.dependencies?.["expo-build-properties"], "1.0.10");
 assert.match(appConfig, /react-native-iap/);
 assert.match(appConfig, /kotlinVersion: "2\.1\.20"/);
+assert.match(appConfig, /enableMinifyInReleaseBuilds:\s*true/);
+assert.match(appConfig, /enableShrinkResourcesInReleaseBuilds:\s*true/);
 
 assert.match(tipsHub, /useIAP/);
 assert.match(tipsHub, /requestPurchase/);
