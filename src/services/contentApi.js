@@ -135,7 +135,7 @@ export function normalizeArticle(raw, index = 0) {
   const excerpt = first(raw?.excerpt, raw?.summary, raw?.description, raw?.dek, raw?.content, raw?.body, "");
   return {
     id: String(first(raw?.id, slug, index)), slug: String(slug), title: cleanText(title),
-    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.content, raw?.body, raw?.article, raw?.description, "")),
+    excerpt: cleanText(excerpt).slice(0, 300), content: cleanText(first(raw?.bodySource, raw?.body_source, raw?.content, raw?.body, raw?.article, raw?.description, "")),
     category: typeof categoryRaw === "string" ? categoryRaw : first(categoryRaw?.name, categoryRaw?.title, "News"),
     image: absoluteUrl(articleImage(raw)),
     author: first(raw?.author?.name, raw?.authorName, raw?.author_name, typeof raw?.author === "string" ? raw.author : null, "Myanmar Sports Talk"),
