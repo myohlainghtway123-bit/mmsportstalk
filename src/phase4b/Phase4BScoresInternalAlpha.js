@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -2740,7 +2741,7 @@ function Phase4BScoresInternalAlphaContent() {
   const showFooter = !previewMatch && !selectedMatch && !selectedEntity && subScreen !== "search" && subScreen !== "profile";
 
   return (
-    <View style={[s.root, { backgroundColor: colors.bg }]}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
       {process.env.EXPO_PUBLIC_MST_ENVIRONMENT !== "production" ? <EnvironmentBanner /> : null}
       <View style={s.flex}>{content}</View>
@@ -2765,7 +2766,7 @@ function Phase4BScoresInternalAlphaContent() {
         }}
         language={language}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
