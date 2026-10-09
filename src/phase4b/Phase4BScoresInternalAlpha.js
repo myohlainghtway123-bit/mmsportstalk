@@ -1320,21 +1320,13 @@ function MatchesScreen({
 
   const featuredMatch = useMemo(() => {
     if (!previewArticles.length || !filteredMatches.length) return null;
-    const articleByMatchId = new Map(
-      previewArticles
-        .filter((article) => article?.relatedMatchId)
-        .map((article) => [String(article.relatedMatchId), article]),
-    );
-    const candidates = filteredMatches
-      .filter((match) => articleByMatchId.has(canonicalMatchId(match)))
-      .sort((a, b) => {
-        const bScore = getCompetitionScore(b?.competition_name, [b], b?.competition_id, b?.competition_country);
-        const aScore = getCompetitionScore(a?.competition_name, [a], a?.competition_id, a?.competition_country);
-        return bScore - aScore || String(a?.kickoff_at || "").localeCompare(String(b?.kickoff_at || ""));
-      });
-    const match = candidates[0];
-    if (!match) return null;
-    return { ...match, _mstPreviewArticle: articleByMatchId.get(canonicalMatchId(match)) };
+    const matchById = new Map(filteredMatches.map((match) => [canonicalMatchId(match), match]));
+    for (const article of previewArticles) {
+      const matchId = String(article?.relatedMatchId || "").trim();
+      const match = matchId ? matchById.get(matchId) : null;
+      if (match) return { ...match, _mstPreviewArticle: article };
+    }
+    return null;
   }, [filteredMatches, previewArticles]);
 
   const groups = useMemo(() => {
