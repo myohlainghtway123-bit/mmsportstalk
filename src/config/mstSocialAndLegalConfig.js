@@ -1,7 +1,6 @@
 // Centralized official Myanmar Sports Talk social and legal destinations.
-// Only official, non-fabricated URLs are defined here. Missing external
-// channel URLs (Instagram, Threads) are preserved as configurable keys
-// rather than guessed.
+// Keep these aligned with the website's canonical lib/social/links.ts.
+// Do not add a channel unless an official public URL is known.
 
 export const MST_OFFICIAL_SOCIALS = Object.freeze([
   {
@@ -13,21 +12,12 @@ export const MST_OFFICIAL_SOCIALS = Object.freeze([
     url: process.env.EXPO_PUBLIC_MST_FACEBOOK_URL || "https://www.facebook.com/profile.php?id=61585572826885",
   },
   {
-    id: "youtube",
-    name: "YouTube",
-    subtitle: "Myanmar Sports Talk channel",
-    icon: "logo-youtube",
-    color: "#FF0000",
-    url: process.env.EXPO_PUBLIC_MST_YOUTUBE_URL || "https://youtube.com/@myanmarsportstalk",
-  },
-  {
-    id: "instagram",
-    name: "Instagram",
-    subtitle: "Official Instagram profile",
-    icon: "logo-instagram",
-    color: "#E1306C",
-    // Configurable placeholder pending official MST account URL
-    url: process.env.EXPO_PUBLIC_MST_INSTAGRAM_URL || "",
+    id: "threads",
+    name: "Threads",
+    subtitle: "@myanmar.sports.talk",
+    icon: "at-outline",
+    color: "#FFFFFF",
+    url: process.env.EXPO_PUBLIC_MST_THREADS_URL || "https://www.threads.net/@myanmar.sports.talk",
   },
   {
     id: "tiktok",
@@ -38,13 +28,20 @@ export const MST_OFFICIAL_SOCIALS = Object.freeze([
     url: process.env.EXPO_PUBLIC_MST_TIKTOK_URL || "https://www.tiktok.com/@myanmar.sports.talk",
   },
   {
-    id: "threads",
-    name: "Threads",
-    subtitle: "Official Threads profile",
-    icon: "logo-threads",
-    color: "#FFFFFF",
-    // Configurable placeholder pending official MST account URL
-    url: process.env.EXPO_PUBLIC_MST_THREADS_URL || "",
+    id: "youtube",
+    name: "YouTube",
+    subtitle: "Myanmar Sports Talk channel",
+    icon: "logo-youtube",
+    color: "#FF0000",
+    url: process.env.EXPO_PUBLIC_MST_YOUTUBE_URL || "https://youtube.com/@myanmarsportstalk",
+  },
+  {
+    id: "x",
+    name: "X",
+    subtitle: "@MMRSportsTalk",
+    icon: "logo-twitter",
+    color: "#D4D8DB",
+    url: process.env.EXPO_PUBLIC_MST_X_URL || "https://x.com/MMRSportsTalk",
   },
   {
     id: "website",
