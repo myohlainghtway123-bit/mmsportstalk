@@ -36,6 +36,7 @@ import ScreenHeader from "../components/ScreenHeader";
 import SettingsScreenV2 from "../final/SettingsScreenV2";
 import MatchOddsCard from "../final/MatchOddsCard";
 import NativeEntityScreenV2 from "../final/NativeEntityScreenV2";
+import NativeNationalTeamScreen from "../final/NativeNationalTeamScreen";
 import NativeMatchScreenV5 from "../final/NativeMatchScreenV5";
 import { getAuthStatus, getFavorites } from "./scoresFavoritesApi";
 import { fetchMatchPreviewArticles } from "../services/contentApi";
@@ -2613,7 +2614,13 @@ function Phase4BScoresInternalAlphaContent() {
   // Render secondary screens if active
   let content;
   if (selectedEntity) {
-    content = (
+    content = selectedEntity.type === "national_team" ? (
+      <NativeNationalTeamScreen
+        entity={selectedEntity.entity}
+        language={language}
+        goBack={() => setSelectedEntity(null)}
+      />
+    ) : (
       <NativeEntityScreenV2
         type={selectedEntity.type}
         entity={selectedEntity.entity}
