@@ -37,6 +37,8 @@ assert.match(appConfig, /react-native-iap/);
 assert.match(appConfig, /kotlinVersion: "2\.1\.20"/);
 assert.match(appConfig, /enableMinifyInReleaseBuilds:\s*true/);
 assert.match(appConfig, /enableShrinkResourcesInReleaseBuilds:\s*true/);
+assert.match(appConfig, /extraProguardRules/);
+assert.match(appConfig, /-keep class com\.margelo\.nitro\.iap\.\*\* \{ \*; \}/);
 
 assert.match(tipsHub, /useIAP/);
 assert.match(tipsHub, /requestPurchase/);
