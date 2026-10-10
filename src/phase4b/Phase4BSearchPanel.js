@@ -24,8 +24,6 @@ const FEATURED_TEAMS = [
   { id: 42, name: "Arsenal", country: "England", logo: "https://media.api-sports.io/football/teams/42.png" },
   { id: 49, name: "Chelsea", country: "England", logo: "https://media.api-sports.io/football/teams/49.png" },
   { id: 157, name: "Bayern Munich", country: "Germany", logo: "https://media.api-sports.io/football/teams/157.png" },
-  { id: 1563, name: "Myanmar National Team", country: "Myanmar", logo: "https://media.api-sports.io/football/teams/1563.png" },
-  { id: 1568, name: "Thailand National Team", country: "Thailand", logo: "https://media.api-sports.io/football/teams/1568.png" },
 ];
 
 function Mark({ uri, fallback, colors = C }) {
@@ -57,7 +55,9 @@ function Result({ type, row, onSelect, colors = C }) {
           {type === "Team" ? row.country || "Team" : type === "Competition" ? row.country || "League" : row.nationality || "Player"}
         </Text>
       </View>
-      <Text style={[s.type, { color: colors.muted || C.muted }]}>{type.toUpperCase()}</Text>
+      <Text style={[s.type, { color: colors.muted || C.muted }]}>
+        {type === "Team" && row.national ? "NATIONAL TEAM" : type.toUpperCase()}
+      </Text>
       <Ionicons name="chevron-forward" size={14} color={colors.muted || C.muted} style={{ marginLeft: 6 }} />
     </Pressable>
   );
@@ -158,28 +158,56 @@ export default function Phase4BSearchPanel({ onOpenEntity, onOpenMatch, matches 
       }).slice(0, 6)
     : [];
 
-  // Filter featured teams if search API returned empty
-  const matchingFeaturedTeams = isTyping && state.teams.length === 0
+  // Merge provider results with safe featured-club fallbacks. National teams
+  // must come from provider data so IDs/logos cannot drift from the source.
+  const matchingFeaturedTeams = isTyping
     ? FEATURED_TEAMS.filter((t) =>
         t.name.toLowerCase().includes(cleanedQuery) ||
         (t.country && t.country.toLowerCase().includes(cleanedQuery))
       )
     : [];
 
-  const displayTeams = state.teams.length > 0 ? state.teams.slice(0, 8) : matchingFeaturedTeams;
+  const teamPriority = (row) => {
+    const name = String(row?.name || "").trim().toLowerCase();
+    const country = String(row?.country || "").trim().toLowerCase();
+    const national = row?.national === true;
+    if (national && name === cleanedQuery) return 1000;
+    if (national && country === cleanedQuery) return 950;
+    if (name === cleanedQuery) return 900;
+    if (national && name.startsWith(cleanedQuery)) return 850;
+    if (national && country.startsWith(cleanedQuery)) return 825;
+    if (name.startsWith(cleanedQuery)) return 750;
+    if (national && (name.includes(cleanedQuery) || country.includes(cleanedQuery))) return 700;
+    if (country === cleanedQuery) return 650;
+    if (name.includes(cleanedQuery)) return 550;
+    if (country.includes(cleanedQuery)) return 450;
+    return national ? 100 : 0;
+  };
+
+  const seenTeamKeys = new Set();
+  const displayTeams = [...state.teams, ...matchingFeaturedTeams]
+    .filter((row) => {
+      const id = String(row?.id || "").trim();
+      const key = id ? `id:${id}` : `name:${String(row?.name || "").trim().toLowerCase()}|${String(row?.country || "").trim().toLowerCase()}`;
+      if (!key || seenTeamKeys.has(key)) return false;
+      seenTeamKeys.add(key);
+      return true;
+    })
+    .sort((a, b) => teamPriority(b) - teamPriority(a) || String(a?.name || "").localeCompare(String(b?.name || "")))
+    .slice(0, 8);
   const total = displayTeams.length + state.players.length + matchingCompetitions.length + matchingMatches.length;
 
   return (
     <View style={[s.card, { backgroundColor: colors.surface || C.surface, borderColor: colors.border || C.border }]}>
       <Text style={[s.eyebrow, { color: colors.red || C.red }]}>{language === "my" ? "ရှာဖွေရန်" : "SEARCH"}</Text>
-      <Text style={[s.title, { color: colors.text || C.text }]}>{language === "my" ? "ပွဲစဉ်များ၊ လိဂ်များ၊ အသင်းများနှင့် ကစားသမားများ" : "Matches, leagues, clubs & players"}</Text>
+      <Text style={[s.title, { color: colors.text || C.text }]}>{language === "my" ? "ပွဲစဉ်များ၊ လိဂ်များ၊ အသင်းများနှင့် ကစားသမားများ" : "Matches, leagues, teams & players"}</Text>
 
       <View style={[s.inputWrap, { backgroundColor: colors.raised || C.raised, borderColor: colors.border || C.border }]}>
         <Ionicons name="search-outline" size={17} color={colors.muted || C.muted} />
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder={language === "my" ? "ပွဲစဉ်၊ အသင်း၊ ပြိုင်ပွဲ၊ ကစားသမား ရှာဖွေပါ..." : "Search matches, clubs, leagues, or players"}
+          placeholder={language === "my" ? "ပွဲစဉ်၊ အသင်း၊ ပြိုင်ပွဲ၊ ကစားသမား ရှာဖွေပါ..." : "Search matches, teams, leagues, or players"}
           placeholderTextColor={colors.muted || C.muted}
           autoCorrect={false}
           style={[s.input, { color: colors.text || C.text }]}
