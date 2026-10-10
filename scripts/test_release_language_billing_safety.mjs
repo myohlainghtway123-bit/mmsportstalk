@@ -86,5 +86,7 @@ assert.match(fifaRanking, /rankings\/fifa/);
 assert.match(nationalTeamScreen, /official men's world ranking/i);
 assert.match(scores, /NativeNationalTeamScreen/);
 assert.match(scores, /selectedEntity\.type === "national_team"/);
+assert.match(scores, /<Phase4BRewardedPrediction match=\{featuredMatch\} language=\{language\} \/>/);
+assert.match(scores, /<Phase4BMatchInsights match=\{featuredMatch\} language=\{language\} \/>/);
 
 console.log("Release language, Play billing, and rewarded-ad safety checks passed.");
