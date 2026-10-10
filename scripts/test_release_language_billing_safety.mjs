@@ -15,6 +15,8 @@ const smartSearch = await read("src/services/smartSearchApi.js");
 const fifaRanking = await read("src/services/fifaRankingApi.js");
 const nationalTeamScreen = await read("src/final/NativeNationalTeamScreen.js");
 const matchInsights = await read("src/phase4b/Phase4BMatchInsights.js");
+const socialConfig = await read("src/config/mstSocialAndLegalConfig.js");
+const settingsScreen = await read("src/final/SettingsScreenV2.js");
 const appConfig = await read("app.config.js");
 const pkg = JSON.parse(await read("package.json"));
 
@@ -91,6 +93,13 @@ assert.match(matchInsights, /MST Verified Match Data/);
 assert.match(matchInsights, /url=\{predictionUrl \|\| "mstprediction:\/\/"\}/);
 assert.match(matchInsights, /fallbackUrl="https:\/\/prediction\.myanmarsportstalk\.com"/);
 assert.doesNotMatch(matchInsights, /Linking\.canOpenURL/);
+assert.match(socialConfig, /https:\/\/www\.facebook\.com\/profile\.php\?id=61585572826885/);
+assert.match(socialConfig, /https:\/\/www\.threads\.net\/@myanmar\.sports\.talk/);
+assert.match(socialConfig, /https:\/\/www\.tiktok\.com\/@myanmar\.sports\.talk/);
+assert.match(socialConfig, /https:\/\/youtube\.com\/@myanmarsportstalk/);
+assert.match(socialConfig, /https:\/\/x\.com\/MMRSportsTalk/);
+assert.doesNotMatch(settingsScreen, /Linking\.canOpenURL/);
+assert.match(settingsScreen, /await Linking\.openURL\(url\)/);
 assert.match(scores, /<Phase4BRewardedPrediction match=\{featuredMatch\} language=\{language\} \/>/);
 assert.match(scores, /<Phase4BMatchInsights match=\{featuredMatch\} language=\{language\} \/>/);
 
