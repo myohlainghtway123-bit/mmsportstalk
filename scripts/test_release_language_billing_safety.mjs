@@ -72,7 +72,7 @@ assert.doesNotMatch(rewarded, /48%|28%|24%|65%/);
 assert.doesNotMatch(rewarded, /Direct unlock|Unlocking prediction directly|handleEarnedReward\(\);\s*return;/);
 assert.match(adBanner, /consent\?\.canRequestAds/);
 
-assert.match(searchPanel, /row\.national \? "NATIONAL TEAM"/);
+assert.match(searchPanel, /type === "National Team" \|\| \(type === "Team" && row\.national\) \? "NATIONAL TEAM"/);
 assert.doesNotMatch(searchPanel, /Myanmar National Team/);
 assert.doesNotMatch(searchPanel, /Thailand National Team/);
 assert.doesNotMatch(searchPanel, /teams\/1563\.png/);
