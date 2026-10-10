@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { searchFootballEntities } from "../services/smartSearchApi";
+import { fetchFifaMenRanking } from "../services/fifaRankingApi";
 import { useTheme } from "../theme/ThemeContext";
 
 const C = { surface:"#101417", raised:"#171C20", border:"#293036", text:"#FFFFFF", secondary:"#D4D8DB", muted:"#929AA0", red:"#F3262D", amber:"#F4C84D" };
@@ -39,11 +40,12 @@ function Mark({ uri, fallback, colors = C }) {
 }
 
 function Result({ type, row, onSelect, colors = C }) {
+  const entityType = type === "National Team" ? "national_team" : type.toLowerCase();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Select ${row.name}`}
-      onPress={() => onSelect && onSelect(type.toLowerCase(), row)}
+      onPress={() => onSelect && onSelect(entityType, row)}
       style={[s.row, { borderTopColor: colors.border || C.border }]}
     >
       <Mark uri={row.logo || row.photo} fallback={row.name} colors={colors} />
@@ -52,11 +54,17 @@ function Result({ type, row, onSelect, colors = C }) {
           {row.name}
         </Text>
         <Text numberOfLines={1} style={[s.meta, { color: colors.muted || C.muted }]}>
-          {type === "Team" ? row.country || "Team" : type === "Competition" ? row.country || "League" : row.nationality || "Player"}
+          {type === "National Team"
+            ? [row.fifaRank ? `FIFA #${row.fifaRank}` : null, row.confederation || row.fifaCode].filter(Boolean).join(" · ")
+            : type === "Team"
+              ? row.country || "Team"
+              : type === "Competition"
+                ? row.country || "League"
+                : row.nationality || "Player"}
         </Text>
       </View>
       <Text style={[s.type, { color: colors.muted || C.muted }]}>
-        {type === "Team" && row.national ? "NATIONAL TEAM" : type.toUpperCase()}
+        {type === "National Team" || (type === "Team" && row.national) ? "NATIONAL TEAM" : type.toUpperCase()}
       </Text>
       <Ionicons name="chevron-forward" size={14} color={colors.muted || C.muted} style={{ marginLeft: 6 }} />
     </Pressable>
@@ -97,7 +105,7 @@ function MatchResult({ match, onSelect, colors = C }) {
 
 export default function Phase4BSearchPanel({ onOpenEntity, onOpenMatch, matches = [], language = "my" }) {
   const [query, setQuery] = useState("");
-  const [state, setState] = useState({ loading: false, teams: [], players: [], error: "", stale: false });
+  const [state, setState] = useState({ loading: false, teams: [], nationalTeams: [], players: [], error: "", stale: false });
   const request = useRef(0);
 
   let colors = C;
@@ -109,27 +117,70 @@ export default function Phase4BSearchPanel({ onOpenEntity, onOpenMatch, matches 
   useEffect(() => {
     const cleaned = query.trim();
     if (cleaned.length < 3) {
-      setState({ loading: false, teams: [], players: [], error: "", stale: false });
+      setState({ loading: false, teams: [], nationalTeams: [], players: [], error: "", stale: false });
       return;
     }
     const id = ++request.current;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      try {
-        setState((prev) => ({ ...prev, loading: true, error: "" }));
-        const result = await searchFootballEntities(cleaned, { signal: controller.signal });
-        if (id !== request.current) return;
-        setState({
-          loading: false,
-          teams: result.teams || [],
-          players: result.players || [],
-          error: "",
-          stale: Boolean(result.stale),
-        });
-      } catch (error) {
-        if (error?.name === "AbortError" || id !== request.current) return;
-        setState({ loading: false, teams: [], players: [], error: error?.message || "Search is unavailable.", stale: false });
-      }
+      setState((prev) => ({ ...prev, loading: true, error: "" }));
+      const [entityResult, rankingResult] = await Promise.allSettled([
+        searchFootballEntities(cleaned, { signal: controller.signal }),
+        fetchFifaMenRanking({ signal: controller.signal }),
+      ]);
+      if (id !== request.current) return;
+
+      if (
+        entityResult.status === "rejected" &&
+        entityResult.reason?.name === "AbortError"
+      ) return;
+      if (
+        rankingResult.status === "rejected" &&
+        rankingResult.reason?.name === "AbortError"
+      ) return;
+
+      const entities = entityResult.status === "fulfilled"
+        ? entityResult.value
+        : { teams: [], players: [], stale: false };
+      const ranking = rankingResult.status === "fulfilled" ? rankingResult.value : null;
+      const q = cleaned.toLowerCase();
+      const nationalTeams = Array.isArray(ranking?.entries)
+        ? ranking.entries
+            .filter((entry) => {
+              const name = String(entry?.name || "").toLowerCase();
+              const code = String(entry?.fifaCode || "").toLowerCase();
+              const confederation = String(entry?.confederation || "").toLowerCase();
+              return name.includes(q) || code === q || confederation === q;
+            })
+            .slice(0, 8)
+            .map((entry) => ({
+              id: `fifa:${entry.fifaCode || entry.name}`,
+              name: entry.name,
+              country: entry.name,
+              national: true,
+              logo: entry.flagUrl || null,
+              flagUrl: entry.flagUrl || null,
+              fifaCode: entry.fifaCode || null,
+              fifaRank: entry.rank || null,
+              fifaPoints: entry.points ?? null,
+              previousRank: entry.previousRank ?? null,
+              confederation: entry.confederation || null,
+              rankingPublishedAt: ranking.publishedAt || null,
+              officialFifaRanking: true,
+            }))
+        : [];
+
+      const bothUnavailable = entityResult.status === "rejected" && rankingResult.status === "rejected";
+      setState({
+        loading: false,
+        teams: entities.teams || [],
+        nationalTeams,
+        players: entities.players || [],
+        error: bothUnavailable
+          ? (entityResult.reason?.message || rankingResult.reason?.message || "Search is unavailable.")
+          : "",
+        stale: Boolean(entities.stale || ranking?.stale),
+      });
     }, 300);
     return () => {
       clearTimeout(timer);
@@ -185,6 +236,15 @@ export default function Phase4BSearchPanel({ onOpenEntity, onOpenMatch, matches 
   };
 
   const seenTeamKeys = new Set();
+  const providerNationalNames = new Set(
+    state.teams
+      .filter((row) => row?.national === true)
+      .map((row) => String(row?.name || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const rankingNationalTeams = state.nationalTeams.filter(
+    (row) => !providerNationalNames.has(String(row?.name || "").trim().toLowerCase())
+  );
   const displayTeams = [...state.teams, ...matchingFeaturedTeams]
     .filter((row) => {
       const id = String(row?.id || "").trim();
@@ -195,7 +255,7 @@ export default function Phase4BSearchPanel({ onOpenEntity, onOpenMatch, matches 
     })
     .sort((a, b) => teamPriority(b) - teamPriority(a) || String(a?.name || "").localeCompare(String(b?.name || "")))
     .slice(0, 8);
-  const total = displayTeams.length + state.players.length + matchingCompetitions.length + matchingMatches.length;
+  const total = rankingNationalTeams.length + displayTeams.length + state.players.length + matchingCompetitions.length + matchingMatches.length;
 
   return (
     <View style={[s.card, { backgroundColor: colors.surface || C.surface, borderColor: colors.border || C.border }]}>
@@ -223,6 +283,17 @@ export default function Phase4BSearchPanel({ onOpenEntity, onOpenMatch, matches 
           {language === "my" ? `"${query}" နှင့် ကိုက်ညီသော ရလဒ် မရှိပါ။` : `No results matching "${query}".`}
         </Text>
       ) : null}
+
+      {/* Official FIFA men's national-team results */}
+      {rankingNationalTeams.map((row) => (
+        <Result
+          key={`national-${row.id}`}
+          type="National Team"
+          row={row}
+          onSelect={onOpenEntity}
+          colors={colors}
+        />
+      ))}
 
       {/* Match Results */}
       {matchingMatches.map((match, idx) => (
