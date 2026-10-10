@@ -1679,7 +1679,47 @@ function FavoritesScreen({ matches, onOpenMatch, onOpenSearch, onOpenProfile, us
   );
 }
 
-function TipsScreen({ featuredMatch, onOpenSearch, onOpenProfile, userAvatar, language = "my" }) {
+function TipsScreen({ matches = [], onOpenSearch, onOpenProfile, userAvatar, language = "my" }) {
+  const [publishedForecast, setPublishedForecast] = useState({ match: null, article: null });
+  const matchKey = useMemo(
+    () => (Array.isArray(matches) ? matches.map((match) => canonicalMatchId(match)).filter(Boolean).join("|") : ""),
+    [matches],
+  );
+
+  useEffect(() => {
+    let alive = true;
+    fetchMatchPreviewArticles({ locale: language === "en" ? "en" : "my", limit: 50, force: true })
+      .then((articles) => {
+        if (!alive) return;
+        const article = (Array.isArray(articles) ? articles : []).find(
+          (item) => item?.prediction && item?.relatedMatchId,
+        );
+        if (!article) {
+          setPublishedForecast({ match: null, article: null });
+          return;
+        }
+
+        const id = String(article.relatedMatchId).trim();
+        const matched = (Array.isArray(matches) ? matches : []).find(
+          (match) => canonicalMatchId(match) === id,
+        );
+        const prediction = article.prediction || {};
+        const match = {
+          ...(matched || {}),
+          id,
+          match_id: id,
+          home_team_name: matched?.home_team_name || matched?.homeTeam?.name || matched?.home?.name || prediction.homeTeam || prediction.home_team || "Home Team",
+          away_team_name: matched?.away_team_name || matched?.awayTeam?.name || matched?.away?.name || prediction.awayTeam || prediction.away_team || "Away Team",
+          _mstPreviewArticle: article,
+        };
+        setPublishedForecast({ match, article });
+      })
+      .catch(() => {
+        if (alive) setPublishedForecast({ match: null, article: null });
+      });
+    return () => { alive = false; };
+  }, [language, matchKey]);
+
   return (
     <View style={s.flex}>
       <ScreenHeader
@@ -1703,10 +1743,14 @@ function TipsScreen({ featuredMatch, onOpenSearch, onOpenProfile, userAvatar, la
       />
       <ScrollView contentContainerStyle={s.scrollContent}>
         <Phase4BReadOnlyHub language={language} />
-        {featuredMatch ? (
+        {publishedForecast.match ? (
           <>
-            <Phase4BRewardedPrediction match={featuredMatch} language={language} />
-            <Phase4BMatchInsights match={featuredMatch} language={language} />
+            <Phase4BRewardedPrediction
+              match={publishedForecast.match}
+              article={publishedForecast.article}
+              language={language}
+            />
+            <Phase4BMatchInsights match={publishedForecast.match} language={language} />
           </>
         ) : null}
       </ScrollView>
@@ -2739,7 +2783,7 @@ function Phase4BScoresInternalAlphaContent() {
         </View>
         <View style={[s.flex, !isOverlayScreen && active === "tips" ? null : { display: "none" }]}>
           <TipsScreen
-            featuredMatch={overview.matches[0]}
+            matches={overview.matches}
             onOpenSearch={openSearch}
             onOpenProfile={openProfile}
             userAvatar={userAvatar}
