@@ -21,6 +21,9 @@ if (!plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-build
         kotlinVersion: "2.1.20",
         enableMinifyInReleaseBuilds: true,
         enableShrinkResourcesInReleaseBuilds: true,
+        extraProguardRules: `
+-keep class com.margelo.nitro.iap.** { *; }
+`,
       },
     },
   ]);
