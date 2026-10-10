@@ -10,11 +10,10 @@ import {
   loadTips,
   loadTipsterLeaderboard,
   loadTipsters,
-  loadUserLeaderboard,
 } from "./scoresStagingApi";
 import { useTheme } from "../theme/ThemeContext";
 import { getCreditStorefront, verifyPlayPurchaseOnServer } from "../services/billingService";
-import { getAuthStatus } from "../services/accountApi";
+import { getAuthStatus, getPublicPredictionLeaderboard } from "../services/accountApi";
 
 const ENVIRONMENT = String(process.env.EXPO_PUBLIC_MST_ENVIRONMENT || "staging").trim().toLowerCase();
 const TIP_UNLOCK_ACTION_ENABLED = true;
@@ -111,6 +110,50 @@ function DataList({ title, eyebrow, data, empty, colors = C }) {
         ))
       ) : (
         <Text style={[s.empty, { color: colors.muted }]}>{empty}</Text>
+      )}
+    </View>
+  );
+}
+
+function PredictionLeaderboard({ data, my = true, colors = C }) {
+  const list = rows(data).slice(0, 25);
+  return (
+    <View style={[s.card, { backgroundColor: colors.surface || colors.card || C.surface, borderColor: colors.border }]}>
+      <Text style={[s.eyebrow, { color: colors.red }]}>MST LEADERBOARD</Text>
+      <Text style={[s.title, { color: colors.text }]}>{my ? "ထိပ်တန်းခန့်မှန်းသူများ" : "Top Predictors"}</Text>
+
+      {list.length ? (
+        <>
+          <View style={[s.predLbHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[s.predLbRankHead, { color: colors.muted }]}>#</Text>
+            <Text style={[s.predLbPlayerHead, { color: colors.muted }]}>{my ? "PLAYER" : "PLAYER"}</Text>
+            <Text style={[s.predLbMetricHead, { color: colors.muted }]}>PTS</Text>
+            <Text style={[s.predLbMetricHead, { color: colors.muted }]}>EX</Text>
+            <Text style={[s.predLbMetricHead, { color: colors.muted }]}>COR</Text>
+            <Text style={[s.predLbMetricHead, { color: colors.muted }]}>PLD</Text>
+          </View>
+          {list.map((row, index) => (
+            <View
+              key={String(row?.userId || row?.displayName || `prediction-${index}`)}
+              style={[s.predLbRow, index > 0 && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}
+            >
+              <Text style={[s.predLbRank, { color: colors.secondary || colors.text }]}>{row?.rank ?? index + 1}</Text>
+              <View style={s.predLbPlayer}>
+                <Text numberOfLines={1} style={[s.predLbName, { color: colors.secondary || colors.text }]}>
+                  {row?.displayName || "MST Fan"}{row?.isCurrentUser ? " · YOU" : ""}
+                </Text>
+              </View>
+              <Text style={[s.predLbMetric, { color: colors.text }]}>{Number(row?.points ?? 0)}</Text>
+              <Text style={[s.predLbMetric, { color: colors.secondary || colors.text }]}>{Number(row?.exactHits ?? 0)}</Text>
+              <Text style={[s.predLbMetric, { color: colors.secondary || colors.text }]}>{Number(row?.correctOutcomes ?? 0)}</Text>
+              <Text style={[s.predLbMetric, { color: colors.secondary || colors.text }]}>{Number(row?.settledPredictions ?? 0)}</Text>
+            </View>
+          ))}
+        </>
+      ) : (
+        <Text style={[s.empty, { color: colors.muted }]}>
+          {my ? "ခန့်မှန်းသူ အဆင့်ဇယား မရရှိနိုင်သေးပါ။" : "No prediction leaderboard data is available right now."}
+        </Text>
       )}
     </View>
   );
@@ -698,7 +741,7 @@ export default function Phase4BReadOnlyHub({ language = "my" }) {
       loadTips(),
       loadTipsters(),
       loadTipsterLeaderboard(),
-      loadUserLeaderboard(),
+      getPublicPredictionLeaderboard({ timeframe: "all", limit: 25 }),
       loadOwnPurchases().catch(() => null),
     ]).then(async ([tipsRes, tipstersRes, tipsterLbRes, userLbRes, purchasesRes]) => {
       if (!active) return;
@@ -846,11 +889,9 @@ export default function Phase4BReadOnlyHub({ language = "my" }) {
             </Pressable>
           </View>
 
-          <DataList
-            title={my ? "ခန့်မှန်းသူများ ဦးဆောင်သူဇယား" : "User Prediction Leaderboard"}
-            eyebrow={my ? "ကမ္ဘာလုံးဆိုင်ရာ အဆင့်" : "GLOBAL RANKINGS"}
+          <PredictionLeaderboard
             data={state.leaderboard}
-            empty={my ? "ခန့်မှန်းရမှတ်များ မရှိသေးပါ။ MST Prediction ကိုဖွင့်ပြီး စတင်ခန့်မှန်းပါ!" : "No prediction scores registered yet. Open MST Prediction to make your first pick!"}
+            my={my}
             colors={colors}
           />
         </>
@@ -1068,6 +1109,24 @@ const s = StyleSheet.create({
   freeTag: { color: C.green, fontSize: 12, fontWeight: "900" },
   purchaseSuccess: { color: C.green, fontSize: 12.5, lineHeight: 16, marginTop: 7 },
   purchaseError: { color: C.amber, fontSize: 12.5, lineHeight: 16, marginTop: 7 },
+  predLbHeader: {
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  predLbRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  predLbRankHead: { width: 24, fontSize: 8, fontWeight: "900" },
+  predLbPlayerHead: { flex: 1, fontSize: 8, fontWeight: "900", letterSpacing: 0.4 },
+  predLbMetricHead: { width: 38, fontSize: 7.5, fontWeight: "900", textAlign: "center" },
+  predLbRank: { width: 24, fontSize: 11, fontWeight: "900" },
+  predLbPlayer: { flex: 1, minWidth: 0, paddingRight: 6 },
+  predLbName: { fontSize: 11.5, fontWeight: "800" },
+  predLbMetric: { width: 38, fontSize: 10.5, fontWeight: "800", textAlign: "center", fontVariant: ["tabular-nums"] },
   predictionHeroCard: {
     borderRadius: 13,
     backgroundColor: C.surface,
