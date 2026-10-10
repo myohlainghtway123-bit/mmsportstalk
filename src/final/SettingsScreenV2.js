@@ -329,16 +329,18 @@ export default function SettingsScreenV2({
       Alert.alert(
         label || "Myanmar Sports Talk",
         my
-          ? `တရားဝင် ${label} link သည် launch အချိန်တွင် ရရှိပါမည်။`
-          : `Official ${label} channel will be configured upon production release.`
+          ? `တရားဝင် ${label} link မရရှိသေးပါ။`
+          : `Official ${label} link is not available yet.`
       );
       return;
     }
-    const supported = await Linking.canOpenURL(url).catch(() => false);
-    if (supported) {
-      await Linking.openURL(url).catch(() => {});
-    } else {
-      Alert.alert("Link unavailable", `Could not open ${url}`);
+    try {
+      await Linking.openURL(url);
+    } catch (_) {
+      Alert.alert(
+        my ? "Link ဖွင့်မရပါ" : "Link unavailable",
+        my ? `${label || "MST"} link ကို ဖွင့်မရပါ။` : `Could not open ${label || "this link"}.`
+      );
     }
   };
 
