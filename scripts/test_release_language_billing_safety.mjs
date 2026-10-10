@@ -86,7 +86,12 @@ assert.match(fifaRanking, /rankings\/fifa/);
 assert.match(nationalTeamScreen, /official men's world ranking/i);
 assert.match(scores, /NativeNationalTeamScreen/);
 assert.match(scores, /selectedEntity\.type === "national_team"/);
-assert.match(scores, /<Phase4BRewardedPrediction match=\{featuredMatch\} language=\{language\} \/>/);
-assert.match(scores, /<Phase4BMatchInsights match=\{featuredMatch\} language=\{language\} \/>/);
+assert.match(scores, /fetchMatchPreviewArticles\(\{ locale:/);
+assert.match(scores, /item\?\.prediction && item\?\.relatedMatchId/);
+assert.match(scores, /matches=\{overview\.matches\}/);
+assert.match(scores, /article=\{publishedForecast\.article\}/);
+assert.doesNotMatch(scores, /featuredMatch=\{overview\.matches\[0\]\}/);
+assert.match(rewarded, /predictionFromArticle\(article\)/);
+assert.match(await read("src\/services\/mstPredictionApi\.js"), /export function predictionFromArticle/);
 
 console.log("Release language, Play billing, and rewarded-ad safety checks passed.");
