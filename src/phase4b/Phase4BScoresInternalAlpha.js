@@ -1703,7 +1703,12 @@ function TipsScreen({ featuredMatch, onOpenSearch, onOpenProfile, userAvatar, la
       />
       <ScrollView contentContainerStyle={s.scrollContent}>
         <Phase4BReadOnlyHub language={language} />
-        {featuredMatch ? <Phase4BMatchInsights match={featuredMatch} language={language} /> : null}
+        {featuredMatch ? (
+          <>
+            <Phase4BRewardedPrediction match={featuredMatch} language={language} />
+            <Phase4BMatchInsights match={featuredMatch} language={language} />
+          </>
+        ) : null}
       </ScrollView>
     </View>
   );
