@@ -43,10 +43,15 @@ function configuredUrl(match, keys, template) {
   return rawTemplate.replaceAll("{matchId}", encodeURIComponent(String(match?.id || "")));
 }
 
-async function open(url) {
+async function open(url, fallbackUrl = "") {
   if (!url) return;
-  const supported = await Linking.canOpenURL(url).catch(() => false);
-  if (supported) await Linking.openURL(url).catch(() => {});
+  try {
+    await Linking.openURL(url);
+  } catch (_) {
+    if (fallbackUrl && fallbackUrl !== url) {
+      await Linking.openURL(fallbackUrl).catch(() => {});
+    }
+  }
 }
 
 function Insight({ eyebrow, title, value, accent = C.red }) {
@@ -61,10 +66,12 @@ function Insight({ eyebrow, title, value, accent = C.red }) {
   );
 }
 
-function LinkAction({ icon, title, detail, url }) {
-  const effectiveUrl = url || (title.includes("Prediction") ? "https://prediction.myanmarsportstalk.com" : "https://myanmarsportstalk.com");
+function LinkAction({ icon, title, detail, url, fallbackUrl = "" }) {
+  const isPredictionLink = title.includes("Prediction");
+  const effectiveUrl = url || (isPredictionLink ? "mstprediction://" : "https://myanmarsportstalk.com");
+  const effectiveFallbackUrl = fallbackUrl || (isPredictionLink ? "https://prediction.myanmarsportstalk.com" : "");
   return (
-    <Pressable accessibilityRole="link" onPress={() => open(effectiveUrl)} style={s.link}>
+    <Pressable accessibilityRole="link" onPress={() => open(effectiveUrl, effectiveFallbackUrl)} style={s.link}>
       <Ionicons name={icon} size={19} color={C.red} />
       <View style={s.flex}>
         <Text style={s.linkTitle}>{title}</Text>
@@ -153,8 +160,8 @@ function ProfessionalPreview({ matchId }) {
   return (
     <View>
       <View style={s.qualityCard}>
-        <Text style={s.eyebrow}>MATCH DATA CONFIRMATION</Text>
-        <Text style={s.qualityTitle}>MST Match Intelligence</Text>
+        <Text style={s.eyebrow}>VERIFIED MATCH DATA</Text>
+        <Text style={s.qualityTitle}>MST Verified Match Data</Text>
         <Text style={s.qualityMeta}>
           {quality.sourceCount ? `${quality.sourceCount} verified data sources · ` : ""}Verified by MST Football System
         </Text>
@@ -198,7 +205,13 @@ export default function Phase4BMatchInsights({ match }) {
         <Text style={s.empty}>Analysis for this match will appear once verified by MST editors.</Text>
       ) : null}
       <LinkAction icon="globe-outline" title="Full Website Analysis" detail="Read the complete in-depth coverage on myanmarsportstalk.com." url={websiteUrl} />
-      <LinkAction icon="open-outline" title="Open MST Prediction App" detail="Predict exact scores to compete on the global leaderboard." url={predictionUrl} />
+      <LinkAction
+        icon="open-outline"
+        title="Open MST Prediction App"
+        detail="Predict exact scores to compete on the global leaderboard."
+        url={predictionUrl || "mstprediction://"}
+        fallbackUrl="https://prediction.myanmarsportstalk.com"
+      />
     </View>
   );
 }
