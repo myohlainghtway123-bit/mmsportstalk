@@ -89,4 +89,14 @@ assert.match(scores, /selectedEntity\.type === "national_team"/);
 assert.match(scores, /<Phase4BRewardedPrediction match=\{featuredMatch\} language=\{language\} \/>/);
 assert.match(scores, /<Phase4BMatchInsights match=\{featuredMatch\} language=\{language\} \/>/);
 
+const accountApi = await read("src/services/accountApi.js");
+assert.ok(accountApi.includes("getPublicPredictionLeaderboard"));
+assert.ok(accountApi.includes("/predictions/leaderboard?timeframe="));
+assert.ok(tipsHub.includes("getPublicPredictionLeaderboard({ timeframe: \"all\", limit: 25 })"));
+assert.ok(tipsHub.includes("function PredictionLeaderboard"));
+assert.ok(tipsHub.includes("exactHits"));
+assert.ok(tipsHub.includes("correctOutcomes"));
+assert.ok(tipsHub.includes("settledPredictions"));
+assert.ok(!tipsHub.includes("loadUserLeaderboard"));
+
 console.log("Release language, Play billing, and rewarded-ad safety checks passed.");
