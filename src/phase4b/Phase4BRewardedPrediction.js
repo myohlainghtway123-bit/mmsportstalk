@@ -10,7 +10,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { gatherConsentIfRequired } from "../services/adConsentService";
-import { loadMstMatchPrediction } from "../services/mstPredictionApi";
+import { loadMstMatchPrediction, predictionFromArticle } from "../services/mstPredictionApi";
 
 const C = {
   bg: "#0B0E14",
@@ -37,9 +37,9 @@ function confidenceValue(value) {
   return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n) : null;
 }
 
-export default function Phase4BRewardedPrediction({ match, language = "my", colors = C }) {
+export default function Phase4BRewardedPrediction({ match, article = null, language = "my", colors = C }) {
   const my = language === "my";
-  const matchId = String(match?.id || match?.match_id || "").trim();
+  const matchId = String(match?.id || match?.match_id || article?.relatedMatchId || "").trim();
 
   const [prediction, setPrediction] = useState(null);
   const [predictionLoading, setPredictionLoading] = useState(Boolean(matchId));
@@ -51,10 +51,11 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
     let active = true;
     const controller = new AbortController();
 
-    setPrediction(null);
-    setPredictionLoading(Boolean(matchId));
+    const directPrediction = predictionFromArticle(article);
+    setPrediction(directPrediction);
+    setPredictionLoading(Boolean(matchId) && !directPrediction);
 
-    if (!matchId) {
+    if (directPrediction || !matchId) {
       setPredictionLoading(false);
       return () => controller.abort();
     }
@@ -76,7 +77,7 @@ export default function Phase4BRewardedPrediction({ match, language = "my", colo
       active = false;
       controller.abort();
     };
-  }, [matchId, language]);
+  }, [matchId, language, article]);
 
   useEffect(() => {
     let alive = true;
