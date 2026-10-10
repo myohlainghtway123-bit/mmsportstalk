@@ -24,6 +24,24 @@ function normalizeTeam(item) {
   };
 }
 
+function teamSearchRank(team, query) {
+  const q = String(query || "").trim().toLowerCase();
+  const name = String(team?.name || "").trim().toLowerCase();
+  const country = String(team?.country || "").trim().toLowerCase();
+  const national = team?.national === true;
+  if (national && name === q) return 1000;
+  if (national && country === q) return 950;
+  if (name === q) return 900;
+  if (national && name.startsWith(q)) return 850;
+  if (national && country.startsWith(q)) return 825;
+  if (name.startsWith(q)) return 750;
+  if (national && (name.includes(q) || country.includes(q))) return 700;
+  if (country === q) return 650;
+  if (name.includes(q)) return 550;
+  if (country.includes(q)) return 450;
+  return national ? 100 : 0;
+}
+
 function normalizePlayer(player) {
   if (!player?.id || !player?.name) return null;
   return {
@@ -40,7 +58,7 @@ function normalizePlayer(player) {
 
 export async function searchFootballEntities(query, { signal } = {}) {
   const cleaned = cleanQuery(query);
-  if (cleaned.length < 4) return { teams:[], players:[], stale:false };
+  if (cleaned.length < 3) return { teams:[], players:[], stale:false };
   const key = cleaned.toLowerCase();
   const cache = root.__MST_SMART_SEARCH_CACHE__;
   const saved = cache.get(key);
@@ -54,7 +72,9 @@ export async function searchFootballEntities(query, { signal } = {}) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.error || `Search API ${response.status}`);
-    const teams = Array.isArray(payload?.data?.teams) ? payload.data.teams.map(normalizeTeam).filter(Boolean) : [];
+    const teams = Array.isArray(payload?.data?.teams)
+      ? payload.data.teams.map(normalizeTeam).filter(Boolean).sort((a, b) => teamSearchRank(b, cleaned) - teamSearchRank(a, cleaned))
+      : [];
     const players = Array.isArray(payload?.data?.players) ? payload.data.players.map(normalizePlayer).filter(Boolean) : [];
     const data = { teams, players, stale:payload?.meta?.stale === true };
     cache.set(key, { data, fetchedAt:Date.now() });
