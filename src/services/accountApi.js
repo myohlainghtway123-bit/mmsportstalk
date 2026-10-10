@@ -149,6 +149,29 @@ export function isAuthenticatedPayload(payload) {
   return Boolean(extractUser(payload));
 }
 
+export async function getPublicPredictionLeaderboard({ timeframe = "all", limit = 25, signal } = {}) {
+  const allowed = new Set(["all", "weekly", "monthly", "season"]);
+  const normalizedTimeframe = allowed.has(String(timeframe || "").toLowerCase())
+    ? String(timeframe).toLowerCase()
+    : "all";
+  const safeLimit = Math.min(100, Math.max(1, Number(limit) || 25));
+  const payload = await api(
+    `/predictions/leaderboard?timeframe=${encodeURIComponent(normalizedTimeframe)}&limit=${safeLimit}`,
+    { signal },
+  );
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  return rows.map((row, index) => ({
+    rank: Number(row?.rank ?? index + 1),
+    userId: String(row?.userId || ""),
+    displayName: String(row?.displayName || "MST Fan"),
+    points: Number(row?.points ?? 0),
+    exactHits: Number(row?.exactHits ?? 0),
+    correctOutcomes: Number(row?.correctOutcomes ?? 0),
+    settledPredictions: Number(row?.settledPredictions ?? 0),
+    isCurrentUser: Boolean(row?.isCurrentUser),
+  }));
+}
+
 export async function getAuthStatus(options) {
   try {
     const payload = await api("/auth/status", options);
